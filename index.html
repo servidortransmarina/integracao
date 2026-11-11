@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transmarina</title>
+<meta name="theme-color" content="#4f46e5">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="auth" class="auth-wrap"><div id="authBox"></div></div>
+<div id="carregando" class="auth-wrap" hidden><b>Carregando…</b></div>
+
+<div id="app" hidden>
+  <header>
+    <div class="header-left">
+      <img src="logotrm.png" alt="Transmarina" class="header-logo">
+      <span id="logoTxt" class="logo-txt" hidden>TRM</span>
+      <h1 class="header-title" id="tituloTopo">Início</h1>
+    </div>
+    <div class="header-right">
+      <div class="perfil-wrap">
+        <button class="perfil-icone" id="perfilIcone" type="button" aria-label="Perfil">🙂</button>
+        <span class="badge-perfil" id="perfilBadge" hidden></span>
+        <div class="perfil-menu" id="perfilMenu"></div>
+      </div>
+    </div>
+  </header>
+  <nav class="topnav" id="topnav"></nav>
+  <main id="conteudo"></main>
+  <nav class="bottombar" id="bottombar"></nav>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/frota.js"></script>
+<script src="js/inicio.js"></script>
+<script src="js/perfil.js"></script>
+<script src="js/usuarios.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
