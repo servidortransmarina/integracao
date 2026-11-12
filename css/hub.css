@@ -1,0 +1,96 @@
+/* Hub Transmarina — só o que é do Hub. O visual das telas de Frota vem do gf.css (design do GF). */
+:root{--bar-h:64px;--side-w:248px}
+[hidden]{display:none!important}
+button{font-family:inherit}
+.hub{display:flex;min-height:100vh}
+
+/* ---------- barra lateral (PC) ---------- */
+.hub-side{width:var(--side-w);flex:0 0 var(--side-w);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:16px 12px;overflow-y:auto}
+.hub-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 16px}
+.hub-brand img{height:40px;mix-blend-mode:multiply}
+.hub-brand b{font-size:17px;letter-spacing:.02em}
+.logo-txt{font-weight:800;letter-spacing:.14em;color:var(--primary);font-size:18px}
+.side-sec{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;padding:16px 10px 6px}
+.side-item{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;text-align:left;padding:10px;border-radius:10px;font-size:14px;font-weight:600;color:var(--text);cursor:pointer;position:relative}
+.side-item:hover{background:#f3f4f6}
+.side-item.active{background:rgba(79,70,229,.1);color:var(--primary)}
+.side-item .ic{width:22px;text-align:center;font-size:17px}
+.side-item .n{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:rgba(241,54,54,.12);color:#b91c1c;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.side-item.futuro{opacity:.55;cursor:default}.side-item .tag{margin-left:auto;font-size:10px;font-weight:600;color:var(--dim)}
+.side-user{margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px 8px 0;border-top:1px solid var(--border);cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%}
+.avatar{width:40px;height:40px;border-radius:50%;background:#eef2ff;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:21px;flex:0 0 auto;position:relative}
+.side-user .nm{font-size:13px;font-weight:600;line-height:1.2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-user small{display:inline-block;margin-top:3px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(79,70,229,.1);color:var(--primary);text-transform:uppercase}
+.avatar .dot{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;background:var(--danger);color:#fff;border:2px solid #fff;border-radius:10px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+
+.hub-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.hub-top{background:var(--card);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:50}
+.hub-top h1{margin:0;font-size:18px;font-weight:600}
+.hub-top .acoes{display:flex;align-items:center;gap:10px}
+.hub-top .avatar{cursor:pointer;display:none;background:#eef2ff}
+.hub-body{padding:24px;max-width:1300px;width:100%;margin:0 auto}
+
+/* menu do perfil */
+.pop{position:fixed;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.14);min-width:230px;z-index:9999;overflow:hidden;display:flex;flex-direction:column}
+.pop .nome{padding:12px 16px;font-weight:600;font-size:14px;background:#f9fafb}
+.pop .nome small{display:block;color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase;margin-top:2px}
+.pop hr{margin:0;border:0;border-top:1px solid var(--border)}
+.pop button{background:none;border:none;padding:12px 16px;text-align:left;font-size:13px;font-weight:500;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.pop button:hover{background:#f3f4f6;color:var(--primary)}
+
+/* ---------- Início: "Precisa de você" ---------- */
+.saudacao h2{margin:0;font-size:24px}.saudacao p{margin:4px 0 14px;color:var(--dim)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.chip{background:#fff;border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--dim);cursor:pointer}
+.chip.active{background:rgba(79,70,229,.1);border-color:rgba(79,70,229,.3);color:var(--primary)}
+.sec-t{font-size:14px;font-weight:600;margin:20px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.item{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid var(--border)}
+.item .ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto}
+.item .ico.bad{background:rgba(241,54,54,.1)}.item .ico.warn{background:rgba(255,162,1,.14)}.item .ico.info{background:rgba(79,70,229,.1)}.item .ico.ok{background:rgba(16,185,129,.12)}
+.item .tx{flex:1;min-width:0}.item .tx b{display:block;font-size:15px}.item .tx p{margin:2px 0;color:var(--dim);font-size:13px}.item .tx small{color:var(--dim);font-size:12px}
+.item button.btn{white-space:nowrap}
+.vazio-ok{text-align:center;padding:36px 12px;color:var(--dim)}
+
+/* ---------- acesso ---------- */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#eef2ff,#f3f4f6 60%)}
+.auth-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:420px;box-shadow:0 20px 40px -12px rgba(30,41,59,.18)}
+.auth-card .brand{text-align:center;margin-bottom:18px}.auth-card .brand img{height:56px;mix-blend-mode:multiply}
+.auth-card h1{font-size:20px;margin:6px 0 2px;text-align:center}
+.auth-card p.sub{color:var(--dim);text-align:center;font-size:13px;margin:0 0 18px}
+.auth-links{display:flex;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:4px}
+.regras{font-size:11px;color:var(--dim);margin:-6px 0 10px;line-height:1.5}
+.hint{font-size:11px;color:var(--dim);margin-top:-6px;margin-bottom:10px}
+.msg{font-size:13px;padding:10px 12px;border-radius:8px;margin:10px 0;display:none}.msg.show{display:block}.msg.err{background:#fef2f2;color:#b91c1c}.msg.ok{background:#ecfdf5;color:#047857}
+button.btn.block{width:100%}
+button.link{background:none;border:none;color:var(--primary);cursor:pointer;font-size:13px;font-weight:600;padding:4px}
+.badge.green{background:rgba(16,185,129,.12);color:#047857}.badge.gray{background:#f3f4f6;color:#4b5563}.badge.amber{background:rgba(255,162,1,.15);color:#b45309}
+.modal.wide{max-width:900px}
+.modal h3{margin:0 0 14px;font-size:18px}
+.tabs-in{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;overflow-x:auto}
+.tabs-in button{background:none;border:none;padding:10px 14px;font-weight:600;color:var(--dim);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;font-size:14px}
+.tabs-in button.active{color:var(--primary);border-bottom-color:var(--primary)}
+.perfil-icone{width:44px;height:44px;border-radius:50%;cursor:pointer;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;background:#eef2ff;font-size:22px;padding:0}
+.dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px;font-size:14px}.dl dt{color:var(--dim);font-weight:600}.dl dd{margin:0}
+.soon{text-align:center;padding:48px 16px;color:var(--dim)}.soon b{display:block;color:var(--text);font-size:16px;margin-bottom:6px}
+.veic-abas{display:flex;gap:6px;margin:0 0 14px}
+.veic-abas button{background:#fff;border:1px solid var(--border);border-radius:20px;padding:8px 18px;font-weight:600;font-size:13px;color:var(--dim);cursor:pointer}
+.veic-abas button.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+/* ---------- barra inferior (celular) ---------- */
+.bottombar{display:none;position:fixed;left:0;right:0;bottom:0;height:var(--bar-h);background:var(--card);border-top:1px solid var(--border);z-index:60;box-sizing:content-box;padding-bottom:env(safe-area-inset-bottom)}
+.bottombar button{flex:1;background:none;border:none;color:var(--dim);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;font-weight:600;cursor:pointer;position:relative}
+.bottombar button .ic{font-size:21px;line-height:1}.bottombar button.active{color:var(--primary)}
+.bottombar .n{position:absolute;top:6px;left:calc(50% + 6px);min-width:16px;height:16px;border-radius:8px;background:var(--danger);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.mais-list{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.mais-list button{background:#f9fafb;border:1px solid var(--border);border-radius:12px;padding:14px 6px;font-weight:600;font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px}
+.mais-list .ic{font-size:24px}
+.pers-item{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border)}.pers-item input{width:20px;height:20px}
+
+@media (max-width:820px){
+  .hub-side{display:none}
+  .hub-top{padding:10px 14px}.hub-top .avatar{display:flex}.hub-top .acoes .btn{display:none}
+  .hub-body{padding:14px 12px calc(var(--bar-h) + 28px)}
+  .bottombar{display:flex}
+  .item{align-items:flex-start;flex-wrap:wrap}.item button.btn{margin-left:58px}
+  .toast{bottom:calc(var(--bar-h) + 14px);left:12px;right:12px;max-width:none}
+}

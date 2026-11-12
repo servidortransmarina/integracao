@@ -5,45 +5,365 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Transmarina</title>
 <meta name="theme-color" content="#4f46e5">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<!-- Scripts só do próprio site; chamadas só ao Apps Script. 'unsafe-inline' em script existe porque as telas do GF usam onclick=""; por isso todo texto digitado é limpo no servidor e no navegador (ver ponte.js). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/gf.css">
+<link rel="stylesheet" href="css/hub.css">
 </head>
 <body>
 
 <div id="auth" class="auth-wrap"><div id="authBox"></div></div>
 <div id="carregando" class="auth-wrap" hidden><b>Carregando…</b></div>
 
-<div id="app" hidden>
-  <header>
-    <div class="header-left">
-      <img src="logotrm.png" alt="Transmarina" class="header-logo">
-      <span id="logoTxt" class="logo-txt" hidden>TRM</span>
-      <h1 class="header-title" id="tituloTopo">Início</h1>
-    </div>
-    <div class="header-right">
-      <div class="perfil-wrap">
-        <button class="perfil-icone" id="perfilIcone" type="button" aria-label="Perfil">🙂</button>
-        <span class="badge-perfil" id="perfilBadge" hidden></span>
-        <div class="perfil-menu" id="perfilMenu"></div>
+<div id="app" class="hub" hidden>
+  <aside class="hub-side">
+    <div class="hub-brand"><img src="logotrm.png" alt="Transmarina" class="logo-img"><span class="logo-txt" hidden>TRANSMARINA</span></div>
+    <div id="sideNav"></div>
+    <button class="side-user" id="sideUser" type="button"></button>
+  </aside>
+  <div class="hub-col">
+    <div class="hub-top">
+      <h1 id="tituloTopo">Início</h1>
+      <div class="acoes">
+        <button id="btnImprimir" class="btn secondary small" type="button" onclick="imprimirRelatorioMecanico()" hidden>🖨️ Imprimir ordem</button>
+        <button id="btnAtualizar" class="btn secondary small" type="button" onclick="atualizarManualmente()">🔄 Atualizar dados</button>
+        <button class="avatar" id="topUser" type="button" aria-label="Perfil"></button>
       </div>
     </div>
-  </header>
-  <nav class="topnav" id="topnav"></nav>
-  <main id="conteudo"></main>
-  <nav class="bottombar" id="bottombar"></nav>
+    <div class="hub-body">
+      <div id="hubConteudo"></div>
+      <div id="gfRoot" hidden>
+<section id="tab-manutencao" class="tab active">
+  <div id="manutListaWrap">
+    <div class="card">
+      <h2>Veículos da Frota</h2>
+      <div id="chipsVeiculos"></div>
+    </div>
+  </div>
+  <div id="manutDetalheWrap" style="display:none;"></div>
+</section>
+
+<section id="tab-dashboard" class="tab">
+  <div class="card">
+    <div class="row" style="align-items: center;">
+      <div class="field">
+        <label>Veículo</label>
+        <select id="dashVeiculo" onchange="renderDashboard()"><option value="todos">Todos os veículos</option></select>
+      </div>
+      <div class="field">
+        <label>Data Início</label>
+        <input type="date" id="dashDataInicio" onchange="renderDashboard()">
+      </div>
+      <div class="field">
+        <label>Data Fim</label>
+        <input type="date" id="dashDataFim" onchange="renderDashboard()">
+      </div>
+      <div class="field" style="margin-bottom: 2px;">
+        <button class="btn secondary" style="padding: 10px 14px;" onclick="limparFiltroDatasDashboard()">Limpar Período</button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="grid-cards" id="dashKpis"></div>
+  
+  <div class="row" style="justify-content:space-between; align-items:center; margin-bottom: 10px;">
+      <h2 style="margin:0;">Relação: Custo x Rodagem por Caminhão</h2>
+      <div class="legenda-grafico" style="margin-left: auto;">
+        <div class="legenda-item"><div class="legenda-cor fifa-office"></div>Oficina (R$)</div>
+        <div class="legenda-item"><div class="legenda-cor fifa-fuel"></div>Combustível (R$)</div>
+        <div class="legenda-item"><div class="legenda-cor fifa-km"></div>Rodagem (km)</div>
+      </div>
+  </div>
+
+  <div class="card">
+    <div id="dashChartVertical"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between; align-items:center; margin-bottom: 15px;">
+      <h2 style="margin:0;">Média de Repetição por Serviço / Peça</h2>
+      <div class="field" style="min-width:260px; margin:0;">
+        <select id="dashFiltroCiclo" onchange="calcularCicloServico(this.value)">
+          <option value="">Selecione um serviço ou peça...</option>
+        </select>
+      </div>
+    </div>
+    <div id="dashCiclosTabela"></div>
+  </div>
+</section>
+
+<section id="tab-alertas" class="tab">
+  
+  <div class="card">
+    <h2>Alertas ativos de manutenção</h2>
+    <div id="alertasLista"></div>
+  </div>
+</section>
+
+<section id="tab-pneus" class="tab">
+  <div class="card">
+    <div class="row pn-topo">
+      <div class="field" style="min-width:260px;">
+        <label for="pneusVeiculo">Caminhão</label>
+        <select id="pneusVeiculo" onchange="pneusTrocarVeiculo()"></select>
+      </div>
+      <div class="pn-resumo" id="pneusResumo"></div>
+      <button class="btn" onclick="abrirModalPneu()" style="margin-left:auto;">+ Cadastrar pneu</button>
+    </div>
+  </div>
+
+  <div class="pn-grid">
+    <div class="card pn-viewer-card" id="pneusViewerCard">
+      <div class="pn-viewer-bar">
+        <div class="pn-seg" role="group" aria-label="Modo de exibição">
+          <button type="button" data-modo3d="normal" aria-pressed="true" onclick="pneusDefinirModo(false)">Normal</button>
+          <button type="button" data-modo3d="raiox" aria-pressed="false" onclick="pneusDefinirModo(true)">Raio-X</button>
+        </div>
+        <div class="pn-vistas" role="group" aria-label="Vistas">
+          <button type="button" onclick="pneusIrParaVista('tresq')">3/4</button>
+          <button type="button" onclick="pneusIrParaVista('esquerda')">Esquerda</button>
+          <button type="button" onclick="pneusIrParaVista('direita')">Direita</button>
+          <button type="button" onclick="pneusIrParaVista('frente')">Frente</button>
+          <button type="button" onclick="pneusIrParaVista('traseira')">Traseira</button>
+          <button type="button" onclick="pneusIrParaVista('topo')">Topo</button>
+        </div>
+      </div>
+      <div class="pn-stage">
+        <div id="pneusViewerSlot"></div>
+        <div class="pn-erro" id="pneusViewerErro">Não foi possível carregar o modelo 3D. Confira se a pasta models/ está junto do index.html e se o site está aberto por http (Live Server).</div>
+      </div>
+      <div class="pn-legenda">
+        <span>Novo</span><div class="pn-escala" id="pneusEscala"></div><span>Último uso</span>
+        <span class="pn-legenda-info" id="pneusModeloInfo"></span>
+      </div>
+    </div>
+    <div class="card" id="pneusPainel"></div>
+  </div>
+
+  <div class="card">
+    <div class="header-tabela"><h2>Todos os pneus</h2><input type="text" id="pneusFiltro" placeholder="🔎 Pesquisar por código, marca, placa..." oninput="pneusRenderTabela()"></div>
+    <div class="tabela-responsiva" id="pneusTabela"></div>
+  </div>
+
+  <div class="card">
+    <div class="header-tabela"><h2>Movimentações</h2><input type="text" id="pneusFiltroMov" placeholder="🔎 Pesquisar movimentação..." oninput="pneusRenderMov()"></div>
+    <div class="tabela-responsiva" id="pneusMov"></div>
+  </div>
+</section>
+
+</main>
+
+<!-- Modais do sistema... -->
+      </div>
+    </div>
+  </div>
+  <div class="bottombar" id="bottombar"></div>
 </div>
 
-<div id="toast" class="toast" hidden></div>
+<div class="overlay" id="modalCadVeiculo">
+  <div class="modal">
+    <h3>Adicionar Novo Caminhão</h3>
+    <div class="field" style="margin-bottom:20px; margin-top:15px;">
+      <label>Placa do veículo *</label>
+      <input id="inputPlaca" placeholder="Ex: ABC1234 ou ABC1D23" maxlength="8" onkeypress="if(event.key === 'Enter') cadastrarVeiculo()">
+      <small class="errmsg" id="errPlaca"></small>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalCadVeiculo')">Cancelar</button>
+      <button class="btn" onclick="cadastrarVeiculo()">Salvar Veículo</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalConfirm">
+  <div class="modal">
+    <h3 id="confirmTitle">Confirmar</h3>
+    <p id="confirmMsg" style="color:var(--dim); white-space: pre-wrap; margin-bottom: 15px; font-size: 14px;"></p>
+    <div class="modal-actions">
+      <button class="btn secondary" id="confirmCancelBtn">Cancelar</button>
+      <button class="btn danger" id="confirmBtn">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPrompt">
+  <div class="modal">
+    <h3 id="promptTitle">Título</h3>
+    <p id="promptMsg" style="color:var(--dim); white-space: pre-wrap; margin-bottom: 15px; font-size: 14px;"></p>
+    <div class="field">
+      <input type="text" inputmode="numeric" id="promptInput" placeholder="Digite o KM..." onkeypress="if(event.key === 'Enter') document.getElementById('promptBtnOk').click()">
+    </div>
+    <div class="modal-actions" style="margin-top: 20px;">
+      <button class="btn secondary" id="promptBtnCancel">Cancelar</button>
+      <button class="btn" id="promptBtnOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalManut">
+  <div class="modal">
+    <h3 id="manutTitle">Marcar manutenção</h3>
+    <div class="field">
+      <label>Situação *</label>
+      <select id="mModo" onchange="onModoChange()">
+        <option value="realizada">Manutenção já realizada</option>
+        <option value="agendar">Agendar para o futuro</option>
+      </select>
+    </div>
+    
+    <div class="field"> 
+      <label>Qual serviço ou peça? *</label>
+      <input type="text" id="mTipoInput" list="listaServicos" placeholder="Ex: Alinhamento, Bomba D'água, Pastilha..." onkeypress="if(event.key === 'Enter') document.getElementById('mKm').focus()">
+      <datalist id="listaServicos">
+        <option value="Alinhamento">
+        <option value="Troca de óleo do motor">
+        <option value="Troca de óleo da caixa">
+        <option value="Troca de óleo do diferencial">
+        <option value="Troca de óleo do freio">
+        <option value="Troca de fluido da embreagem">
+      </datalist>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Km atual (obrigatório)</label>
+        <input type="text" inputmode="numeric" id="mKm" placeholder="Ex: 450.000" onkeypress="if(event.key === 'Enter') document.getElementById('mData').focus()">
+        <small class="errmsg" id="errMKm"></small>
+      </div>
+      <div class="field" id="mDataRealizadaWrap">
+        <label>Data *</label>
+        <input type="date" id="mData" onkeypress="if(event.key === 'Enter') document.getElementById('mValor').focus()">
+      </div>
+      <div class="field" id="mDataPrevistaWrap" style="display:none;">
+        <label>Data prevista</label>
+        <input type="date" id="mDataPrevista" onkeypress="if(event.key === 'Enter') document.getElementById('mValor').focus()">
+      </div>
+    </div>
+    <div class="field">
+      <label>Valor Gasto (R$)</label>
+      <input type="text" inputmode="decimal" id="mValor" placeholder="Ex: 1500,50" onkeypress="if(event.key === 'Enter') document.getElementById('mObs').focus()">
+    </div>
+    <div class="field">
+      <label>Observação</label>
+      <input type="text" id="mObs" placeholder="Opcional" onkeypress="if(event.key === 'Enter') salvarManutencao()">
+    </div>
+    <div class="modal-actions" style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 20px;">
+      <div id="infoEdicao" style="font-size: 13px; color: var(--primary); font-weight: 600;"></div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn secondary" onclick="closeModal('modalManut')">Cancelar</button>
+        <button class="btn" id="btnSalvarManut" onclick="salvarManutencao()">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalKm">
+  <div class="modal">
+    <h3>Atualizar quilometragem atual</h3>
+    <div class="field">
+      <label>Quilometragem atual (km) *</label>
+      <input id="kmAtualInput" type="text" inputmode="numeric" placeholder="Ex: 440.000" onkeypress="if(event.key === 'Enter') salvarKmAtual()">
+      <small class="errmsg" id="errKmAtual"></small>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalKm')">Cancelar</button>
+      <button class="btn" id="btnSalvarKm" onclick="salvarKmAtual()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPneu">
+  <div class="modal">
+    <h3 id="pnTitulo">Cadastrar pneu</h3>
+    <div class="field" style="margin-top:15px;"><label for="pnCodigo">Código do pneu (fogo) *</label><input id="pnCodigo" placeholder="Ex: 10234" autocomplete="off"></div>
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label for="pnMarca">Marca</label><input id="pnMarca" placeholder="Ex: Pirelli"></div>
+      <div class="field"><label for="pnModelo">Modelo</label><input id="pnModelo" placeholder="Ex: FG01"></div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label for="pnMedida">Medida</label><input id="pnMedida" placeholder="Ex: 215/75R17.5"></div>
+      <div class="field"><label for="pnRecap">Recapagens já feitas</label><input id="pnRecap" type="number" min="0" value="0"></div>
+    </div>
+    <div id="pnNovoWrap">
+      <div class="field" style="margin-top:12px;"><label for="pnKmRodado">KM já rodado (desde novo ou desde a última recapagem)</label><input id="pnKmRodado" type="text" inputmode="numeric" placeholder="Opcional. Ex: 25.000"></div>
+      <div class="field" style="margin-top:12px;"><label for="pnMontado">Onde está agora</label><select id="pnMontado" onchange="pnMontadoChange()"></select></div>
+      <div class="row" id="pnMontadoWrap" style="margin-top:12px; display:none;">
+        <div class="field"><label for="pnPosicao">Posição</label><select id="pnPosicao"></select></div>
+        <div class="field"><label for="pnKmMont">KM atual do caminhão</label><input id="pnKmMont" type="text" inputmode="numeric"></div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px;"><label for="pnObs">Observação</label><input id="pnObs" placeholder="Opcional"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalPneu')">Cancelar</button>
+      <button class="btn" onclick="salvarPneuModal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPneuMontar">
+  <div class="modal">
+    <h3>Montar pneu</h3>
+    <div class="field" style="margin-top:15px;"><label for="pmPneu">Pneu (em estoque)</label><select id="pmPneu"></select></div>
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label for="pmPlaca">Caminhão</label><select id="pmPlaca" onchange="pmPlacaChange()"></select></div>
+      <div class="field"><label for="pmPosicao">Posição</label><select id="pmPosicao"></select></div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label for="pmKm">KM atual do caminhão *</label><input id="pmKm" type="text" inputmode="numeric"></div>
+      <div class="field"><label for="pmData">Data</label><input id="pmData" type="date"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalPneuMontar')">Cancelar</button>
+      <button class="btn" onclick="confirmarMontar()">Montar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPneuDesmontar">
+  <div class="modal">
+    <h3>Desmontar pneu</h3>
+    <p id="pdInfo" style="color:var(--dim); font-size:14px; margin:10px 0 0;"></p>
+    <div class="field" style="margin-top:12px;"><label for="pdDestino">Para onde vai o pneu?</label>
+      <select id="pdDestino"><option value="estoque">Estoque (vai ser montado em outro lugar)</option><option value="recapagem">Recapagem</option><option value="descartado">Descarte</option></select></div>
+    <div class="row" style="margin-top:12px;">
+      <div class="field"><label for="pdKm">KM atual do caminhão *</label><input id="pdKm" type="text" inputmode="numeric"></div>
+      <div class="field"><label for="pdData">Data</label><input id="pdData" type="date"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalPneuDesmontar')">Cancelar</button>
+      <button class="btn danger" onclick="confirmarDesmontar()">Desmontar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="modalPneuMover">
+  <div class="modal">
+    <h3>Trocar de posição</h3>
+    <p id="pvInfo" style="color:var(--dim); font-size:14px; margin:10px 0 0;"></p>
+    <div class="field" style="margin-top:12px;"><label for="pvPosicao">Nova posição</label><select id="pvPosicao"></select></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('modalPneuMover')">Cancelar</button>
+      <button class="btn" onclick="confirmarMover()">Trocar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="loading-overlay" id="loadingOverlay">Carregando dados…</div>
+
 <script src="js/config.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/api.js"></script>
+<script src="js/gf/ponte.js"></script>
+<script src="js/gf/script.js"></script>
+<script src="js/gf/pneus.js"></script>
+<script src="js/gf/fleet.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/frota.js"></script>
 <script src="js/inicio.js"></script>
 <script src="js/perfil.js"></script>
 <script src="js/usuarios.js"></script>

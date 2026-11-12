@@ -1,8 +1,9 @@
 /* Gestão de usuários — só master (o servidor também confere). */
 const Usuarios = {
+  pendentes: 0,
   async contarPendentes() {
     try { const r = await API.chamar('listarUsuarios'); const n = r.usuarios.filter(u => u.status === 'PENDENTE_APROVACAO').length, b = $('#badgeUsuarios');
-      if (b) { b.hidden = !n; b.textContent = n; } $('#perfilBadge').hidden = !n; $('#perfilBadge').textContent = n; } catch (e) {}
+      this.pendentes = n; if (b) { b.hidden = !n; b.textContent = n; } } catch (e) {}
   },
   async abrir() {
     const caixa = h('div', {}, h('div', { class: 'empty', text: 'Carregando…' })); const mod = abrirModal('Usuários', caixa, { largo: true });
@@ -31,7 +32,7 @@ const Usuarios = {
             h('button', { class: 'btn small ' + (u.status === 'ATIVO' ? 'secondary' : 'success'), text: u.status === 'ATIVO' ? 'Desativar' : 'Ativar', onclick: () => this.agir(() => API.chamar('definirStatusUsuario', { usuario: u.usuario, status: u.status === 'ATIVO' ? 'INATIVO' : 'ATIVO' }), desenhar) });
           return h('tr', {}, h('td', { text: u.usuario }), h('td', { text: u.nome }), h('td', {}, h('span', { class: 'badge ' + cor, text: u.status })), h('td', {}, u.perfil ? sel : '—'), h('td', {}, acao));
         })))));
-      this.contarPendentes();
+      await this.contarPendentes(); if (typeof App !== 'undefined' && App.sessao) { App.montarUsuario(); App.montarNavegacao(); }
     };
     desenhar();
   },

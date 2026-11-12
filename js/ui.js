@@ -18,11 +18,6 @@ function h(tag, attrs, ...filhos) {
 }
 function limpar(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
 
-let _toastT;
-function toast(msg, erro) {
-  const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (erro ? ' err' : ''); t.hidden = false;
-  clearTimeout(_toastT); _toastT = setTimeout(() => { t.hidden = true; }, erro ? 5000 : 2800);
-}
 
 /** Abre um modal; devolve {el, fechar}. conteudo = nó DOM. */
 function abrirModal(titulo, conteudo, op) {
@@ -40,17 +35,5 @@ function campo(rotulo, input, dica) { return h('div', { class: 'field' }, h('lab
 const REGRA_SENHA = 'Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.';
 
 const NOME_PERFIL = { master: 'Master', admin: 'Administrador', mecanico: 'Mecânico', motorista: 'Motorista' };
-const fmtData = iso => { const s = String(iso || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : (s || '—'); };
 const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
-const fmtKm = n => fmtNum(Math.round(Number(n) || 0)) + ' km';
 
-/** Placa no estilo do GF. contagem opcional = nº de pendências (bolinha). */
-function placaEl(placa, opc) {
-  opc = opc || {};
-  const p = String(placa || '').toUpperCase(), mercosul = /^[A-Z]{3}\d[A-Z]\d{2}$/.test(p);
-  const corpo = h('button', { class: 'placa-veiculo ' + (mercosul ? 'mercosul' : 'antiga'), type: 'button', onclick: opc.aoClicar || null, 'aria-label': 'Veículo ' + p },
-    h('div', { class: 'placa-topo', text: mercosul ? 'BRASIL' : 'BRASIL' }), h('div', { class: 'placa-numero', text: p }));
-  const wrap = h('div', { class: 'placa-wrap' }, corpo);
-  if (opc.contagem != null) wrap.append(h('span', { class: 'placa-count ' + (opc.contagem === 0 ? 'ok' : opc.contagem > 2 ? 'bad' : 'warn'), text: String(opc.contagem), title: opc.contagem + ' pendência(s)' }));
-  return wrap;
-}

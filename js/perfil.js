@@ -7,7 +7,7 @@ const Perfil = {
       conta: () => {
         const cx = h('div', { class: 'row', style: 'margin-bottom:12px' }), msg = h('div', { class: 'msg' });
         AVATARES.forEach(a => cx.append(h('button', { class: 'perfil-icone', type: 'button', text: a, style: a === S.avatar ? 'border-color:var(--primary)' : '', onclick: async () => {
-          try { await API.chamar('atualizarDados', { avatar: a }); S.avatar = a; $('#perfilIcone').textContent = a; toast('Foto atualizada.'); mostrar('conta'); } catch (e) { mensagem(msg, e.message); } } })));
+          try { await API.chamar('atualizarDados', { avatar: a }); S.avatar = a; App.montarUsuario(); toast('Foto atualizada.'); mostrar('conta'); } catch (e) { mensagem(msg, e.message); } } })));
         return h('div', {}, h('dl', { class: 'dl' }, h('dt', { text: 'Nome' }), h('dd', { text: S.nome }), h('dt', { text: 'Usuário' }), h('dd', { text: S.usuario }), h('dt', { text: 'E-mail' }), h('dd', { text: S.email || '—' }), h('dt', { text: 'Perfil' }), h('dd', { text: NOME_PERFIL[S.perfil] })),
           h('h2', { style: 'margin:18px 0 8px;font-size:14px', text: 'Foto de perfil' }), cx, msg);
       },
