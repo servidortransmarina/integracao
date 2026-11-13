@@ -15,7 +15,7 @@ const API = {
     if (!r || r.ok === false) {
       const msg = (r && r.error) || 'Erro inesperado.';
       if (/^Sess[ãa]o/.test(msg) && !(opc && opc.semExpirar) && this.aoExpirar) this.aoExpirar();
-      throw new Error(msg);
+      const er = new Error(msg); if (r && r.codigo) er.codigo = r.codigo; throw er;
     }
     return r;
   }

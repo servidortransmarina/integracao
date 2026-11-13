@@ -15,13 +15,13 @@ const Perfil = {
         const a = h('input', { type: 'password', autocomplete: 'current-password' }), n = h('input', { type: 'password', autocomplete: 'new-password' }), n2 = h('input', { type: 'password', autocomplete: 'new-password' });
         const m = h('div', { class: 'msg' }), b = h('button', { class: 'btn', type: 'submit', text: 'Trocar senha' });
         return h('form', { onsubmit: async e => { e.preventDefault(); if (n.value !== n2.value) return mensagem(m, 'As senhas não conferem.'); b.disabled = true;
-          try { await API.chamar('alterarSenha', { senhaAtual: a.value, novaSenha: n.value }); mensagem(m, 'Senha alterada. Outros aparelhos foram desconectados.', 'ok'); a.value = n.value = n2.value = ''; } catch (err) { mensagem(m, err.message); } b.disabled = false; } },
+          try { await Cripto.trocarSenha(S.usuario, a.value, n.value); mensagem(m, 'Senha alterada. Outros aparelhos foram desconectados.', 'ok'); a.value = n.value = n2.value = ''; } catch (err) { mensagem(m, err.message); } b.disabled = false; } },
           campo('Senha atual', a), campo('Nova senha', n), h('div', { class: 'regras', text: REGRA_SENHA }), campo('Repita a nova senha', n2), m, b);
       },
       email: () => {
         const novo = h('input', { type: 'email', autocapitalize: 'none' }), senha = h('input', { type: 'password', autocomplete: 'current-password' }), cod = h('input', { type: 'text', inputmode: 'numeric', maxlength: '6' });
         const m = h('div', { class: 'msg' }), p2 = h('div', { hidden: true }), bEnv = h('button', { class: 'btn', type: 'button', text: 'Enviar código' }), bOk = h('button', { class: 'btn', type: 'submit', text: 'Confirmar novo e-mail' });
-        bEnv.onclick = async () => { bEnv.disabled = true; try { await API.chamar('solicitarTrocaEmail', { novoEmail: novo.value.trim(), senhaAtual: senha.value }); p2.hidden = false; mensagem(m, 'Se o e-mail puder ser usado, enviamos um código.', 'ok'); } catch (err) { mensagem(m, err.message); } bEnv.disabled = false; };
+        bEnv.onclick = async () => { bEnv.disabled = true; try { await Cripto.comSenhaAtual('solicitarTrocaEmail', { novoEmail: novo.value.trim() }, S.usuario, senha.value); p2.hidden = false; mensagem(m, 'Se o e-mail puder ser usado, enviamos um código.', 'ok'); } catch (err) { mensagem(m, err.message); } bEnv.disabled = false; };
         p2.append(campo('Código recebido no novo e-mail', cod), bOk);
         return h('form', { onsubmit: async e => { e.preventDefault(); bOk.disabled = true;
           try { await API.chamar('confirmarTrocaEmail', { novoEmail: novo.value.trim(), codigo: cod.value.trim() }); S.email = novo.value.trim(); toast('E-mail atualizado.'); mostrar('conta'); } catch (err) { mensagem(m, err.message); } bOk.disabled = false; } },

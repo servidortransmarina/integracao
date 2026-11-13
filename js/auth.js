@@ -11,15 +11,20 @@ const Auth = {
 };
 
 Auth.telas.entrar = () => {
-  const u = h('input', { type: 'text', autocomplete: 'username', autocapitalize: 'none', placeholder: 'Joao.123456 ou e-mail' });
+  const u = h('input', { type: 'text', autocomplete: 'username', autocapitalize: 'none', placeholder: 'Joao.123456' });
   const s = h('input', { type: 'password', autocomplete: 'current-password' });
   const m = h('div', { class: 'msg' }), b = h('button', { class: 'btn block', type: 'submit', text: 'Entrar' });
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, ''); b.disabled = true; b.textContent = 'Entrando…';
-    try { const r = await API.chamar('login', { usuario: u.value.trim(), senha: s.value }, { semExpirar: true }); s.value = ''; await App.iniciar(r); }
+    try {
+      const usuario = u.value.trim(), chave = await Cripto.chave(usuario, s.value); let r;
+      try { r = await API.chamar('login', { usuario, chave }, { semExpirar: true }); }
+      catch (e1) { if (e1.codigo !== 'ATUALIZAR') throw e1; r = await API.chamar('login', { usuario, chave, senha: s.value }, { semExpirar: true }); }   // conta antiga: converte uma vez
+      s.value = ''; await App.iniciar(r);
+    }
     catch (err) { mensagem(m, err.message); }
     b.disabled = false; b.textContent = 'Entrar';
-  } }, campo('Usuário ou e-mail', u), campo('Senha', s), m, b,
+  } }, campo('Usuário', u), campo('Senha', s), m, b,
     h('div', { class: 'auth-links' }, h('button', { class: 'link', type: 'button', text: 'Criar conta', onclick: () => Auth.mostrar('cadastro') }),
       h('button', { class: 'link', type: 'button', text: 'Esqueci a senha / primeiro acesso', onclick: () => Auth.mostrar('recuperar') })));
   return Auth.cartao('Entrar', 'Um só acesso para todos os sistemas', f);
@@ -58,7 +63,7 @@ Auth.telas.cadastro = () => {
 
 Auth.telas.cadastroOk = () => Auth.cartao('Cadastro enviado', 'Aguarde a aprovação do administrador',
   h('p', { text: 'Seu usuário de acesso é:' }), h('p', { style: 'font-size:22px;font-weight:700;text-align:center;margin:8px 0 14px', text: Auth._usuarioNovo || '' }),
-  h('p', { class: 'hint', text: 'Anote este usuário. Você também pode entrar com o e-mail cadastrado. Quando for aprovado, entre com a senha que criou.' }),
+  h('p', { class: 'hint', text: 'Anote este usuário. Quando for aprovado, entre com esse usuário e a senha que criou.' }),
   h('button', { class: 'btn block', text: 'Ir para o login', onclick: () => Auth.mostrar('entrar') }));
 
 Auth.telas.recuperar = () => {
@@ -95,7 +100,7 @@ function exigirTrocaSenha(aoConcluir) {
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, ''); if (n.value !== n2.value) return mensagem(m, 'As senhas não conferem.');
     b.disabled = true;
-    try { await API.chamar('alterarSenha', { senhaAtual: a.value, novaSenha: n.value }); modal.fechar(); toast('Senha atualizada.'); aoConcluir(); }
+    try { await Cripto.trocarSenha(App.sessao.usuario, a.value, n.value); modal.fechar(); toast('Senha atualizada.'); aoConcluir(); }
     catch (err) { mensagem(m, err.message); }
     b.disabled = false;
   } }, h('p', { class: 'hint', text: 'Por segurança, defina uma nova senha antes de continuar.' }), campo('Senha atual', a), campo('Nova senha', n), h('div', { class: 'regras', text: REGRA_SENHA }), campo('Repita a nova senha', n2), m,

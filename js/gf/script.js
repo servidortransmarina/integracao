@@ -71,8 +71,16 @@ async function apiPost(action, data) {
 }
 
 function normalizarDadosDaPlanilha(raw) {
-  const veiculos = (raw.veiculos || []).map(v => ({ placa: String(v.placa).trim().toUpperCase(), kmAtual: Number(v.kmAtual) || 0 }));
-  const manutencoes = (raw.manutencoes || []).map(m => ({
+  const veiculos = (raw.veiculos || []).map(v => ({ placa: String(v.placa).trim().toUpperCase(), kmAtual: Number(v.kmAtual) || 0,
+    modelo: v.modelo || '', ano: v.ano || '', tipoDiesel: v.tipoDiesel || '', utilizaArla: v.utilizaArla || '', tipoTacografo: v.tipoTacografo || '',
+    statusVeiculo: v.statusVeiculo || '', capacidadeDiesel: Number(v.capacidadeDiesel) || 0, capacidadeArla: Number(v.capacidadeArla) || 0 }));
+  // Abastecimentos de fatura/lançamento da gestão entram como "manutenção" do tipo abastecimento (é o formato que o Dashboard e o histórico do GF leem).
+  const abast = (raw.abastecimentos || []).filter(a => a.origem !== 'motorista' && a.status !== 'expirado' && a.placa).map(a => {
+    const l = Number(a.litros) || 0, vu = Number(a.valorUnit) || 0;
+    return { id: String(a.id), placa: a.placa, tipo: 'abastecimento', descricao: a.produto || 'Diesel S10', km: a.km, data: a.data, valor: a.valor,
+      observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L' + (a.hora ? ' | ' + a.hora : ''), nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
+  });
+  const manutencoes = (raw.manutencoes || []).concat(abast).map(m => ({ _abs: m._abs, _litros: m._litros, _hora: m._hora,
     id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: String(m.tipo || '').trim().toLowerCase(),
     descricao: String(m.descricao || m['descrição'] || m['Descricao'] || m['Descrição'] || m['descriçao'] || m['Descriçao'] || '').trim(),
     km: Number(m.km) || 0, data: formatarDataPlanilhaParaISO(m.data), valor: Number(m.valor) || 0, observacao: m.observacao || '', nome: m.nome || m['Nome'] || m.responsavel || '' 

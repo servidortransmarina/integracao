@@ -320,8 +320,15 @@ function pneusRenderMov() {
 /* ---------- VISUALIZADOR 3D ---------- */
 const VISTAS_PNEUS = { frente: '0deg 78deg auto', esquerda: '90deg 80deg auto', direita: '-90deg 80deg auto', traseira: '180deg 78deg auto', topo: '0deg 0deg auto', tresq: '-38deg 74deg auto' };
 
+/** O visualizador 3D só é baixado quando a aba de Pneus é aberta (não pesa no resto do sistema). */
+function carregarModelViewer() {
+  if (customElements.get('model-viewer') || document.getElementById('mvScript')) return;
+  const sc = document.createElement('script'); sc.type = 'module'; sc.id = 'mvScript';
+  sc.src = 'https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js'; document.head.appendChild(sc);
+}
 function pneusCriarViewer() {
   if (pneusMV) return pneusMV;
+  carregarModelViewer();
   const slot = document.getElementById('pneusViewerSlot'); if (!slot) return null;
   const mv = document.createElement('model-viewer');
   const attrs = { 'camera-controls': '', 'touch-action': 'pan-y', 'camera-orbit': VISTAS_PNEUS.tresq, 'min-camera-orbit': 'auto 0deg auto', 'max-camera-orbit': 'auto 90deg auto',

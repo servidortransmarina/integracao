@@ -30,7 +30,7 @@ const Usuarios = {
           const cor = u.status === 'ATIVO' ? 'green' : u.status === 'INATIVO' || u.status === 'RECUSADO' ? 'red' : 'gray';
           const acao = ehMaster || u.usuario === App.sessao.usuario || ['ATIVO', 'INATIVO'].indexOf(u.status) < 0 ? '' :
             h('button', { class: 'btn small ' + (u.status === 'ATIVO' ? 'secondary' : 'success'), text: u.status === 'ATIVO' ? 'Desativar' : 'Ativar', onclick: () => this.agir(() => API.chamar('definirStatusUsuario', { usuario: u.usuario, status: u.status === 'ATIVO' ? 'INATIVO' : 'ATIVO' }), desenhar) });
-          return h('tr', {}, h('td', { text: u.usuario }), h('td', { text: u.nome }), h('td', {}, h('span', { class: 'badge ' + cor, text: u.status })), h('td', {}, u.perfil ? sel : '—'), h('td', {}, acao));
+          return h('tr', {}, h('td', { text: u.usuario }), h('td', {}, u.nome, h('button', { class: 'link', type: 'button', title: 'Corrigir nome (acentos)', text: ' ✏️', onclick: () => { const n = prompt('Nome de exibição (com acentos):', u.nome); if (n && n.trim() && n.trim() !== u.nome) this.agir(() => API.chamar('editarNomeUsuario', { usuario: u.usuario, nome: n.trim() }), desenhar); } })), h('td', {}, h('span', { class: 'badge ' + cor, text: u.status })), h('td', {}, u.perfil ? sel : '—'), h('td', {}, acao));
         })))));
       await this.contarPendentes(); if (typeof App !== 'undefined' && App.sessao) { App.montarUsuario(); App.montarNavegacao(); }
     };
