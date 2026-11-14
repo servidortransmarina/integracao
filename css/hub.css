@@ -29,7 +29,7 @@ button{font-family:inherit}
 .hub-top h1{margin:0;font-size:18px;font-weight:600}
 .hub-top .acoes{display:flex;align-items:center;gap:10px}
 .hub-top .avatar{cursor:pointer;display:none;background:#eef2ff}
-.hub-body{padding:24px;max-width:1300px;width:100%;margin:0 auto}
+.hub-body{padding:24px;max-width:1800px;width:100%;margin:0 auto}
 
 /* menu do perfil */
 .pop{position:fixed;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,.14);min-width:230px;z-index:9999;overflow:hidden;display:flex;flex-direction:column}
@@ -116,7 +116,7 @@ body.sem-scroll{overflow:hidden}
 .subtab .n{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:rgba(241,54,54,.12);color:#b91c1c;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
 
 /* ---------- painel: duas colunas de cartões recolhíveis ---------- */
-.painel-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.painel-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(250px,320px);gap:24px;align-items:start}
 .painel-cols .sec-t{margin-top:4px}
 .grupo{background:var(--card);border:1px solid var(--border);border-radius:14px;margin-top:12px;overflow:hidden}
 .grupo-cab{display:flex;align-items:center;gap:10px;width:100%;background:#f9fafb;border:0;padding:12px 16px;cursor:pointer;font-size:14px;font-weight:700;text-align:left;color:var(--text)}
@@ -132,3 +132,104 @@ body.sem-scroll{overflow:hidden}
   .sub-tabs{display:none}
   .item .tx b{font-size:14px}
 }
+.av-logo{width:78%;height:78%;object-fit:contain;mix-blend-mode:multiply}
+.perfil-icone{overflow:hidden}
+
+/* ---------- tela do caminhão (mecânico): pendências | ocorrências ---------- */
+.pend-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
+.pend-grid>.card{margin-bottom:0}
+.pend-grid .alert-card{justify-content:flex-start;gap:16px}
+.pend-grid .alert-card .alert-info{flex:0 1 auto;min-width:0;max-width:62%}
+.pend-grid .alert-card .alert-actions{justify-content:flex-start;margin-left:0;flex:0 0 auto}
+@media (max-width:1000px){.pend-grid{grid-template-columns:minmax(0,1fr)}.pend-grid .alert-card{flex-wrap:wrap}.pend-grid .alert-card .alert-info{max-width:100%}}
+
+/* ---------- aba Fleet do caminhão ---------- */
+.fleet-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:16px}
+.fleet-grid>.card{margin-bottom:0}
+.fleet-dados .dl{font-size:15px;gap:12px 20px}
+.fleet-dados .dl dt{font-size:14px}
+.fleet-dados .dl dd{font-weight:700;font-size:17px;color:#111827}
+.mot-lista{display:flex;flex-direction:column}
+.mot{padding:10px 0;border-bottom:1px solid var(--border)}.mot:last-child{border-bottom:0}
+.mot b{display:block;font-size:15px}.mot span{font-size:13px;color:var(--dim)}
+@media (max-width:1000px){.fleet-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- pódio (top 3 do mês) ---------- */
+.podio-card{padding:16px 14px 6px}
+.podio{display:flex;align-items:flex-end;justify-content:center;gap:8px;min-height:210px}
+.degrau{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
+.degrau .medalha{font-size:26px;line-height:1}.degrau b{font-size:13px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}.degrau small{color:var(--dim);font-size:11px;margin-bottom:6px}
+.degrau .bloco{width:100%;border-radius:10px 10px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;font-weight:800;font-size:20px;color:#fff}
+.degrau.p1 .bloco{background:linear-gradient(180deg,#f5b301,#d98e04)}.degrau.p2 .bloco{background:linear-gradient(180deg,#9ca3af,#6b7280)}.degrau.p3 .bloco{background:linear-gradient(180deg,#c9803c,#9a5b1f)}
+.podio-lista{list-style:none;margin:12px 0 4px;padding:0}.podio-lista li{display:flex;justify-content:space-between;padding:8px 2px;border-top:1px solid var(--border);font-size:13px}
+@media (max-width:1300px){.painel-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.col-podio{grid-column:1 / -1}}
+@media (max-width:820px){.painel-cols{grid-template-columns:minmax(0,1fr)!important}}
+
+/* ---------- dashboard: análises ---------- */
+.dash-duo{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.dash-duo>.card,.dash-col-custo>.card,.dash-col-dir>.card{margin-bottom:0}
+.dash-col-custo,.dash-col-dir{min-width:0}
+.dash-media{margin-top:16px}
+@media (max-width:1100px){.dash-duo{grid-template-columns:minmax(0,1fr)}}
+.g-abas{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.g-abas button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:7px 14px;font-weight:600;font-size:13px;color:var(--dim);cursor:pointer}
+.g-abas button.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.g-corpo{border-radius:14px;padding:6px}
+.g-corpo.g-escuro{background:#0b1020;padding:14px 14px 10px;color:#e2e8f0}
+.g-svg{width:100%;height:auto;display:block}.g-svg-pizza{max-width:240px}
+.g-lbl{font-size:12px;fill:var(--text)}.g-val{font-size:12px;font-weight:700;fill:var(--text)}.g-tot{font-size:30px;font-weight:800;fill:var(--text)}
+.g-f1 .g-grade{stroke:#1e293b;stroke-width:1}.g-f1 .g-eixo{fill:#64748b;font-size:10px}.g-f1 .g-hoje{stroke:#475569;stroke-dasharray:3 4}
+.g-kpi{display:flex;flex-direction:column;margin:0 4px 8px}.g-kpi span{font-size:12px;color:#94a3b8;font-weight:600}.g-kpi b{font-size:28px;color:#f8fafc;letter-spacing:-.5px}.g-kpi small{font-size:11px;color:#64748b}
+.g-leg-f1{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#94a3b8;margin:6px 4px 0}.g-leg-f1 i{display:inline-block;width:22px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.g-pizza{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:center}.g-legs{flex:1;min-width:200px}
+.g-leg{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;border-bottom:1px solid var(--border)}.g-leg i{width:12px;height:12px;border-radius:3px;flex:0 0 auto}.g-leg span{flex:1}.g-leg b{font-size:12px;color:var(--dim)}
+
+/* ---------- previsão por caminhão ---------- */
+.g-f1-corpo{display:flex;gap:14px;align-items:flex-start}
+.g-f1-graf{flex:1;min-width:0}
+.g-legs-f1{display:flex;flex-direction:column;gap:5px;flex:0 0 112px;max-height:300px;overflow:auto}
+.g-legs-f1 button{display:flex;align-items:center;gap:7px;background:#111a33;border:1px solid #1e293b;border-radius:9px;padding:6px 8px;color:#e2e8f0;font-size:12px;font-weight:700;cursor:pointer;text-align:left}
+.g-legs-f1 button i{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+.g-legs-f1 button small{margin-left:auto;color:#64748b;font-weight:600;font-size:10px}
+.g-legs-f1 button.off{opacity:.38}
+@media (max-width:640px){.g-f1-corpo{flex-direction:column}.g-legs-f1{flex-direction:row;flex-wrap:wrap;flex:none;max-height:none}}
+/* ---------- Pneus: tabelas lado a lado ---------- */
+.pn-duo{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.pn-duo>.card{margin-bottom:0;min-width:0}
+@media (max-width:1100px){.pn-duo{grid-template-columns:minmax(0,1fr)}}
+/* ---------- Dashboard do mecânico: só o gráfico de serviços ---------- */
+#tab-dashboard.dash-mec>.card,#tab-dashboard.dash-mec #dashKpis,#tab-dashboard.dash-mec .dash-col-custo,#tab-dashboard.dash-mec .dash-media{display:none}
+#tab-dashboard.dash-mec .dash-duo{grid-template-columns:minmax(0,1fr)}
+#tab-dashboard.dash-mec .g-abas button[data-modo="previsao"]{display:none}
+/* ---------- olho da senha ---------- */
+.senha-box{position:relative;display:block}.senha-box input{padding-right:46px;width:100%}
+.senha-olho{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:none;background:none;font-size:18px;cursor:pointer;color:var(--dim);border-radius:8px}
+.senha-olho:hover{background:rgba(0,0,0,.06)}
+/* ---------- celular: abas do sistema em faixa rolável ---------- */
+@media (max-width:820px){
+  .sub-tabs{display:flex!important;overflow-x:auto;gap:6px;padding:8px 12px;margin:0 -12px 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .sub-tabs[hidden]{display:none!important}
+  .sub-tabs::-webkit-scrollbar{display:none}
+  .sub-tabs .subtab{flex:0 0 auto;white-space:nowrap}
+}
+
+.item-ocultar{background:none;border:none;font-size:16px;cursor:pointer;opacity:.45;padding:6px;border-radius:8px}.item-ocultar:hover{opacity:1;background:rgba(0,0,0,.06)}
+
+/* ---------- Fleet: motoristas ---------- */
+.mot-topo{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.mot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.mot-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.mot-card:hover{border-color:var(--primary);box-shadow:0 4px 14px rgba(79,70,229,.12)}.mot-card.inativo{opacity:.55}
+.mot-av{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;font-size:22px}.mot-av.grande{width:68px;height:68px;font-size:34px}
+.mot-tx{flex:1;min-width:0}.mot-tx b{display:block;font-size:15px}.mot-tx small{color:var(--dim)}
+.mot-pts{text-align:right}.mot-pts b{display:block;font-size:20px;color:var(--primary)}.mot-pts small{color:var(--dim);font-size:11px}
+.mot-cab{display:flex;gap:14px;align-items:center;margin-bottom:12px}.mot-cab h3{margin:0 0 4px}
+.mot-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.mot-kpis div{background:rgba(79,70,229,.07);border-radius:12px;padding:12px;text-align:center}.mot-kpis b{display:block;font-size:26px;color:var(--primary)}.mot-kpis small{color:var(--dim)}
+.mot-lin{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}.mot-lin span{color:var(--dim)}
+.mot-perfil h4{margin:16px 0 6px}.mot-lanc>div{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.mot-lanc .pos{color:#059669}.mot-lanc .neg{color:#dc2626}
+.degrau .mot-av{width:38px;height:38px;font-size:19px;margin:0 auto 4px}
+.modal .side-sec{margin:14px 0 8px;color:var(--text)}
+
+.acoes-user{display:grid;grid-template-columns:118px 92px;gap:6px;justify-content:start;align-items:center}.acoes-user .btn{width:100%;white-space:nowrap}
+.mais-item{display:flex;align-items:center;gap:12px;width:100%;padding:13px 12px;margin-bottom:6px;background:#f9fafb;border:1px solid var(--border);border-radius:12px;font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.mais-item:disabled{opacity:.5;cursor:default}.mais-item .ic{font-size:22px}.mais-item .tx{flex:1}.mais-item small{color:var(--dim);font-weight:500}

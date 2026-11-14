@@ -32,7 +32,13 @@ function abrirModal(titulo, conteudo, op) {
   return { el: caixa, fechar, overlay: ov };
 }
 function mensagem(el, texto, tipo) { el.textContent = texto || ''; el.className = 'msg' + (texto ? ' show ' + (tipo || 'err') : ''); }
-function campo(rotulo, input, dica) { return h('div', { class: 'field' }, h('label', { text: rotulo }), input, dica ? h('div', { class: 'hint', text: dica }) : null); }
+/** Campo de senha com o olhinho para mostrar/ocultar. */
+function comOlho(input) {
+  const b = h('button', { type: 'button', class: 'senha-olho', title: 'Mostrar senha', 'aria-label': 'Mostrar senha', text: '👁' });
+  b.onclick = () => { const ver = input.type === 'password'; input.type = ver ? 'text' : 'password'; b.textContent = ver ? '🙈' : '👁'; b.title = b['aria-label'] = ver ? 'Ocultar senha' : 'Mostrar senha'; b.setAttribute('aria-label', b.title); input.focus(); };
+  return h('div', { class: 'senha-box' }, input, b);
+}
+function campo(rotulo, input, dica) { return h('div', { class: 'field' }, h('label', { text: rotulo }), input.type === 'password' ? comOlho(input) : input, dica ? h('div', { class: 'hint', text: dica }) : null); }
 const REGRA_SENHA = 'Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.';
 
 const NOME_PERFIL = { master: 'Master', admin: 'Administrador', mecanico: 'Mecânico', motorista: 'Motorista' };
@@ -52,3 +58,10 @@ const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
     if (topo.id) topo.classList.remove('show'); else topo.remove();
   });
 })();
+
+/** Foto de perfil: emoji ou a logo da empresa ("logo:trm"). */
+function avatarNo(av) {
+  if (/^logo:/.test(av || '')) return h('img', { src: 'logotrm.png', alt: '', class: 'av-logo' });
+  if (/^img:[a-z0-9_]{1,24}$/.test(av || '')) return h('img', { src: 'icons/avatares/' + av.slice(4) + '.png', alt: '', class: 'av-logo' });   // logos de marcas/empresas: coloque o PNG em icons/avatares/ e acrescente 'img:nome' em AVATARES (perfil.js)
+  return document.createTextNode(av || '🔧');
+}

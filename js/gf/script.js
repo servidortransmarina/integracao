@@ -404,7 +404,7 @@ function renderDetalhe() {
       ...alsV.map(a => { const g = grupoAlerta(a); return { o: ordem[g], html: montarCardAlerta(a) }; }),
       ...agsV.map(ag => { const atras = ag.dataPrevista && ag.dataPrevista < hojeL; return { o: atras ? 0 : 2, html: atras ? montarCardAgAtrasado(ag) : montarCardAgPendente(ag) }; })
     ].sort((x, y) => x.o - y.o);
-    htmlPendencias = `<div class="card"><h2>⚠️ O que precisa ser feito neste caminhão</h2>${itens.length ? itens.map(i => i.html).join('') : '<p class="empty" style="padding:12px;">Nada pendente neste caminhão. ✅</p>'}</div>`;
+    htmlPendencias = `<div class="pend-grid"><div class="card"><h2>⚠️ O que precisa ser feito neste caminhão</h2>${itens.length ? itens.map(i => i.html).join('') : '<p class="empty" style="padding:12px;">Nada pendente neste caminhão. ✅</p>'}</div>${montarCardOcorrencias(placa)}</div>`;
   }
 
   // Monta as linhas do histórico exibindo o KM normalmente (ou 0 km)
@@ -911,6 +911,19 @@ function dicaAlerta(a, grp) {
   return quem ? (grp === 'resolvido' ? `👤 Resolvido por: ${quem}` : `👤 ${rot} — classificado por: ${quem}`) : `👤 ${rot} — sem registro de quem classificou`;
 }
 function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.nome || 'Não identificado'}`; }
+/** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
+function montarCardOcorrencias(placa) {
+  const d = (typeof App !== 'undefined' && App.dados) || {}, mot = {}; (d.motoristas || []).forEach(m => { mot[m.id] = m.nome; });
+  const lista = (d.ocorrencias || []).filter(o => o.placa === placa && String(o.status || '').toLowerCase() !== 'resolvida' && String(o.status || '').toLowerCase() !== 'resolvido')
+    .sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
+  const cards = lista.map(o => {
+    const alta = /alta|grave|urgente/i.test(o.prioridade || '') || /sim/i.test(o.restringeCirculacao || '');
+    return `<div class="alert-card ${alta ? 'atrasado' : 'pendente'}"><div class="alert-info"><div class="alert-title">${escHtml(o.item || 'Ocorrência')}${/sim/i.test(o.restringeCirculacao || '') ? ' · 🚫 restringe circulação' : ''}</div>
+      <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(mot[o.motoristaId] || 'Motorista')}</div></div></div>`;
+  }).join('');
+  return `<div class="card"><h2>📣 Ocorrências dos motoristas</h2>${cards || '<p class="empty" style="padding:12px;">Nenhuma ocorrência aberta neste caminhão. ✅</p>'}</div>`;
+}
+
 function montarCardAlerta(a) {
   const v = db.veiculos.find(x => x.placa === a.placa), km = v ? fmtKm(v.kmAtual) : '-', grp = grupoAlerta(a);
   const isAdmin = (GF.perfil()) !== "mecanico";

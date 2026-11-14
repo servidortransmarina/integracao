@@ -161,8 +161,10 @@ function corDesgaste(f) {
 }
 
 function modeloKeyDoVeiculo(v) {
-  const k = String((v && v.modelo) || (v && MODELO_POR_PLACA[v.placa]) || '').trim().toLowerCase();
-  return MODELOS_3D[k] ? k : null;
+  // A coluna "modelo" da planilha agora guarda o texto do Fleet (ex.: "M.BENZ/ACCELO 1017"); só vale se for o nome de um modelo 3D. Senão, vale a tabela por placa.
+  // Cada placa tem o seu modelo (MODELO_POR_PLACA). A coluna "modelo" só vale para placas que não estão na tabela e se for o nome exato de um modelo 3D.
+  const col = String((v && v.modelo) || '').trim().toLowerCase(), porPlaca = String((v && MODELO_POR_PLACA[String(v.placa || '').toUpperCase()]) || '').toLowerCase();
+  return MODELOS_3D[porPlaca] ? porPlaca : (MODELOS_3D[col] ? col : null);
 }
 function modelo3dDoVeiculo(v) {
   const k = modeloKeyDoVeiculo(v);
@@ -235,7 +237,7 @@ function renderPneus() {
     `<div class="pn-resumo-item"><b>${rec}</b><span>na recapagem</span></div>` +
     `<div class="pn-resumo-item"><b>${fmtKm(v.kmAtual)}</b><span>KM do caminhão (Sascar)</span></div>`;
   document.getElementById('pneusModeloInfo').textContent =
-    (ficha ? ficha.desc : m.nome) + (m.ilustrativo ? ' · corpo 3D ilustrativo (modelo próprio ainda não criado)' : '') + (m.nota ? ' · ' + m.nota : '');
+    (ficha ? ficha.desc : m.nome) + ' · modelo 3D: ' + m.chave + (m.ilustrativo ? ' · corpo 3D ilustrativo (modelo próprio ainda não criado)' : '') + (m.nota ? ' · ' + m.nota : '');
 
   pneusAtualizarViewer(v, m);
   pneusRenderPainel(v, m);
