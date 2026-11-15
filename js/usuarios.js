@@ -43,10 +43,13 @@ const Usuarios = {
     const lista = [['manutencao', '🔧 Manutenção'], ['fleet', '🚛 Fleet'], ['escalas', '📅 Escalas'], ['almoxarifado', '📦 Almoxarifado'], ['ponto', '🕒 Ponto'], ['financeiro', '💰 Financeiro']];
     const marcado = new Set(u.sistemas || []), caixa = h('div');
     lista.forEach(([id, nome]) => { const cb = h('input', { type: 'checkbox', checked: marcado.has(id) ? true : null, dataset: { sis: id } }); caixa.append(h('label', { class: 'pers-item' }, cb, h('span', { text: nome }))); });
+    const selPonto = h('select', { class: 'sel-ponto' }, h('option', { value: 'adm', text: 'ADM do Ponto (tudo)' }), h('option', { value: 'encarregado', text: 'Encarregado (folgas e cartas pendentes)' }));
+    selPonto.value = u.pontoPerfil || (u.perfil === 'admin' || u.perfil === 'master' ? 'adm' : 'encarregado');
+    caixa.append(h('label', { class: 'pers-item ponto-perfil' }, h('span', { text: '🕒 Perfil dentro do Ponto: ' }), selPonto));
     const m = abrirModal('Sistemas de ' + nomeBonito(u.nome), h('div', {}, h('div', { class: 'hint', text: 'Marque o que esta pessoa pode ver. O que ela pode fazer dentro de cada sistema continua dependendo do perfil (' + (NOME_PERFIL[u.perfil] || u.perfil) + '). Ela entra de novo para valer.' }), caixa,
       h('div', { class: 'modal-actions' }, h('button', { class: 'btn secondary', text: 'Cancelar', onclick: () => m.fechar() }),
         h('button', { class: 'btn', text: 'Salvar', onclick: async () => { const mapa = {}; $$('input[data-sis]', caixa).forEach(cb => { mapa[cb.dataset.sis] = cb.checked; });
-          try { await API.chamar('definirSistemasUsuario', { usuario: u.usuario, sistemas: mapa }); u.sistemas = Object.keys(mapa).filter(k => mapa[k]); toast('Sistemas atualizados.'); m.fechar(); } catch (e) { toast(e.message, true); } } }))));
+          try { await API.chamar('definirSistemasUsuario', { usuario: u.usuario, sistemas: mapa, perfisSis: { ponto: selPonto.value } }); u.pontoPerfil = selPonto.value; u.sistemas = Object.keys(mapa).filter(k => mapa[k]); toast('Sistemas atualizados.'); m.fechar(); } catch (e) { toast(e.message, true); } } }))));
   },
   /** Mostra o resultado na hora (otimista), manda ao servidor em segundo plano e desfaz se der erro. */
   agir(fn, aplicar, desfazer) {
