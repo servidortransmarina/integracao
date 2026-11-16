@@ -2,10 +2,25 @@
    Sessão e chamadas ao servidor vêm do Hub (window.HubFin). */
 const Financeiro = {
   area: null,                 // null = tela de escolha | 'rota' | 'loja'
+  resumoCache: null,
+  resumo() {
+    if (this.resumoCache && Date.now() - this.resumoCache.t < 60000) return Promise.resolve(this.resumoCache.r);
+    return API.chamar('financeiroRotaResumo').then(r => { this.resumoCache = { t: Date.now(), r }; return r; });
+  },
+  /** Tela de escolha: a Rota mostra a situação do crédito das escalas; a Loja aparece como "em breve". */
   escolha() {
-    const op = (area, ic, nome, txt, breve) => h('button', { type: 'button', class: 'fin-op' + (breve ? ' breve' : ''), onclick: () => this.entrar(area) }, h('span', { class: 'ic', text: ic }), h('b', { text: nome }), h('small', { text: txt }));
-    return h('div', {}, h('div', { class: 'saudacao' }, h('h2', { text: 'Financeiro' }), h('p', { text: 'Qual financeiro você quer abrir?' })),
-      h('div', { class: 'fin-escolha' }, op('rota', '🚚', 'Rota', 'Fretes, depósitos, tarifas por região, ticket médio e balanços semanais.'), op('loja', '🏬', 'Loja', 'Em breve.', true)));
+    const saldo = h('div', { class: 'fo-saldo', text: '…' }), nota = h('div', { class: 'fo-nota', text: 'Saldo em aberto das escalas' }), stats = h('div', { class: 'fo-stats' }), pe = h('div', { class: 'fo-pe' });
+    const stat = (rot, v) => h('div', {}, h('small', { text: rot }), h('b', { text: v }));
+    this.resumo().then(r => {
+      saldo.textContent = fmtMoeda(r.saldo); saldo.classList.toggle('neg', r.saldo < 0);
+      nota.textContent = r.saldo < 0 ? 'Gasto acima do crédito das escalas' : 'Crédito das escalas sobrando';
+      stats.append(stat('Crédito', fmtMoeda(r.credito)), stat('Gasto', fmtMoeda(r.gasto)), stat('Ticket médio', fmtMoeda(r.ticket)));
+      pe.textContent = r.escalas + (r.escalas === 1 ? ' escala salva' : ' escalas salvas') + ', ' + r.fechados + (r.fechados === 1 ? ' balanço fechado' : ' balanços fechados') + ', ' + r.tarifas + ' regiões com tarifa.';
+    }).catch(() => { saldo.textContent = 'Indisponível'; nota.textContent = 'Não consegui ler os números agora. Você ainda pode abrir a Rota.'; });
+    const rota = h('section', { class: 'fo-painel fo-rota' }, h('h2', { text: 'Rota' }), h('p', { class: 'fo-sub', text: 'Fretes, depósitos, tarifas por região, ticket médio e balanços da semana.' }),
+      h('div', { class: 'fo-num' }, saldo, nota), stats, pe, h('button', { class: 'fo-abrir', type: 'button', text: 'Abrir Rota', onclick: () => this.entrar('rota') }));
+    const loja = h('section', { class: 'fo-painel fo-loja', 'aria-disabled': 'true' }, h('div', { class: 'fo-toldo' }), h('h2', { text: 'Loja' }), h('p', { class: 'fo-sub', text: 'O financeiro da loja chega depois do da Rota. Quando estiver pronto, ele abre aqui.' }), h('span', { class: 'fo-breve', text: 'Em breve' }));
+    return h('div', { class: 'fo' }, h('div', { class: 'fo-grade' }, rota, loja));
   },
   entrar(area) { this.area = area; App.abrirAba(area === 'rota' ? 'fin-rota-lanc' : 'fin-loja'); },
   voltar() { this.area = null; App.abrirAba('fin-escolha'); }
@@ -35,7 +50,7 @@ const FinHub = {
   reiniciar() {
     if (this.frame) this.frame.remove();
     if (this._aj) window.removeEventListener('resize', this._aj);
-    this.frame = null; this.pronto = false; this.pendente = null; this.aba = null; Financeiro.area = null; this.esconder();
+    this.frame = null; this.pronto = false; this.pendente = null; this.aba = null; Financeiro.area = null; Financeiro.resumoCache = null; this.esconder();
   }
 };
 window.addEventListener('message', e => {
