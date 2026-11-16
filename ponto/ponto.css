@@ -1963,6 +1963,10 @@ img,svg,canvas {max-width:100%;}
 }
 
 
+/* cor do Ponto: #173a57 (a do menu original) em contornos e linhas */
+body.embed .panel, body.embed .card, body.embed .metric-card { border-top:3px solid #173a57; }
+body.embed .subnav-btn.active { border-bottom-color:#173a57; }
+
 /* ===== Modo embutido no Hub: o Hub fornece menu, topo e sessão ===== */
 body.embed .sidebar, body.embed .topbar, body.embed #modal-login {display:none!important;}
 body.embed .shell {display:block;min-height:0;}

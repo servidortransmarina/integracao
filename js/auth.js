@@ -18,8 +18,8 @@ Auth.telas.entrar = () => {
     e.preventDefault(); mensagem(m, ''); b.disabled = true; b.textContent = 'Entrando…';
     try {
       const usuario = u.value.trim(), chave = await Cripto.chave(usuario, s.value); let r;
-      try { r = await API.chamar('login', { usuario, chave }, { semExpirar: true }); }
-      catch (e1) { if (e1.codigo !== 'ATUALIZAR') throw e1; r = await API.chamar('login', { usuario, chave, senha: s.value }, { semExpirar: true }); }   // conta antiga: converte uma vez
+      try { r = await API.chamar('login', { usuario, chave, comDados: true }, { semExpirar: true }); }
+      catch (e1) { if (e1.codigo !== 'ATUALIZAR') throw e1; r = await API.chamar('login', { usuario, chave, senha: s.value, comDados: true }, { semExpirar: true }); }   // conta antiga: converte uma vez
       s.value = ''; await App.iniciar(r);
     }
     catch (err) { mensagem(m, err.message); }

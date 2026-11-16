@@ -27,6 +27,7 @@ const PontoHub = {
   reiniciar() {
     if (this.frame) this.frame.remove();
     if (this._aj) window.removeEventListener('resize', this._aj);
+    PontoPainel.reiniciar();
     this.frame = null; this.pronto = false; this.pendente = null; this.aba = null; this.esconder();
   }
 };

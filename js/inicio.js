@@ -15,8 +15,8 @@ const Inicio = {
   estaOculto(it) { const e = it.k && this.ocultos()[it.k]; if (!e) return false; if (e.ate) return e.ate > Date.now(); return e.sig === it.t; },
   menuOcultar(it, ancora) {
     const antigo = $('#ocultarPop'); if (antigo) antigo.remove();
-    const pop = h('div', { class: 'pop', id: 'ocultarPop' }, h('div', { class: 'nome' }, 'Ocultar este aviso'), h('hr'),
-      ...[[1, 'Por 1 dia'], [3, 'Por 3 dias'], [7, 'Por 7 dias'], [30, 'Por 30 dias'], [0, 'Até mudar']].map(([d, t]) => h('button', { onclick: e => { e.stopPropagation(); pop.remove(); this.ocultar(it, d); } }, t)));
+    const pop = h('div', { class: 'pop', id: 'ocultarPop' }, h('div', { class: 'nome' }, 'Silenciar este aviso'), h('hr'),
+      ...[[1, 'Por 1 dia'], [3, 'Por 3 dias'], [7, 'Por 7 dias'], [30, 'Por 30 dias'], [0, 'Até mudar a situação']].map(([d, t]) => h('button', { onclick: e => { e.stopPropagation(); pop.remove(); this.ocultar(it, d); } }, t)));
     document.body.append(pop);
     const r = ancora.getBoundingClientRect(), w = pop.offsetWidth, hh = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
@@ -26,8 +26,11 @@ const Inicio = {
   itens() {
     const S = App.sessao, d = App.dados || {}, lista = [];
     const add = (o) => lista.push(o);
-    if (S.perfil === 'master' && Usuarios.pendentes) add({ nivel: 'bad', sis: 'portal', ic: '👤', t: Usuarios.pendentes + (Usuarios.pendentes > 1 ? ' usuários aguardando acesso' : ' usuário aguardando acesso'), p: 'Cadastros novos esperam a sua aprovação.', origem: 'Portal', acao: () => Usuarios.abrir(), ordem: 0, k: 'usuarios' });
-    if (S.perfil === 'master' && d.pendenciasPlaca) add({ nivel: 'bad', sis: 'frota', ic: '🧾', t: d.pendenciasPlaca + (d.pendenciasPlaca > 1 ? ' cupons com placa não identificada' : ' cupom com placa não identificada'), p: 'O posto leu uma placa que não existe na frota. Escolha a certa.', origem: 'Manutenção', acao: () => Pendencias.abrir(), ordem: 0, k: 'pendplaca' });
+    if (S.perfil === 'master' && Usuarios.pendentes) add({ nivel: 'bad', sis: 'portal', ic: '👤', t: Usuarios.pendentes + (Usuarios.pendentes > 1 ? ' usuários aguardando acesso' : ' usuário aguardando acesso'), k: 'pt:usuarios', p: 'Cadastros novos esperam a sua aprovação.', origem: 'Portal', acao: () => Usuarios.abrir(), ordem: 0, k: 'usuarios' });
+    if (S.perfil === 'master' && d.pendenciasPlaca) add({ nivel: 'bad', sis: 'frota', ic: '🧾', t: d.pendenciasPlaca + (d.pendenciasPlaca > 1 ? ' cupons com placa não identificada' : ' cupom com placa não identificada'), k: 'pt:cupons', p: 'O posto leu uma placa que não existe na frota. Escolha a certa.', origem: 'Manutenção', acao: () => Pendencias.abrir(), ordem: 0, k: 'pendplaca' });
+    if (S.perfil === 'master' && (d.problemas || []).length) { const ps = d.problemas, u = ps[ps.length - 1]; add({ nivel: 'warn', sis: 'portal', ic: '🐞', t: ps.length + (ps.length > 1 ? ' problemas relatados' : ' problema relatado'), p: nomeBonito(u.nome) + ': ' + String(u.descricao).slice(0, 100), origem: 'Relatos', quando: u.criadoEm, acao: () => Ajuda.problemas(), k: 'pr:problemas', ordem: 3 }); }
+    if (['master', 'admin'].indexOf(S.perfil) >= 0) (d.resgates || []).filter(r => String(r.status).toUpperCase() === 'PENDENTE').forEach(r => { const m = (d.motoristas || []).find(x => String(x.id) === String(r.motoristaId)); add({ nivel: 'warn', sis: 'fleet', ic: '🎁', origem: 'Fleet', ordem: 2, k: 'rg:' + r.id, t: nomeBonito(m ? m.nome : 'Motorista') + ' quer resgatar uma folga', p: r.pontos + ' pontos — aguardando a sua decisão.', quando: r.dataHora, acao: () => Pontos.decidir(r) }); });
+    if (S.pontoPerfil) { PontoPainel.garantir(); if (PontoPainel.item) add(Object.assign({}, PontoPainel.item)); }
     (d.notificacoes || []).forEach(n => add({ nivel: 'info', sis: 'portal', ic: '🔔', t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm, ordem: 5, k: 'nt:' + (n.id || n.titulo) }));
     if (S.perfil !== 'motorista') {
       const hoje = hojeLocal();
@@ -63,7 +66,7 @@ const Inicio = {
       h('div', { class: 'tx' }, h('b', { text: it.t }), h('p', { text: it.p }), h('small', { text: it.origem + (this.quando(it.quando) ? ' · ' + this.quando(it.quando) : '') })),
       it.k ? (it.oculto
         ? h('button', { class: 'btn small secondary', type: 'button', text: 'Voltar a mostrar', onclick: e => { e.stopPropagation(); this.mostrar(it); } })
-        : h('button', { class: 'item-ocultar', type: 'button', title: 'Ocultar ou adiar', 'aria-label': 'Ocultar ou adiar', text: '🙈', onclick: e => { e.stopPropagation(); this.menuOcultar(it, e.currentTarget); } })) : null,
+        : h('button', { class: 'item-ocultar', type: 'button', title: 'Silenciar este aviso', 'aria-label': 'Silenciar este aviso', text: '🔕 Silenciar', onclick: e => { e.stopPropagation(); this.menuOcultar(it, e.currentTarget); } })) : null,
       it.acao ? h('span', { class: 'seta', text: '›' }) : null);
     if (it.acao) { el.onclick = it.acao; el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); it.acao(); } }; }
     return el;
@@ -79,7 +82,7 @@ const Inicio = {
     return h('div', { class: 'grupo' }, cab, corpo);
   },
   coluna(titulo, chavePrefixo, itens, vazio) {
-    const SIS = { frota: ['🔧', 'Manutenção'], portal: ['🏠', 'Portal'] }, col = h('div', { class: 'col' }, h('div', { class: 'sec-t', text: titulo }));
+    const SIS = { frota: ['🔧', 'Manutenção'], fleet: ['🚛', 'Fleet'], ponto: ['🕒', 'Ponto'], portal: ['🏠', 'Geral (cadastros, cupons e avisos)'] }, col = h('div', { class: 'col' }, h('div', { class: 'sec-t', text: titulo }));
     const ordem = Object.keys(SIS).filter(k => itens.some(i => i.sis === k));
     if (!ordem.length) col.append(h('div', { class: 'vazio-ok', text: vazio }));
     ordem.forEach(k => col.append(this.cartao(chavePrefixo + k, SIS[k][0], SIS[k][1], itens.filter(i => i.sis === k))));
@@ -87,15 +90,20 @@ const Inicio = {
   },
 
   render() {
+    const r = this.renderBase();
+    r.insertBefore(h('div', { class: 'rel-prob-linha' }, h('button', { class: 'btn small secondary', type: 'button', text: '🐞 Relatar problema', onclick: () => Ajuda.relatar() })), r.firstChild);
+    return r;
+  },
+  renderBase() {
     const S = App.sessao, raiz = h('div'), hora = new Date().getHours();
     const saud = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
     if (S.perfil === 'motorista') return this.renderMotorista(raiz, saud);
     const brutos = this.itens(), ocultosLista = brutos.filter(i => this.estaOculto(i)).map(i => Object.assign(i, { oculto: true }));
     const todos = brutos.filter(i => !this.estaOculto(i)), vis = this.filtro === 'ocultos' ? ocultosLista : todos.filter(i => this.filtro === 'tudo' || i.sis === this.filtro);
     const precisa = vis.filter(i => !i.acompanhar), acomp = vis.filter(i => i.acompanhar), n = todos.filter(i => !i.acompanhar).length;
-    raiz.append(h('div', { class: 'saudacao' }, h('h2', { text: saud + ', ' + primeiroNome(S.nome) }), h('p', { text: n ? n + (n > 1 ? ' itens precisam de você' : ' item precisa de você') : 'Tudo em dia por aqui.' })));
+    raiz.append(h('div', { class: 'saudacao' }, h('h2', { text: saud + ', ' + primeiroNome(S.nome) }), h('p', { text: n ? n + (n > 1 ? ' itens precisam de você' : ' item precisa de você') : 'Tudo em dia por aqui.' }), h('button', { class: 'btn secondary small sau-atualizar', type: 'button', text: '🔄 Atualizar', onclick: () => atualizarManualmente() })));
     const chips = h('div', { class: 'chips' });
-    [['tudo', 'Tudo'], ['frota', 'Manutenção']].concat(S.perfil === 'master' ? [['portal', 'Portal']] : []).concat([['ocultos', 'Ocultos' + (ocultosLista.length ? ' (' + ocultosLista.length + ')' : '')]]).forEach(([id, nome]) => chips.append(h('button', { class: 'chip' + (this.filtro === id ? ' active' : ''), type: 'button', text: nome, onclick: () => { this.filtro = id; App.abrirAba('inicio'); } })));
+    [['tudo', 'Tudo']].concat((S.sistemas || []).indexOf('manutencao') >= 0 ? [['frota', 'Manutenção']] : []).concat((S.sistemas || []).indexOf('fleet') >= 0 && ['master', 'admin'].indexOf(S.perfil) >= 0 ? [['fleet', 'Fleet']] : []).concat(S.pontoPerfil ? [['ponto', 'Ponto']] : []).concat(S.perfil === 'master' ? [['portal', 'Geral']] : []).concat([['ocultos', 'Silenciados' + (ocultosLista.length ? ' (' + ocultosLista.length + ')' : '')]]).forEach(([id, nome]) => chips.append(h('button', { class: 'chip' + (this.filtro === id ? ' active' : ''), type: 'button', text: nome, onclick: () => { this.filtro = id; App.abrirAba('inicio'); } })));
     raiz.append(chips, h('div', { class: 'painel-cols' }, this.coluna('Precisa de você', 'p:', precisa, 'Nada pendente. ✅'), this.coluna('Para acompanhar', 'a:', acomp, 'Nada em andamento.'), this.podio()));
     return raiz;
   },
@@ -114,11 +122,9 @@ const Inicio = {
 
   renderMotorista(raiz, saud) {
     const S = App.sessao, d = App.dados;
-    raiz.append(h('div', { class: 'saudacao' }, h('h2', { text: saud + ', ' + primeiroNome(S.nome) }), h('p', { text: 'Seu caminhão e seus avisos.' })));
+    raiz.append(h('div', { class: 'saudacao' }, h('h2', { text: saud + ', ' + primeiroNome(S.nome) }), h('p', { text: 'Seu caminhão e seus avisos.' })), h('button', { class: 'pt-card', type: 'button', onclick: () => Pontos.abrirMotorista() }, h('span', { text: '⭐' }), h('b', { text: Pontos.saldo() + ' pontos' }), h('small', { text: Pontos.saldo() >= Pontos.custo() ? 'Você já pode resgatar uma folga!' : 'Toque para ver o histórico e resgatar folgas' })));
     (d.notificacoes || []).forEach(n => raiz.append(this.linha({ nivel: 'info', ic: '🔔', t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm })));
-    raiz.append(h('div', { class: 'card' }, h('h2', { text: 'Meu caminhão' }), (d.veiculos || []).length
-      ? h('div', { class: 'placas', style: 'display:flex;flex-wrap:wrap;gap:16px' }, d.veiculos.map(v => placaHtmlEl(v.placa)))
-      : h('div', { class: 'empty', text: 'Nenhum caminhão vinculado ainda. Faça um checklist para registrar o caminhão de hoje.' })));
+    raiz.append(Motorista.cartaoHoje());
     return raiz;
   }
 };

@@ -14,10 +14,10 @@ function contagemServicos() {
     if (m.descricao === 'Registro de KM' || m.tipo === 'abastecimento') return;
     if (veic !== 'todos' && m.placa !== veic) return;
     if ((ini && m.data < ini) || (fim && m.data > fim)) return;
-    const nome = m.tipo === 'outro' ? m.descricao : (TIPOS[m.tipo] || m.tipo); if (!nome) return;
-    cont[nome] = (cont[nome] || 0) + 1;
+    const nome = String(m.tipo === 'outro' ? m.descricao : (TIPOS[m.tipo] || m.tipo) || '').trim(); if (!nome) return;
+    const k = normPeca(nome); (cont[k] = cont[k] || { qtd: 0, v: {} }); cont[k].qtd++; cont[k].v[nome] = (cont[k].v[nome] || 0) + 1;   // "Pastilha de freio" e "pastilha freio " viram um serviço só
   });
-  return Object.keys(cont).map(n => ({ nome: n, qtd: cont[n] })).sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome));
+  return Object.keys(cont).map(k => ({ nome: Object.keys(cont[k].v).sort((a, b) => cont[k].v[b] - cont[k].v[a])[0], qtd: cont[k].qtd })).sort((a, b) => b.qtd - a.qtd || a.nome.localeCompare(b.nome));
 }
 
 function svgBarras(lista) {
@@ -31,7 +31,7 @@ function svgBarras(lista) {
 }
 
 function svgPizza(lista) {
-  const top = lista.slice(0, 7), resto = lista.slice(7).reduce((s, x) => s + x.qtd, 0), fatias = top.concat(resto ? [{ nome: 'Outros', qtd: resto }] : []);
+  const top = lista.slice(0, 7), sobra = lista.slice(7), resto = sobra.reduce((s, x) => s + x.qtd, 0), fatias = top.concat(resto ? [{ nome: 'Outros', qtd: resto, itens: sobra }] : []);
   const total = fatias.reduce((s, x) => s + x.qtd, 0) || 1, R = 90, r = 52, cx = 110, cy = 110;
   let ang = -Math.PI / 2;
   const arcos = fatias.map((x, i) => {
@@ -42,7 +42,7 @@ function svgPizza(lista) {
     ang = a2;
     return `<path d="${d}" fill="${PALETA[i % PALETA.length]}" fill-rule="evenodd"><title>${esc(x.nome)}: ${x.qtd} (${Math.round(x.qtd / total * 100)}%)</title></path>`;
   }).join('');
-  const leg = fatias.map((x, i) => `<div class="g-leg"><i style="background:${PALETA[i % PALETA.length]}"></i><span>${esc(x.nome)}</span><b>${x.qtd} · ${Math.round(x.qtd / total * 100)}%</b></div>`).join('');
+  const leg = fatias.map((x, i) => x.itens ? `<details class="g-outros"><summary class="g-leg"><i style="background:${PALETA[i % PALETA.length]}"></i><span>Outros (${x.itens.length} serviços) ▾</span><b>${x.qtd} · ${Math.round(x.qtd / total * 100)}%</b></summary>${x.itens.map(o => `<div class="g-leg g-sub"><span>${esc(o.nome)}</span><b>${o.qtd}</b></div>`).join('')}</details>` : `<div class="g-leg"><i style="background:${PALETA[i % PALETA.length]}"></i><span>${esc(x.nome)}</span><b>${x.qtd} · ${Math.round(x.qtd / total * 100)}%</b></div>`).join('');
   return `<div class="g-pizza"><svg viewBox="0 0 220 220" class="g-svg g-svg-pizza" role="img" aria-label="Participação de cada serviço">${arcos}<text x="${cx}" y="${cy - 2}" text-anchor="middle" class="g-tot">${total}</text><text x="${cx}" y="${cy + 16}" text-anchor="middle" class="g-lbl">serviços</text></svg><div class="g-legs">${leg}</div></div>`;
 }
 

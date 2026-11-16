@@ -5,7 +5,7 @@ const SISTEMAS = [
   { id: 'frota', chave: 'manutencao', nome: 'Manutenção', ic: '🔧', perfis: OFICINA_P, titulo: 'Controle de Manutenção', contador: () => Hub.contarAtencao() },
   { id: 'fleet', chave: 'fleet', nome: 'Fleet', ic: '🚛', perfis: TODOS_P, titulo: 'Fleet' },
   { id: 'ponto', chave: 'ponto', nome: 'Ponto', ic: '🕒', perfis: GESTAO_P, titulo: 'Gestão de Ponto' },
-  { id: 'financeiro', chave: 'financeiro', nome: 'Financeiro', ic: '💰', perfis: ['master'], futuro: true },
+  { id: 'financeiro', chave: 'financeiro', nome: 'Financeiro', ic: '💰', perfis: GESTAO_P, titulo: 'Financeiro' },
   { id: 'escalas', chave: 'escalas', nome: 'Escalas', ic: '📅', perfis: GESTAO_P, futuro: true },
   { id: 'almoxarifado', chave: 'almoxarifado', nome: 'Almoxarifado', ic: '📦', perfis: OFICINA_P, futuro: true }
 ];
@@ -15,15 +15,25 @@ const ABAS = [
   { id: 'dashboard', sis: 'frota', nome: 'Dashboard Analítico', curto: 'Dashboard', ic: '📊', perfis: OFICINA_P, gf: 'dashboard' },
   { id: 'alertas', sis: 'frota', nome: 'Alertas', curto: 'Alertas', ic: '🔔', perfis: OFICINA_P, gf: 'alertas', contador: () => Hub.contarAtencao() },
   { id: 'pneus', sis: 'frota', nome: 'Controle de Pneus', curto: 'Pneus', ic: '🛞', perfis: GESTAO_P, gf: 'pneus' },
-  { id: 'checklists', sis: 'fleet', nome: 'Checklists', curto: 'Checklists', ic: '✅', perfis: TODOS_P, soon: 'Em breve — checklist com fotos e avaliação.' },
-  { id: 'abastecimento', sis: 'fleet', nome: 'Abastecer', curto: 'Abastecer', ic: '⛽', perfis: ['motorista'], soon: 'Em breve — lançar abastecimento e ganhar pontos.' },
-  { id: 'ocorrencias', sis: 'fleet', nome: 'Ocorrências', curto: 'Ocorrências', ic: '⚠️', perfis: ['master', 'admin', 'motorista'], soon: 'Em breve — ocorrências registradas pelos motoristas.' },
+  { id: 'checklists', sis: 'fleet', nome: 'Checklist', curto: 'Checklist', ic: '✅', perfis: TODOS_P, hub: () => App.sessao.perfil === 'motorista' ? Motorista.checklist() : Motorista.gestaoChecklists() },
+  { id: 'abastecimento', sis: 'fleet', nome: 'Abastecimento', curto: 'Abastecer', ic: '⛽', perfis: ['motorista'], hub: () => Motorista.abastecer() },
+  { id: 'historico', sis: 'fleet', nome: 'Histórico', curto: 'Histórico', ic: '🗂️', perfis: ['motorista'], hub: () => Motorista.historico() },
+  { id: 'escala', sis: 'fleet', nome: 'Escalas', curto: 'Escalas', ic: '📅', perfis: ['motorista'], hub: () => Motorista.escala() },
+  { id: 'ocorrencias', sis: 'fleet', nome: 'Ocorrências', curto: 'Ocorrências', ic: '⚠️', perfis: GESTAO_P, hub: () => Motorista.gestaoOcorrencias() },
   { id: 'motoristas', sis: 'fleet', nome: 'Motoristas', curto: 'Motoristas', ic: '👥', perfis: GESTAO_P, hub: () => Motoristas.render() },
   { id: 'ponto-horas', sis: 'ponto', nome: 'Horas extras', curto: 'Horas', ic: '⏱️', perfis: TODOS_P, ponto: 'horas' },
   { id: 'ponto-folgas', sis: 'ponto', nome: 'Controle de folgas', curto: 'Folgas', ic: '🗓️', perfis: TODOS_P, ponto: 'folgas' },
-  { id: 'ponto-cartas', sis: 'ponto', nome: 'Cartas de ponto', curto: 'Cartas', ic: '📄', perfis: TODOS_P, ponto: 'cartas', pontoPerfis: ['adm'] },
+  { id: 'ponto-cartas', sis: 'ponto', nome: 'Gestão: Pontos e Horas', curto: 'Gestão', ic: '📄', perfis: TODOS_P, ponto: 'cartas', pontoPerfis: ['adm'] },
   { id: 'ponto-pendentes', sis: 'ponto', nome: 'Cartas pendentes', curto: 'Pendentes', ic: '✅', perfis: TODOS_P, ponto: 'pendentes' },
-  { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: ['master', 'admin', 'motorista'], soon: 'Em breve — ranking dos motoristas com setas de subida e descida.' }
+  { id: 'fin-escolha', sis: 'financeiro', nome: 'Financeiro', curto: 'Financeiro', ic: '💰', perfis: GESTAO_P, visivel: () => !Financeiro.area, hub: () => Financeiro.escolha() },
+  { id: 'fin-voltar', sis: 'financeiro', nome: 'Trocar', curto: 'Trocar', ic: '↩️', perfis: GESTAO_P, visivel: () => !!Financeiro.area, acao: () => Financeiro.voltar() },
+  { id: 'fin-rota-lanc', sis: 'financeiro', nome: 'Lançamento', curto: 'Lançamento', ic: '🧾', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'lanc' },
+  { id: 'fin-rota-planilhas', sis: 'financeiro', nome: 'Planilhas', curto: 'Planilhas', ic: '📑', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'planilhas' },
+  { id: 'fin-rota-ticket', sis: 'financeiro', nome: 'Ticket & Escala', curto: 'Ticket', ic: '🎫', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'ticket' },
+  { id: 'fin-rota-balancos', sis: 'financeiro', nome: 'Balanços e Escalas', curto: 'Balanços', ic: '⚖️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'balancos' },
+  { id: 'fin-rota-hist', sis: 'financeiro', nome: 'Histórico', curto: 'Histórico', ic: '🗓️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'hist' },
+  { id: 'fin-loja', sis: 'financeiro', nome: 'Loja', curto: 'Loja', ic: '🏬', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', soon: 'Em breve — o Financeiro da Loja chega depois do da Rota.' },
+  { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: GESTAO_P, soon: 'Em breve — ranking dos motoristas com setas de subida e descida.' }
 ];
 
 /** Se o servidor ainda for a versão antiga (sem "sistemas"), usa o padrão do perfil para nada sumir. */
@@ -62,6 +72,7 @@ const App = {
     $('#auth').hidden = true; $('#app').hidden = false;
     this.montarUsuario(); this.montarNavegacao();
     if (login.trocarSenha) { exigirTrocaSenha(() => this.recarregar()); return; }
+    if (login.dados && login.dados.sucesso) { this.dados = login.dados; delete login.dados; await this.aplicarDados(); return; }
     await this.recarregar();
   },
 
@@ -70,14 +81,16 @@ const App = {
     try { this.dados = await API.chamar('getBootstrap'); } catch (e) { setLoading(false); if (!silencioso) toast(e.message, true);
       if (!this.dados) { $('#gfRoot').hidden = true; const c = limpar($('#hubConteudo')); c.hidden = false; c.append(h('div', { class: 'card' }, h('h2', { text: 'Não consegui carregar os dados' }), h('p', { class: 'hint', text: e.message }), h('button', { class: 'btn', text: 'Tentar de novo', onclick: () => this.recarregar() }))); }
       return; }
-    setLoading(false);
+    setLoading(false); await this.aplicarDados();
+  },
+  async aplicarDados() {
     this.sessao.perfil = this.dados.perfil || this.sessao.perfil;
     Hub.aposDados(); this.montarUsuario(); this.montarNavegacao();
     if (this.sessao.perfil === 'master') await Usuarios.contarPendentes();
     this.abrirAba(this.abaValida(this.aba));
   },
 
-  abasDoPerfil() { const sis = this.sistemasDoPerfil().map(x => x.id), pp = this.sessao.pontoPerfil || ''; return ABAS.filter(a => a.perfis.indexOf(this.sessao.perfil) >= 0 && (a.sis === 'painel' || sis.indexOf(a.sis) >= 0) && (!a.ponto || (pp && (a.pontoPerfis || ['adm', 'encarregado']).indexOf(pp) >= 0))); },
+  abasDoPerfil() { const sis = this.sistemasDoPerfil().map(x => x.id), pp = this.sessao.pontoPerfil || ''; return ABAS.filter(a => a.perfis.indexOf(this.sessao.perfil) >= 0 && (a.sis === 'painel' || sis.indexOf(a.sis) >= 0) && (!a.visivel || a.visivel()) && (!a.ponto || (pp && (a.pontoPerfis || ['adm', 'encarregado']).indexOf(pp) >= 0))); },
   abaValida(id) { const a = this.abasDoPerfil().find(x => x.id === id); return a ? id : 'inicio'; },
   sistemasDoPerfil() { const v = this.sessao.sistemas || []; return SISTEMAS.filter(x => v.indexOf(x.chave) >= 0); },
   abaAtual() { return ABAS.find(x => x.id === this.aba); },
@@ -100,6 +113,8 @@ const App = {
       pop.append(h('button', { onclick: () => { pop.remove(); Usuarios.abrir(); } }, '👥 Usuários', Usuarios.pendentes ? h('span', { class: 'badge red', text: String(Usuarios.pendentes) }) : null),
         h('button', { onclick: () => { pop.remove(); Pendencias.abrir(); } }, '🧾 Pendências de placa', np ? h('span', { class: 'badge red', text: String(np) }) : null));
     }
+    pop.append(h('button', { onclick: () => { pop.remove(); Ajuda.abrir(); } }, '❓ Ajuda'));
+    if (S.perfil === 'master') { const np2 = ((this.dados && this.dados.problemas) || []).length; pop.append(h('button', { onclick: () => { pop.remove(); Ajuda.problemas(); } }, '🐞 Problemas relatados', np2 ? h('span', { class: 'badge red', text: String(np2) }) : null)); }
     pop.append(h('hr'), h('button', { onclick: () => { pop.remove(); this.sair(); } }, '🚪 Sair do sistema'));
     document.body.append(pop);
     const r = ancora.getBoundingClientRect(), w = pop.offsetWidth, hh = pop.offsetHeight;
@@ -120,8 +135,8 @@ const App = {
 
     // abas do sistema aberto (topo, PC)
     const topo = limpar($('#subTabs')), abasSis = this.abasDoPerfil().filter(a => a.sis === sisAtual && sisAtual !== 'painel');
-    topo.hidden = !abasSis.length;
-    abasSis.forEach(a => { const n = this.badge(a); topo.append(h('button', { type: 'button', class: 'subtab' + (a.id === this.aba ? ' active' : ''), dataset: { aba: a.id }, onclick: () => this.abrirAba(a.id) }, a.nome, n ? h('span', { class: 'n', text: String(n) }) : null)); });
+    topo.hidden = !abasSis.length; $('.hub-bar').hidden = topo.hidden;
+    abasSis.forEach(a => { const n = this.badge(a); topo.append(h('button', { type: 'button', class: 'subtab' + (a.id === this.aba ? ' active' : ''), dataset: { aba: a.id }, onclick: () => this.abrirAba(a.id) }, a.ic ? h('span', { class: 'st-ic', text: a.ic }) : null, a.nome, n ? h('span', { class: 'n', text: String(n) }) : null)); });
 
     // barra inferior (celular): Painel + um botão por sistema ativo + Mais. As abas do sistema aparecem numa faixa no topo.
     const barra = limpar($('#bottombar'));
@@ -137,22 +152,28 @@ const App = {
 
   abrirAba(id) {
     const a = ABAS.find(x => x.id === id); if (!a) return;
+    if (a.acao) { a.acao(); return; }
     this.aba = id; (this.ultimaAba = this.ultimaAba || {})[a.sis] = id;
     this.montarNavegacao();
     const sis = SISTEMAS.find(x => x.id === a.sis);
     $('#tituloTopo').textContent = a.gf ? ((sis && sis.titulo) || a.nome) : a.nome;
+    Pontos.chip(); $('.hub-top').classList.remove('vazio');
+    $('#tituloTopo').hidden = !$('#subTabs').hidden;     // com abas visíveis o título só repetiria o nome da aba
+    document.body.dataset.sis = (a.sis === 'ponto' || a.sis === 'fleet' || a.sis === 'financeiro') ? a.sis : '';
     const hubC = limpar($('#hubConteudo')), gfR = $('#gfRoot');
     $('#btnImprimir').hidden = !(a.gf && OFICINA_P.indexOf(this.sessao.perfil) >= 0);
     $('#btnAtualizar').hidden = false;
     const dash = $('#tab-dashboard'); if (dash) dash.classList.toggle('dash-mec', this.sessao.perfil === 'mecanico');
-    if (a.ponto) {
-      hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; PontoHub.abrir(a.ponto);
+    if (a.fin) {
+      PontoHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); FinHub.abrir(a.fin);
+    } else if (a.ponto) {
+      FinHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); PontoHub.abrir(a.ponto);
     } else if (a.gf) {
-      PontoHub.esconder(); hubC.hidden = true; gfR.hidden = false;
+      PontoHub.esconder(); FinHub.esconder(); hubC.hidden = true; gfR.hidden = false;
       $$('#gfRoot > .tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + a.gf));
       gfAba = a.gf; renderTelaAtual();
     } else {
-      PontoHub.esconder(); gfR.hidden = true; hubC.hidden = false;
+      PontoHub.esconder(); FinHub.esconder(); gfR.hidden = true; hubC.hidden = false;
       if (a.hub) hubC.append(a.hub());
       else if (a.soon) hubC.append(h('div', { class: 'card soon' }, h('b', { text: a.nome }), a.soon));
       else hubC.append(Inicio.render());
@@ -169,12 +190,14 @@ const App = {
       const np = (this.dados && this.dados.pendenciasPlaca) || 0;
       caixa.append(item('👥', 'Usuários', () => Usuarios.abrir(), Usuarios.pendentes ? h('span', { class: 'badge red', text: String(Usuarios.pendentes) }) : null), item('🧾', 'Pendências de placa', () => Pendencias.abrir(), np ? h('span', { class: 'badge red', text: String(np) }) : null));
     }
+    caixa.append(item('❓', 'Ajuda', () => Ajuda.abrir()));
+    if (S.perfil === 'master') { const np2 = ((this.dados && this.dados.problemas) || []).length; caixa.append(item('🐞', 'Problemas relatados', () => Ajuda.problemas(), np2 ? h('span', { class: 'badge red', text: String(np2) }) : null)); }
     caixa.append(item('🚪', 'Sair do sistema', () => this.sair()));
   },
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
-    API.guardar(''); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar();
+    API.guardar(''); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
     $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar');

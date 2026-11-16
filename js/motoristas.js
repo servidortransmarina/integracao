@@ -45,7 +45,7 @@ const Motoristas = {
       p.lanc.length ? h('div', { class: 'mot-lanc' }, p.lanc.slice(0, 12).map(l => h('div', {}, h('span', { text: String(l.dataHora || '').slice(0, 10).split('-').reverse().join('/') + ' · ' + (l.descricao || l.evento) }), h('b', { class: Number(l.pontos) < 0 ? 'neg' : 'pos', text: (Number(l.pontos) > 0 ? '+' : '') + l.pontos }))))
         : h('div', { class: 'hint', text: 'Ainda sem pontos.' }));
     const mod = abrirModal('Motorista', h('div', {}, corpo, h('div', { class: 'modal-actions' }, h('button', { class: 'btn secondary', text: 'Fechar', onclick: () => mod.fechar() }),
-      h('button', { class: 'btn', text: '✏️ Editar', onclick: () => { mod.fechar(); this.formulario(m); } }))));
+      h('button', { class: 'btn secondary', text: '± Ajustar pontos', onclick: () => { mod.fechar(); Pontos.ajustar(m); } }), h('button', { class: 'btn', text: '✏️ Editar', onclick: () => { mod.fechar(); this.formulario(m); } }))));
   },
 
   formulario(m) {
