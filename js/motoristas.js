@@ -61,7 +61,7 @@ const Motoristas = {
       try {
         const dados = { nome: nome.value.trim(), matricula: mat.value.trim(), telefone: tel.value.trim(), placaFixa: placa.value.trim(), vinculo: vinc.value, status: stat.value };
         if (edit) await API.chamar('editarMotorista', Object.assign({ id: m.id }, dados)); else await API.chamar('cadastrarMotorista', Object.assign({ cpf: cpf.value }, dados));
-        mod.fechar(); toast(edit ? 'Motorista atualizado.' : 'Motorista cadastrado.'); await App.recarregar(true);
+        mod.fechar(); toast(edit ? 'Motorista atualizado.' : 'Motorista cadastrado.'); App.recarregar(true);
       } catch (err) { mensagem(msg, err.message); }
       salvar.disabled = false;
     } }, campo('Nome completo', nome), edit ? null : campo('CPF', cpf, 'Usado só para identificar a pessoa; guardamos apenas um código irreversível. Quando ela criar a conta com este CPF, o acesso é ligado a este cadastro.'),

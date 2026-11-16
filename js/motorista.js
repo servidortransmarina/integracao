@@ -51,7 +51,7 @@ const Motorista = {
       env.disabled = true; env.textContent = 'Enviando…';
       try {
         const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens });
-        await App.recarregar(true);
+        App.recarregar(true);
         const aviso = { OK: 'Tudo certo!', ATENCAO: 'Itens com atenção foram avisados à oficina.', CRITICO: 'Itens ruins foram avisados à oficina agora.' }[r.statusGeral];
         const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: aviso }), r.pontos ? h('p', { class: 'ck-pts', text: '+' + r.pontos + ' pontos 🎉' }) : h('p', { class: 'hint', text: 'Pontos do checklist já foram contados hoje.' }),
           h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver no histórico', onclick: () => { m.fechar(); App.abrirAba('historico'); } }))), { aoFechar: () => App.abrirAba('inicio') });
@@ -74,7 +74,7 @@ const Motorista = {
       mensagem(msg, ''); const l = this.numero(lit.value), v = this.numero(val.value), k = this.numero(km.value);
       if (!placa.value) return mensagem(msg, 'Escolha o caminhão.'); if (!(l > 0)) return mensagem(msg, 'Informe os litros.'); if (!(v > 0)) return mensagem(msg, 'Informe o valor.'); if (!(k > 0)) return mensagem(msg, 'Informe o KM.');
       env.disabled = true; env.textContent = 'Enviando…';
-      try { await API.chamar('lancarAbastecimento', { placa: placa.value, data: data.value, hora: hora.value, produto: prod.value, km: k, litros: l, valor: v }); toast('Abastecimento lançado! Ele será conferido com a fatura do posto.'); await App.recarregar(true); App.abrirAba('abastecimento'); }
+      try { await API.chamar('lancarAbastecimento', { placa: placa.value, data: data.value, hora: hora.value, produto: prod.value, km: k, litros: l, valor: v }); toast('Abastecimento lançado! Ele será conferido com a fatura do posto.'); App.recarregar(true); App.abrirAba('abastecimento'); }
       catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Lançar abastecimento'; }
     };
     const ult = (d.abastecimentos || []).slice().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 5);

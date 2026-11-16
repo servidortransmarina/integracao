@@ -213,7 +213,9 @@ const App = {
 document.addEventListener('DOMContentLoaded', () => {
   API.aoExpirar = () => { if (App.sessao) { toast('Sua sessão expirou. Entre novamente.', true); App.limparSessao(); } };
   document.addEventListener('click', e => { const p = $('#perfilPop'); if (p && !p.contains(e.target)) p.remove(); const o = $('#ocultarPop'); if (o && !o.contains(e.target)) o.remove(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && App.sessao && !$('.overlay.show')) App.recarregar(true); });
+  API.aquecer();
+  let _ultVis = Date.now();
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { _ultVis = Date.now(); return; } if (App.sessao && !$('.overlay.show') && Date.now() - _ultVis > 60000) App.recarregar(true); });
   $$('.logo-img').forEach(lg => { const sem = () => { lg.style.display = 'none'; const t = $('.logo-txt', lg.parentNode); if (t) t.hidden = false; }; lg.addEventListener('error', sem); if (lg.complete && lg.naturalWidth === 0) sem(); });
   if (typeof ESCALA_DESGASTE !== 'undefined' && $('#pneusEscala')) $('#pneusEscala').style.background = 'linear-gradient(90deg, ' + ESCALA_DESGASTE.map(e => rgbCss(e[1]) + ' ' + Math.round(e[0] * 100) + '%').join(', ') + ')';
   App.retomar();

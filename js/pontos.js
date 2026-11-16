@@ -21,7 +21,7 @@ const Pontos = {
     const pedir = async (tipo, botao, rotulo) => {
       if (tipo === 'FOLGA_DATA' && !dataIn.value) { toast('Escolha o dia da folga.', true); return; }
       botao.disabled = true; botao.textContent = 'Enviando…';
-      try { await API.chamar('resgatarPontos', { tipo, dataDesejada: dataIn.value }); toast('Pedido enviado! A gestão vai avaliar.'); m.fechar(); await App.recarregar(true); this.chip(); this.abrirMotorista(); }
+      try { await API.chamar('resgatarPontos', { tipo, dataDesejada: dataIn.value }); toast('Pedido enviado! A gestão vai avaliar.'); m.fechar(); App.recarregar(true).then(() => { this.chip(); this.abrirMotorista(); });  }
       catch (e) { toast(e.message, true); botao.disabled = false; botao.textContent = rotulo; }
     };
     const mk = (tipo, custoT, rotulo) => { const b = h('button', { class: 'btn' + (tipo === 'FOLGA_DATA' ? ' secondary' : ''), type: 'button', text: pend ? 'Pedido aguardando aprovação…' : saldo < custoT ? rotulo + ' — faltam ' + (custoT - saldo) : rotulo, disabled: pend || saldo < custoT ? true : null }); b.onclick = () => pedir(tipo, b, rotulo); return b; };

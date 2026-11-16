@@ -338,3 +338,10 @@ body[data-sis="ponto"] .hub-side .side-item.active::before, body[data-sis="fleet
 .ck-leg span{display:inline-flex;align-items:center;gap:6px}.ck-leg i{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;font-style:normal;font-weight:700;color:#fff}
 .ck-leg .ok i{background:#10b981}.ck-leg .warn i{background:#f59e0b}.ck-leg .bad i{background:#ef4444}.ck-leg .btn{margin-left:auto}
 .ck-cols{display:flex;justify-content:flex-end;gap:8px;font-size:11px;font-weight:700;color:var(--dim);margin:-2px 0 2px}.ck-cols span{width:46px;text-align:center}
+
+/* barra fina de progresso (qualquer chamada ao servidor) */
+#apiBarra{position:fixed;top:0;left:0;height:3px;width:100%;z-index:9999;pointer-events:none;opacity:0;background:linear-gradient(90deg,transparent,#1e7a4c,#4cc38a,transparent);background-size:40% 100%;background-repeat:no-repeat;transition:opacity .15s}
+#apiBarra.on{opacity:1;animation:apiBarra 1s linear infinite}
+@keyframes apiBarra{from{background-position:-40% 0}to{background-position:140% 0}}
+.btn:active,button:active{transform:scale(.97);transition:transform .05s}
+@media (prefers-reduced-motion:reduce){#apiBarra.on{animation:none}}

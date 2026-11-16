@@ -17,7 +17,8 @@ Auth.telas.entrar = () => {
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, ''); b.disabled = true; b.textContent = 'Entrando…';
     try {
-      const usuario = u.value.trim(), chave = await Cripto.chave(usuario, s.value); let r;
+      const usuario = u.value.trim(); if (usuario.indexOf('@') >= 0) { mensagem(m, 'Aqui vai o seu usuário (como Nome.123456), não o e-mail. Se não lembra, use "Esqueci a senha".'); b.disabled = false; b.textContent = 'Entrar'; return; }
+      const chave = await Cripto.chave(usuario, s.value); let r;
       try { r = await API.chamar('login', { usuario, chave, comDados: true }, { semExpirar: true }); }
       catch (e1) { if (e1.codigo !== 'ATUALIZAR') throw e1; r = await API.chamar('login', { usuario, chave, senha: s.value, comDados: true }, { semExpirar: true }); }   // conta antiga: converte uma vez
       s.value = ''; await App.iniciar(r);
@@ -50,6 +51,7 @@ Auth.telas.cadastro = () => {
     campo('Senha', s1), h('div', { class: 'regras', text: REGRA_SENHA }), campo('Repita a senha', s2), bFim);
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, '');
+    if (passo2.hidden) { bEnviar.click(); return; }          // Enter no e-mail: envia o código primeiro
     if (s1.value !== s2.value) return mensagem(m, 'As senhas não conferem.');
     bFim.disabled = true;
     try { const r = await API.chamar('concluirCadastro', { email: email.value.trim(), codigo: cod.value.trim(), nome: nome.value.trim(), cpf: cpf.value, senha: s1.value }, { semExpirar: true });
@@ -83,6 +85,7 @@ Auth.telas.recuperar = () => {
   passo2.append(campo('Código recebido', cod), campo('Nova senha', s1), h('div', { class: 'regras', text: REGRA_SENHA }), campo('Repita a senha', s2), bFim);
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, '');
+    if (passo2.hidden) { bEnviar.click(); return; }          // Enter no campo de e-mail: envia o código (antes tentava definir uma senha vazia)
     if (s1.value !== s2.value) return mensagem(m, 'As senhas não conferem.');
     bFim.disabled = true;
     try { await API.chamar('redefinirSenha', { email: email.value.trim(), codigo: cod.value.trim(), senha: s1.value }, { semExpirar: true }); toast('Senha definida. Faça login.'); Auth.mostrar('entrar'); }
