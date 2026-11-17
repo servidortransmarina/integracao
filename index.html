@@ -6,11 +6,12 @@
 <title>Transmarina</title>
 <meta name="theme-color" content="#4f46e5">
 <!-- Scripts só do próprio site; chamadas só ao Apps Script. 'unsafe-inline' em script existe porque as telas do GF usam onclick=""; por isso todo texto digitado é limpo no servidor e no navegador (ver ponte.js). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://ajax.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' blob: data: https://www.gstatic.com https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://ajax.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://drive.google.com https://*.googleusercontent.com; worker-src 'self' blob:; connect-src 'self' blob: data: https://www.gstatic.com https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" href="logotrm.png?v=2">
+<link rel="shortcut icon" type="image/png" href="logotrm.png?v=2">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -25,6 +26,7 @@
 <div id="app" class="hub" hidden>
   <aside class="hub-side">
     <div class="hub-brand"><img src="logotrm.png" alt="Transmarina" class="logo-img"><span class="logo-txt" hidden>TRANSMARINA</span></div>
+    <button class="side-toggle" id="sideToggle" type="button" aria-label="Recolher menu lateral" title="Recolher menu">«</button>
     <div id="sideNav"></div>
     <button class="side-user" id="sideUser" type="button"></button>
   </aside>
@@ -44,6 +46,7 @@
       <div id="hubConteudo"></div>
       <div id="pontoRoot" hidden></div>
       <div id="finRoot" hidden></div>
+      <div id="escRoot" hidden></div>
       <div id="gfRoot" hidden>
 <section id="tab-manutencao" class="tab active">
   <div id="manutListaWrap">
@@ -393,6 +396,7 @@
 <script src="js/motoristas.js"></script>
 <script src="js/pontos.js"></script>
 <script src="js/motorista.js"></script>
+<script src="js/escalas-hub.js"></script>
 <script src="js/financeiro-hub.js"></script>
 <script src="js/ajuda.js"></script>
 <script src="js/ponto-hub.js"></script>

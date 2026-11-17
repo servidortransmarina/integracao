@@ -122,6 +122,7 @@ function dataISOParaCampo(valor) {
 function normalizarAnoDaData(input) {
   if(!input)return false;
   if(!String(input.value||'').trim())return !input.required;
+  if(/_/.test(input.value))return false;
   const iso=dataParaISO(input.value);
   if(!iso)return false;
   input.value=dataISOParaCampo(iso);
@@ -131,16 +132,95 @@ function configurarCampoDataBR(id) {
   const input=$(id);
   if(!input)return;
   input.placeholder='DD/MM/AA';
-  input.addEventListener('input',()=>{
-    // A máscara insere as barras sem alterar o ano enquanto a pessoa digita.
-    const valor=input.value.trim();
-    if(/^\d{4}-\d{2}-\d{2}$/.test(valor)){
-      input.value=dataISOParaCampo(valor);return;
+  input.setAttribute('autocomplete','off');
+  // Edição por partes (dia / mês / ano): apagar uma parte deixa "__" no lugar e o cursor fica nela;
+  // dois cliques selecionam só a parte clicada e o que for digitado a substitui.
+  const MAX=[2,2,4];
+  const LER=()=>{
+    const v=String(input.value||'').trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(v))return [v.slice(8,10),v.slice(5,7),v.slice(2,4)];
+    if(v.includes('/')||/_/.test(v)){const p=v.split('/');return [0,1,2].map(i=>String(p[i]||'').replace(/\D/g,'').slice(0,MAX[i]));}
+    const n=v.replace(/\D/g,'').slice(0,8);
+    return [n.slice(0,2),n.slice(2,4),n.slice(4)];
+  };
+  const MOSTRAR=(partes,seg,desloc)=>{
+    if(!partes.some(x=>x)){input.value='';return;}
+    input.value=partes.map(x=>x.padEnd(2,'_')).join('/');
+    const pos=[0,3,6][seg]+Math.min(desloc,MAX[seg]);
+    try{input.setSelectionRange(pos,pos);}catch(e){}
+  };
+  const SEGDE=p=>p<=2?0:p<=5?1:2;
+  const aplicarDigito=(d,s,e)=>{
+    const partes=LER();let seg=SEGDE(s);const ini=[0,3,6][seg];
+    let desloc=Math.max(0,Math.min(s-ini,partes[seg].length));
+    const exata=e>s&&s===ini&&e-s>=1;                 // parte selecionada: o dígito substitui tudo
+    if(exata){partes[seg]=d;desloc=1;}
+    else if(e>s){partes[seg]=d;desloc=1;}             // qualquer seleção dentro da parte
+    else if(desloc<partes[seg].length){partes[seg]=partes[seg].slice(0,desloc)+d+partes[seg].slice(desloc+1);desloc++;}
+    else if(partes[seg].length<MAX[seg]){partes[seg]+=d;desloc++;}
+    else if(seg<2){seg++;partes[seg]=d;desloc=1;}
+    if(seg<2&&desloc>=MAX[seg]){seg++;desloc=0;}
+    MOSTRAR(partes,seg,desloc);
+  };
+  const apagar=(tras,s,e)=>{
+    const partes=LER();
+    if(e>s){                                           // seleção: limpa as partes tocadas
+      const a=SEGDE(s),b=SEGDE(Math.max(s,e-1));
+      for(let i=a;i<=b;i++){
+        const ini=[0,3,6][i],fim=ini+Math.max(MAX[i],partes[i].length||MAX[i]);
+        if(s<=ini&&e>=Math.min(fim,ini+MAX[i]))partes[i]='';
+        else partes[i]=partes[i].slice(0,Math.max(0,s-ini))+partes[i].slice(Math.max(0,e-ini));
+      }
+      MOSTRAR(partes,a,Math.max(0,s-[0,3,6][a]));
+      if(!partes.some(x=>x))input.value='';
+      return;
     }
-    const numeros=valor.replace(/\D/g,'').slice(0,8);
-    input.value=numeros.length>4
-      ?`${numeros.slice(0,2)}/${numeros.slice(2,4)}/${numeros.slice(4)}`
-      :numeros.length>2?`${numeros.slice(0,2)}/${numeros.slice(2)}`:numeros;
+    let seg=SEGDE(s),desloc=s-[0,3,6][seg];
+    if(tras){
+      if(desloc<=0){if(seg===0)return;seg--;desloc=MAX[seg];}
+      const t=Math.min(desloc,partes[seg].length);
+      if(t>0){partes[seg]=partes[seg].slice(0,t-1)+partes[seg].slice(t);}
+      desloc=Math.max(0,desloc-1);
+    }else{
+      if(desloc<partes[seg].length)partes[seg]=partes[seg].slice(0,desloc)+partes[seg].slice(desloc+1);
+    }
+    MOSTRAR(partes,seg,desloc);
+    if(!partes.some(x=>x))input.value='';
+  };
+  input.addEventListener('beforeinput',ev=>{
+    const t=ev.inputType||'';
+    const s=input.selectionStart??input.value.length,e=input.selectionEnd??s;
+    if(t==='insertText'&&ev.data){
+      ev.preventDefault();
+      const dig=String(ev.data).replace(/\D/g,'');
+      if(dig){for(const d of dig)aplicarDigito(d,input.selectionStart??0,input.selectionEnd??0);}
+      else if(/[\/.\-\s]/.test(ev.data)){                // barra/ponto/traço: vai para a próxima parte
+        const seg=Math.min(2,SEGDE(s)+1),p=[0,3,6][seg];try{input.setSelectionRange(p,p);}catch(x){}
+      }
+    }else if(t==='deleteContentBackward'||t==='deleteContentForward'||t==='deleteByCut'){
+      ev.preventDefault();apagar(t==='deleteContentBackward',s,e);
+    }else if(t==='insertFromPaste'||t==='insertFromDrop'){
+      ev.preventDefault();
+      const texto=(ev.dataTransfer&&ev.dataTransfer.getData('text'))||'';
+      const iso=dataParaISO(texto);
+      if(iso)input.value=dataISOParaCampo(iso);
+      else{input.value=texto.replace(/\D/g,'').slice(0,8);input.dispatchEvent(new Event('input'));}
+    }
+  });
+  input.addEventListener('input',()=>{
+    // Teclados que não avisam antes (alguns celulares): reorganiza o que entrou sem perder a posição.
+    const v=String(input.value||'').trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)){input.value=dataISOParaCampo(v);return;}
+    if(/^[\d_]{0,2}\/[\d_]{0,2}\/[\d_]{0,4}$/.test(v))return;      // já está no formato por partes
+    const n=v.replace(/\D/g,'').slice(0,8);
+    input.value=n.length>4?`${n.slice(0,2)}/${n.slice(2,4)}/${n.slice(4)}`:n.length>2?`${n.slice(0,2)}/${n.slice(2)}`:n;
+  });
+  // dois cliques: seleciona só o dia, o mês ou o ano
+  input.addEventListener('dblclick',ev=>{
+    ev.preventDefault();
+    const pos=input.selectionStart??0,seg=SEGDE(pos),ini=[0,3,6][seg];
+    const fim=seg===2?Math.max(ini+2,String(input.value).length):ini+2;
+    try{input.setSelectionRange(ini,fim);}catch(e){}
   });
   input.addEventListener('blur',()=>normalizarAnoDaData(input));
   input.addEventListener('change',()=>normalizarAnoDaData(input));
@@ -1150,6 +1230,15 @@ async function carregarAssinaturasResponsaveis() {
     return false; // A falha de sugestões não pode impedir o cadastro de cartas.
   }
 }
+/** Quem recebeu a maioria das últimas cartas lançadas (as 20 mais recentes): vira o responsável já preenchido ao registrar uma nova. */
+function responsavelMaisFrequenteRecente(qtd=20) {
+  const recentes=ordenarCartasPorLancamento([...(APP.cartas||[])]).filter(c=>String(c.responsavel||'').trim()).slice(0,qtd);
+  const cont=new Map();
+  for(const c of recentes){const k=norm(c.responsavel);const o=cont.get(k)||{nome:String(c.responsavel).trim(),n:0,ultima:dataOrdemCarta(c)};o.n++;cont.set(k,o);}
+  let melhor=null;
+  for(const o of cont.values())if(!melhor||o.n>melhor.n||(o.n===melhor.n&&o.ultima>melhor.ultima))melhor=o;
+  return melhor?melhor.nome:'';
+}
 function aplicarAprendizadoResponsavelCarta() {
   const funcionario=$('carta-funcionario'),responsavel=$('carta-responsavel');
   const aviso=$('carta-responsavel-aprendizado');
@@ -1158,7 +1247,7 @@ function aplicarAprendizadoResponsavelCarta() {
   const nome=ident.nome?chaveAprendizadoCarta(ident.nome,ident.empresa):'';
   if(nome!==estadoSugestaoCarta.colaborador) {
     if(!estadoSugestaoCarta.editadoManualmente&&estadoSugestaoCarta.automatico&&
-       responsavel.value===estadoSugestaoCarta.automatico)responsavel.value='';
+       responsavel.value===estadoSugestaoCarta.automatico&&!APP.cartaEditando){const pad=responsavelMaisFrequenteRecente();responsavel.value=pad;estadoSugestaoCarta.automatico=pad;}
     estadoSugestaoCarta.colaborador=nome;
     estadoSugestaoCarta.automatico='';
   }
@@ -1167,7 +1256,7 @@ function aplicarAprendizadoResponsavelCarta() {
   aviso.hidden=false;aviso.classList.remove('carta-aprendizado-confiavel');
   if(!padrao){aviso.textContent='Sem confirmação anterior de assinatura pelo encarregado para sugerir um responsável.';return;}
   const ultimo=padrao.ultimo;
-  if(!estadoSugestaoCarta.editadoManualmente&&!responsavel.value.trim()) {
+  if(!estadoSugestaoCarta.editadoManualmente&&(!responsavel.value.trim()||(estadoSugestaoCarta.automatico&&responsavel.value===estadoSugestaoCarta.automatico))) {
     responsavel.value=ultimo.nome;estadoSugestaoCarta.automatico=ultimo.nome;
   }
   aviso.classList.add('carta-aprendizado-confiavel');
@@ -1260,6 +1349,7 @@ function definirModoCarta(c=null) {
   $('carta-ocorrencia').value=dataISOParaCampo(c?.dataOcorrencia||ontem());
   $('carta-correcao').value=dataISOParaCampo(c?c.dataCorrecao||'':today());
   $('carta-responsavel').value=c?.responsavel||'';
+  if(!c){const padrao=responsavelMaisFrequenteRecente();if(padrao){$('carta-responsavel').value=padrao;estadoSugestaoCarta.automatico=padrao;}}
   $('carta-assinado').value=c?.status||'NÃO';
   $('carta-obs').value=c?textoComplementarCarta(c):'';
   atualizarEmpresaCarta();
@@ -1847,7 +1937,38 @@ function renderRelatorios() {
     return {shape,label,nome:r.nome,pct,count:r.total,color:col};
   });
   $('grafico-pizza').innerHTML=partes.length?`<svg viewBox="0 0 300 300" aria-hidden="true">${partes.map(p=>p.shape).join('')}${partes.map(p=>p.label).join('')}</svg>`:'<div class="empty">Sem dados.</div>';
+  renderGraficoLinhasCartas();
   $('legenda-pizza').innerHTML=partes.map(p=>`<div class="legend-item"><span class="legend-dot" style="background:${p.color}"></span><span class="legend-name">${esc(p.nome)}</span><strong>${p.pct.toFixed(1).replace('.',',')}%</strong><small>(${p.count})</small></div>`).join('');
+}
+
+/** Cartas de ponto por mês: uma linha para 2025 e outra para 2026 (pela data da ocorrência). */
+function renderGraficoLinhasCartas() {
+  const alvo=$('grafico-linhas');if(!alvo)return;
+  const anos=[2025,2026],cores={2025:'#4f83b7',2026:'#ec9845'};
+  const cont={2025:Array(12).fill(0),2026:Array(12).fill(0)};
+  for(const c of APP.cartas||[]){const m=String(c.dataOcorrencia||'').match(/^(\d{4})-(\d{2})/);if(m&&cont[m[1]])cont[m[1]][Number(m[2])-1]++;}
+  const hoje=new Date(),anoAtual=hoje.getFullYear(),mesAtual=hoje.getMonth();
+  const valor=(a,i)=>a>anoAtual||(a===anoAtual&&i>mesAtual)?null:cont[a][i];
+  const todos=anos.flatMap(a=>cont[a].map((_,i)=>valor(a,i))).filter(v=>v!==null);
+  if(!todos.some(v=>v>0)){alvo.innerHTML='<div class="empty">Sem cartas em 2025 e 2026.</div>';return;}
+  const max=Math.max(5,...todos),topo=Math.ceil(max/5)*5;
+  const W=720,H=300,E=44,D=16,T=18,B=34,iw=W-E-D,ih=H-T-B;
+  const x=i=>E+iw*i/11,y=v=>T+ih-ih*v/topo;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" class="linhas-svg" role="img" aria-label="Cartas de ponto por mês, 2025 comparado a 2026">`;
+  for(let g=0;g<=5;g++){const v=topo*g/5,yy=y(v);svg+=`<line x1="${E}" x2="${W-D}" y1="${yy}" y2="${yy}" stroke="#e5e7eb"/><text x="${E-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="#6b7280">${Math.round(v)}</text>`;}
+  MESES_ABREV.forEach((m,i)=>{svg+=`<text x="${x(i)}" y="${H-12}" text-anchor="middle" font-size="11" fill="#6b7280">${m.charAt(0)+m.slice(1).toLowerCase()}</text>`;});
+  for(const a of anos){
+    const pts=cont[a].map((_,i)=>[i,valor(a,i)]).filter(p=>p[1]!==null);
+    if(!pts.length)continue;
+    svg+=`<polyline fill="none" stroke="${cores[a]}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" points="${pts.map(p=>x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)).join(' ')}"/>`;
+    for(const p of pts){
+      svg+=`<circle cx="${x(p[0]).toFixed(1)}" cy="${y(p[1]).toFixed(1)}" r="3.6" fill="#fff" stroke="${cores[a]}" stroke-width="2"><title>${MESES_ABREV[p[0]]}/${a}: ${p[1]} carta${p[1]===1?'':'s'}</title></circle>`;
+      if(p[1]>0)svg+=`<text x="${x(p[0]).toFixed(1)}" y="${(y(p[1])-9).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${cores[a]}">${p[1]}</text>`;
+    }
+  }
+  svg+='</svg>';
+  const total=a=>cont[a].reduce((s,v)=>s+v,0);
+  alvo.innerHTML=svg+`<div class="linhas-legenda">${anos.map(a=>`<span><i style="background:${cores[a]}"></i>${a} · ${total(a)} cartas</span>`).join('')}</div>`;
 }
 
 // RESUMO PARA COMPARTILHAR — a API SALDOS_MES não possui filtro diário comprovado.

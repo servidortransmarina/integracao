@@ -10,7 +10,7 @@
 <body class="embed">
   <div class="modal-overlay" id="modal-login" aria-modal="true" role="dialog">
     <div class="login-card">
-      <div class="login-brand"><img src="logotrm.png" alt="Transmarina" onerror="this.style.display='none'"><div><strong>GESTÃO DE PONTO</strong><small>Transmarina • Acesso restrito</small></div></div>
+      <div class="login-brand"><img src="../logotrm.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Transmarina • Acesso restrito</small></div></div>
       <h1 id="auth-titulo">Bem-vindo de volta</h1>
       <p id="auth-subtitulo">Entre com seu usuário e senha para acessar seu painel.</p>
       <section id="auth-painel-login" aria-label="Acessar conta">
@@ -123,7 +123,7 @@
 
   <div class="shell" id="shell" hidden>
     <aside class="sidebar">
-      <div class="brand"><img src="logotrm.png" alt="Transmarina" onerror="this.style.display='none'"><div><strong>GESTÃO DE PONTO</strong><small>Painel corporativo</small></div></div>
+      <div class="brand"><img src="../logotrm.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Painel corporativo</small></div></div>
       <div class="sidebar-label">GERENCIAMENTO</div>
       <nav class="main-nav" aria-label="Menu principal">
         <button class="nav-button active" data-tab="horas"><span class="nav-icon">◷</span> Horas extras</button>
@@ -227,6 +227,7 @@
               <div class="panel"><h3 id="titulo-ranking">Ranking de colaboradores</h3><div class="table-scroll"><table><thead><tr><th>Pos.</th><th>Colaborador</th><th>Cartas</th></tr></thead><tbody id="tbody-ranking"></tbody></table></div></div>
               <div class="panel"><h3 id="titulo-barras">QUANTIDADE DE CARTAS DE PONTO POR FUNCIONÁRIO</h3><div class="bar-chart" id="grafico-barras" role="img" aria-label="Gráfico de barras horizontais com a contagem de cartas por funcionário"></div></div>
             </div>
+            <div class="panel linhas-panel"><h3>Cartas de ponto por mês: 2025 × 2026</h3><div id="grafico-linhas" class="linhas-chart"></div><p class="footnote">Contagem pela data da ocorrência. O mês atual aparece até hoje; meses futuros ficam em branco.</p></div>
             <div class="panel pie-panel"><h3>Percentual de cartas por responsável</h3><div class="pie-container"><div id="grafico-pizza" class="pie-chart" role="img" aria-label="Gráfico de pizza da porcentagem de cartas por responsável"></div><div id="legenda-pizza" class="pie-legend"></div></div><p class="footnote">Assim como o gráfico de pizza do Excel, os valores são apresentados em porcentagem. Registros sem responsável são exibidos separadamente, sem serem atribuídos a outra pessoa.</p></div>
           </div>
 

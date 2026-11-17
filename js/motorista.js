@@ -11,6 +11,79 @@ const Motorista = {
   nomeMot(id) { const m = (this.d().motoristas || []).find(x => String(x.id) === String(id)); return m ? nomeBonito(m.nome) : '-'; },
 
   /* ---------- CHECKLIST ---------- */
+  /* ---------- fotos do checklist: reduz no aparelho e envia na hora, em segundo plano ---------- */
+  async reduzirFoto(arquivo) {
+    const url = URL.createObjectURL(arquivo);
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Não consegui abrir a foto.')); i.src = url; });
+      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.7);
+    } finally { URL.revokeObjectURL(url); }
+  },
+  filaFotos: { ativos: 0, espera: [] },
+  enviarFoto(foto, placa) {                      // foto: { tipo, slot, dados, estado, id }
+    const F = this.filaFotos;
+    const rodar = async () => {
+      F.ativos++; foto.estado = 'enviando'; foto.aviso && foto.aviso();
+      try { const r = await API.chamar('enviarFotoChecklist', { tipo: foto.tipo, slot: foto.slot, placa: placa(), imagemBase64: foto.dados }, { mudo: true }); foto.id = r.id; foto.estado = 'ok'; foto.erro = ''; }
+      catch (e) { foto.estado = 'erro'; foto.erro = e.message; }
+      F.ativos--; foto.aviso && foto.aviso(); const prox = F.espera.shift(); if (prox) prox();
+      (foto.resolver || []).forEach(f => f()); foto.resolver = [];
+    };
+    foto.pronta = new Promise(res => { foto.resolver = [res]; });
+    if (F.ativos < 2) rodar(); else F.espera.push(rodar);
+  },
+  /** Cartão "Fotos do caminhão". Devolve { el, estado() } — estado diz o que falta e permite esperar os envios. */
+  cartaoFotos(mod, placa) {
+    const cfg = mod.fotos || { carroceriaMin: 4, carroceriaMax: 10, pneus: [], cabineItem: '' };
+    const car = [], pneu = {}, cab = { v: null };
+    const ver = f => f.estado === 'ok' ? '✅' : f.estado === 'erro' ? '⚠️ toque para tentar de novo' : '⏳';
+    const miniatura = (f, remover) => {
+      const m = h('div', { class: 'ckf-mini ' + f.estado }, h('img', { src: f.dados, alt: 'foto' }), h('span', { class: 'ckf-st' }));
+      const pinta = () => { m.className = 'ckf-mini ' + f.estado; m.querySelector('.ckf-st').textContent = f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…'; m.title = ver(f); };
+      f.aviso = pinta; pinta();
+      m.onclick = () => { if (f.estado === 'erro') this.enviarFoto(f, placa); };
+      if (remover) m.append(h('button', { type: 'button', class: 'ckf-x', 'aria-label': 'Remover foto', onclick: ev => { ev.stopPropagation(); remover(); } }, '×'));
+      return m;
+    };
+    const pegar = (aoEscolher) => {
+      const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+      inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return; try { aoEscolher(await this.reduzirFoto(arq)); } catch (e) { toast(e.message); } };
+      return { inp, abrir: () => inp.click() };
+    };
+    // carroceria
+    const contador = h('small', { class: 'hint' }), gridCar = h('div', { class: 'ckf-grid' });
+    const pintaCar = () => {
+      limpar(gridCar); car.forEach((f, i) => gridCar.append(miniatura(f, () => { car.splice(i, 1); pintaCar(); })));
+      contador.textContent = car.length + ' de ' + cfg.carroceriaMin + ' fotos (mínimo)' + (car.length >= cfg.carroceriaMin ? ' ✓' : '');
+      if (car.length < cfg.carroceriaMax) gridCar.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => pc.abrir() }, h('b', { text: '＋' }), h('span', { text: 'Foto' })));
+    };
+    const pc = pegar(d => { const f = { tipo: 'carroceria', slot: 'c' + (car.length + 1), dados: d, estado: 'enviando' }; car.push(f); this.enviarFoto(f, placa); pintaCar(); });
+    // pneus e cabine: um espaço por foto
+    const slot = (rotulo, guardar, obter, tipo, chave) => {
+      const caixa = h('div', { class: 'ckf-slot' }), p = pegar(d => { const f = { tipo, slot: chave, dados: d, estado: 'enviando' }; guardar(f); this.enviarFoto(f, placa); pinta(); });
+      const pinta = () => { limpar(caixa); const f = obter(); caixa.append(h('div', { class: 'ckf-rot', text: rotulo }));
+        if (f) caixa.append(miniatura(f, () => { guardar(null); pinta(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
+      pinta(); return caixa;
+    };
+    const el = h('div', { class: 'card ck-cat' }, h('h3', { text: 'FOTOS DO CAMINHÃO' }), h('small', { class: 'hint', text: 'Tire as fotos agora, com a câmera do celular. Elas são enviadas enquanto você responde o checklist.' }),
+      h('div', { class: 'sec-t', text: 'Carroceria (mínimo ' + cfg.carroceriaMin + ': frente, trás e as duas laterais)' }), gridCar, contador,
+      h('div', { class: 'sec-t', text: 'Pneus (uma foto de cada)' }),
+      h('div', { class: 'ckf-pneus' }, ...(cfg.pneus || []).map((n, i) => slot(n, f => { pneu[n] = f; }, () => pneu[n], 'pneu', 'p' + (i + 1)))),
+      h('div', { class: 'sec-t', text: 'Dentro da cabine (mostre a limpeza)' }), slot('Cabine por dentro', f => { cab.v = f; }, () => cab.v, 'cabine', 'k'));
+    pintaCar();
+    const todas = () => car.concat((cfg.pneus || []).map(n => pneu[n]).filter(Boolean), cab.v ? [cab.v] : []);
+    return { el, todas,
+      falta() {
+        if (car.length < cfg.carroceriaMin) return 'Tire mais ' + (cfg.carroceriaMin - car.length) + ' foto(s) da carroceria.';
+        const sem = (cfg.pneus || []).find(n => !pneu[n]); if (sem) return 'Falta a foto de: ' + sem + '.';
+        if (!cab.v) return 'Falta a foto de dentro da cabine.'; return '';
+      },
+      async esperar() { await Promise.all(todas().map(f => f.estado === 'enviando' ? f.pronta : null)); const ruim = todas().find(f => f.estado !== 'ok'); if (ruim) throw new Error(ruim.erro || 'Uma foto não foi enviada. Toque nela para tentar de novo.'); },
+      valor() { const pn = {}; (cfg.pneus || []).forEach(n => { pn[n] = pneu[n].id; }); return { carroceria: car.map(f => f.id), pneus: pn, cabine: cab.v.id }; } };
+  },
+
   checklist() {
     const d = this.d(), mod = d.checklistModelo; if (!mod) return h('div', { class: 'card soon' }, 'Checklist indisponível. Atualize a página.');
     const esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : ''), km = h('input', { type: 'number', inputmode: 'numeric', min: 1, placeholder: 'KM atual do painel' });
@@ -37,6 +110,7 @@ const Motorista = {
       });
       raiz.append(cx);
     });
+    const fotosCx = this.cartaoFotos(mod, () => placa.value);
     const eq = h('div', { class: 'card ck-cat' }, h('h3', { text: 'QUANTIDADES' }));
     mod.quantidades.forEach(n => { const i = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 999, placeholder: '0', oninput: e => { qtd[n] = e.target.value; } }); eq.append(h('div', { class: 'ck-lin' }, h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: 'Quantidade de ' + n.toLowerCase().replace(/s$/, '') + 's' }), h('span', { class: 'ck-qtd' }, i)))); });
     const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar checklist' });
@@ -47,10 +121,12 @@ const Motorista = {
       const falta = Object.keys(linhas).filter(n => !resp[n]); if (falta.length) { falta.forEach(n => linhas[n].classList.add('falta')); linhas[falta[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Faltam ' + falta.length + ' itens para responder.'); }
       const semDesc = Object.keys(resp).filter(n => resp[n] !== 'ok' && String(obs[n] || '').trim().length < 3); if (semDesc.length) { linhas[semDesc[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Descreva o problema de: ' + semDesc[0] + '.'); }
       for (const n of mod.quantidades) if (String(qtd[n] == null ? '' : qtd[n]) === '') return mensagem(msg, 'Informe a quantidade de ' + n.toLowerCase() + '.');
+      const semFoto = fotosCx.falta(); if (semFoto) { fotosCx.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, semFoto); }
       const itens = Object.keys(resp).map(n => ({ item: n, status: resp[n], descricao: obs[n] || '' })).concat(mod.quantidades.map(n => ({ item: n, quantidade: qtd[n] })));
-      env.disabled = true; env.textContent = 'Enviando…';
+      env.disabled = true; env.textContent = 'Enviando fotos…';
       try {
-        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens });
+        await fotosCx.esperar(); env.textContent = 'Enviando…';
+        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos: fotosCx.valor() });
         App.recarregar(true);
         const aviso = { OK: 'Tudo certo!', ATENCAO: 'Itens com atenção foram avisados à oficina.', CRITICO: 'Itens ruins foram avisados à oficina agora.' }[r.statusGeral];
         const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: aviso }), r.pontos ? h('p', { class: 'ck-pts', text: '+' + r.pontos + ' pontos 🎉' }) : h('p', { class: 'hint', text: 'Pontos do checklist já foram contados hoje.' }),
@@ -58,7 +134,7 @@ const Motorista = {
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar checklist'; }
     };
     atualizarProg();
-    raiz.append(eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
+    raiz.append(fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
     return raiz;
   },
 
@@ -116,7 +192,18 @@ const Motorista = {
       h('p', { text: c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' }));
     ruins.forEach(i => cx.append(h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: i.item }), h('small', { text: i.descricao })), h('span', { class: 'badge ' + (i.status === 'bad' ? 'red' : 'amber'), text: i.status === 'bad' ? 'ruim' : 'atenção' }))));
     itens.filter(i => i.quantidade !== '' && i.quantidade != null).forEach(i => cx.append(h('div', { class: 'hist-lin' }, h('b', { text: i.item }), h('span', { text: String(i.quantidade) }))));
-    if (!ruins.length) cx.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' })); abrirModal('Checklist', cx);
+    if (!ruins.length) cx.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' })); cx.append(this.galeria(c)); abrirModal('Checklist', cx);
+  },
+  /** Fotos guardadas no Drive: miniaturas que abrem em tamanho grande. */
+  galeria(c) {
+    let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; }
+    if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos (foi enviado antes da exigência).' });
+    const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam;
+    const foto = (id, leg) => h('a', { class: 'ckf-gal', href: 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view', target: '_blank', rel: 'noopener', title: leg }, h('img', { src: th(id, 320), alt: leg, loading: 'lazy' }), h('small', { text: leg }));
+    const g = h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos' }));
+    const lista = h('div', { class: 'ckf-grid' }); (f.c || []).forEach((id, i) => lista.append(foto(id, 'Carroceria ' + (i + 1))));
+    Object.keys(f.p || {}).forEach(n => lista.append(foto(f.p[n], n))); if (f.k) lista.append(foto(f.k, 'Cabine'));
+    g.append(lista); return g;
   },
   linhaOc(o) {
     const ST = { ABERTA: ['aberta', 'amber'], RESOLVIDA: ['resolvida', 'green'] }, s = ST[String(o.status).toUpperCase()] || [o.status, 'gray'];
@@ -139,7 +226,7 @@ const Motorista = {
     const cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }));
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum checklist enviado ainda.' }));
     l.forEach(c => { const s = this.STC[c.statusGeral] || [c.statusGeral, 'gray'];
-      cx.append(h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
+      cx.append(h('div', { class: 'hist-lin click', onclick: () => abrirModal('Checklist · ' + c.placa, h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '')), h('p', { text: c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' }), this.galeria(c))) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
     return cx;
   },
   gestaoOcorrencias() {

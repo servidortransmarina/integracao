@@ -13,7 +13,7 @@ const Ajuda = {
       'Use o botão "Relatar problema" no alto do Painel se algo não funcionar.');
     if (tem('checklists') && moto) add('checklist', '✅', 'Checklist do dia', [
       'Escolha o caminhão e informe o KM que está no painel.', 'Para cada item toque em um botão: ✓ Ok (funcionando bem), ! Atenção (funciona, mas tem algo estranho ou desgastado) ou ✕ Ruim (com defeito ou perigoso).',
-      'Se marcar ! ou ✕, descreva o que viu no campo que aparece. A oficina é avisada na hora.', 'Informe a quantidade de cordas e de cintas.', 'Toque em "Enviar checklist". Você ganha pontos pelo checklist do dia (uma vez por dia).'],
+      'Se marcar ! ou ✕, descreva o que viu no campo que aparece. A oficina é avisada na hora.', 'Tire as fotos pedidas com a câmera do celular: no mínimo 4 da carroceria (frente, trás e laterais), 1 de cada pneu (dianteiro esquerdo, dianteiro direito, traseiros e estepe) e 1 de dentro da cabine, mostrando a limpeza. Elas são enviadas enquanto você responde; espere o ✓ verde em cada foto.', 'Informe a quantidade de cordas e de cintas.', 'Toque em "Enviar checklist". Você ganha pontos pelo checklist do dia (uma vez por dia).'],
       'Responda com atenção: o checklist bem feito evita quebra na estrada.');
     if (tem('abastecimento')) add('abastecimento', '⛽', 'Lançar abastecimento', [
       'Escolha o caminhão, a data (até 7 dias atrás), o produto, o KM, os litros e o valor total.', 'Toque em "Lançar abastecimento". Ele fica "aguardando fatura".', 'Quando a fatura do posto chega, o sistema confere sozinho. Se bater, vira "conferido" e você ganha pontos.'],

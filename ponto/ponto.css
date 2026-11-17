@@ -1972,3 +1972,10 @@ body.embed .sidebar, body.embed .topbar, body.embed #modal-login {display:none!i
 body.embed .shell {display:block;min-height:0;}
 body.embed main {padding:16px clamp(10px,2vw,28px) 40px;}
 @media (max-width:780px) { body.embed main {padding:12px 10px 40px;} }
+
+/* gráfico de linhas das cartas (2025 x 2026) */
+.linhas-panel{margin-top:16px}
+.linhas-chart{width:100%;overflow-x:auto}
+.linhas-svg{width:100%;min-width:520px;height:auto;display:block}
+.linhas-legenda{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;font-size:13px;font-weight:600}
+.linhas-legenda i{display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}

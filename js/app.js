@@ -6,7 +6,7 @@ const SISTEMAS = [
   { id: 'fleet', chave: 'fleet', nome: 'Fleet', ic: '🚛', perfis: TODOS_P, titulo: 'Fleet' },
   { id: 'ponto', chave: 'ponto', nome: 'Ponto', ic: '🕒', perfis: GESTAO_P, titulo: 'Gestão de Ponto' },
   { id: 'financeiro', chave: 'financeiro', nome: 'Financeiro', ic: '💰', perfis: GESTAO_P, titulo: 'Financeiro' },
-  { id: 'escalas', chave: 'escalas', nome: 'Escalas', ic: '📅', perfis: GESTAO_P, futuro: true },
+  { id: 'escalas', chave: 'escalas', nome: 'Escalas', ic: '📅', perfis: GESTAO_P, titulo: 'Escalas' },
   { id: 'almoxarifado', chave: 'almoxarifado', nome: 'Almoxarifado', ic: '📦', perfis: OFICINA_P, futuro: true }
 ];
 const ABAS = [
@@ -33,6 +33,10 @@ const ABAS = [
   { id: 'fin-rota-balancos', sis: 'financeiro', nome: 'Balanços e Escalas', curto: 'Balanços', ic: '⚖️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'balancos' },
   { id: 'fin-rota-hist', sis: 'financeiro', nome: 'Histórico', curto: 'Histórico', ic: '🗓️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'hist' },
   { id: 'fin-loja', sis: 'financeiro', nome: 'Loja', curto: 'Loja', ic: '🏬', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', soon: 'Em breve — o Financeiro da Loja chega depois do da Rota.' },
+  { id: 'esc-escala', sis: 'escalas', nome: 'Escala do dia', curto: 'Escala', ic: '📅', perfis: GESTAO_P, esc: 'scale' },
+  { id: 'esc-cad', sis: 'escalas', nome: 'Cadastros', curto: 'Cadastros', ic: '👥', perfis: GESTAO_P, esc: 'catalog' },
+  { id: 'esc-fin', sis: 'escalas', nome: 'Financeiro da escala', curto: 'Financeiro', ic: '💰', perfis: GESTAO_P, esc: 'finance', visivel: () => (App.sessao.sistemas || []).indexOf('financeiro') >= 0 },
+  { id: 'esc-hist', sis: 'escalas', nome: 'Histórico de cargas', curto: 'Histórico', ic: '🗂️', perfis: GESTAO_P, esc: 'history' },
   { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: GESTAO_P, soon: 'Em breve — ranking dos motoristas com setas de subida e descida.' }
 ];
 
@@ -126,7 +130,7 @@ const App = {
   badge(a) { try { return a.contador ? a.contador() : 0; } catch (e) { return 0; } },
   montarNavegacao() {
     const lado = limpar($('#sideNav')), atual = this.abaAtual(), sisAtual = atual ? atual.sis : 'painel';
-    const item = (id, ic, nome, ativo, futuro, n, clique) => h('button', { class: 'side-item' + (futuro ? ' futuro' : '') + (ativo ? ' active' : ''), dataset: { aba: id }, onclick: futuro ? null : clique },
+    const item = (id, ic, nome, ativo, futuro, n, clique) => h('button', { class: 'side-item' + (futuro ? ' futuro' : '') + (ativo ? ' active' : ''), dataset: { aba: id }, title: nome, onclick: futuro ? null : clique },
       h('span', { class: 'ic', text: ic }), nome, n ? h('span', { class: 'n', text: String(n) }) : null, futuro ? h('span', { class: 'tag', text: 'em breve' }) : null);
     lado.append(item('inicio', '🏠', 'Painel Transmarina', sisAtual === 'painel', false, 0, () => this.abrirAba('inicio')));
     const sis = this.sistemasDoPerfil(), ativos = sis.filter(x => !x.futuro), breve = sis.filter(x => x.futuro);
@@ -164,16 +168,18 @@ const App = {
     $('#btnImprimir').hidden = !(a.gf && OFICINA_P.indexOf(this.sessao.perfil) >= 0);
     $('#btnAtualizar').hidden = false;
     const dash = $('#tab-dashboard'); if (dash) dash.classList.toggle('dash-mec', this.sessao.perfil === 'mecanico');
-    if (a.fin) {
-      PontoHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); FinHub.abrir(a.fin);
+    if (a.esc) {
+      PontoHub.esconder(); FinHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); EscHub.abrir(a.esc);
+    } else if (a.fin) {
+      EscHub.esconder(); PontoHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); FinHub.abrir(a.fin);
     } else if (a.ponto) {
-      FinHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); PontoHub.abrir(a.ponto);
+      EscHub.esconder(); FinHub.esconder(); hubC.hidden = true; gfR.hidden = true; $('#btnAtualizar').hidden = true; if ($('#tituloTopo').hidden) $('.hub-top').classList.add('vazio'); PontoHub.abrir(a.ponto);
     } else if (a.gf) {
-      PontoHub.esconder(); FinHub.esconder(); hubC.hidden = true; gfR.hidden = false;
+      EscHub.esconder(); PontoHub.esconder(); FinHub.esconder(); hubC.hidden = true; gfR.hidden = false;
       $$('#gfRoot > .tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + a.gf));
       gfAba = a.gf; renderTelaAtual();
     } else {
-      PontoHub.esconder(); FinHub.esconder(); gfR.hidden = true; hubC.hidden = false;
+      EscHub.esconder(); PontoHub.esconder(); FinHub.esconder(); gfR.hidden = true; hubC.hidden = false;
       if (a.hub) hubC.append(a.hub());
       else if (a.soon) hubC.append(h('div', { class: 'card soon' }, h('b', { text: a.nome }), a.soon));
       else hubC.append(Inicio.render());
@@ -197,7 +203,7 @@ const App = {
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
-    API.guardar(''); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar();
+    API.guardar(''); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
     $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar');
@@ -213,6 +219,13 @@ const App = {
 document.addEventListener('DOMContentLoaded', () => {
   API.aoExpirar = () => { if (App.sessao) { toast('Sua sessão expirou. Entre novamente.', true); App.limparSessao(); } };
   document.addEventListener('click', e => { const p = $('#perfilPop'); if (p && !p.contains(e.target)) p.remove(); const o = $('#ocultarPop'); if (o && !o.contains(e.target)) o.remove(); });
+  (function () {
+    const btn = $('#sideToggle'); if (!btn) return;
+    const aplicar = min => { document.body.classList.toggle('side-min', min); btn.textContent = min ? '»' : '«'; btn.title = min ? 'Expandir menu' : 'Recolher menu'; btn.setAttribute('aria-label', btn.title); };
+    let min = false; try { min = localStorage.getItem('trm.sidemin') === '1'; } catch (e) {}
+    aplicar(min);
+    btn.addEventListener('click', () => { min = !document.body.classList.contains('side-min'); aplicar(min); try { localStorage.setItem('trm.sidemin', min ? '1' : '0'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 220); });
+  })();
   API.aquecer();
   let _ultVis = Date.now();
   document.addEventListener('visibilitychange', () => { if (document.hidden) { _ultVis = Date.now(); return; } if (App.sessao && !$('.overlay.show') && Date.now() - _ultVis > 60000) App.recarregar(true); });
