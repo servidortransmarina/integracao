@@ -62,3 +62,53 @@ const Pontos = {
         h('button', { class: 'btn', type: 'button', text: 'Lançar', onclick: async () => { try { await API.chamar('ajustarPontos', { motoristaId: mot.id, pontos: Number(val.value), motivo: motivo.value }); toast('Ajuste lançado.'); m.fechar(); App.recarregar(true).then(() => { if (window.Motoristas && Motoristas.perfil) Motoristas.perfil(mot.id); }); } catch (e) { toast(e.message, true); } } }))));
   }
 };
+
+/* Aba Pódio do Fleet (gestão): ranking do mês inteiro, setas contra o mês anterior e de onde vieram os pontos. */
+const Podio = {
+  mes: null,
+  MESES: ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'],
+  rotMes(m) { const [y, mm] = m.split('-').map(Number), n = this.MESES[mm - 1]; return n.charAt(0).toUpperCase() + n.slice(1) + ' de ' + y; },
+  somaMes(m, n) { let [y, mm] = m.split('-').map(Number); mm += n; while (mm < 1) { mm += 12; y--; } while (mm > 12) { mm -= 12; y++; } return y + '-' + String(mm).padStart(2, '0'); },
+  tela() {
+    const hoje = (App.dados && App.dados.hoje) || new Date().toISOString().slice(0, 10);
+    if (!this.mes) this.mes = hoje.slice(0, 7);
+    const cx = h('div', { class: 'pd' }), corpo = h('div', { class: 'pd-corpo' }, h('div', { class: 'hint', text: 'Carregando ranking…' }));
+    const titulo = h('h2', { text: this.rotMes(this.mes) });
+    const ir = n => { this.mes = this.somaMes(this.mes, n); App.abrirAba('podio'); };
+    const prox = h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Próximo mês', text: '›', onclick: () => ir(1) }); if (this.mes >= hoje.slice(0, 7)) prox.disabled = true;
+    cx.append(h('div', { class: 'card pd-cab' }, h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Mês anterior', text: '‹', onclick: () => ir(-1) }), titulo, prox), corpo);
+    API.chamar('rankingPontos', { mes: this.mes }, { mudo: true }).then(r => this.preencher(corpo, r)).catch(e => { corpo.textContent = ''; corpo.append(h('div', { class: 'card empty', text: e.message })); });
+    return cx;
+  },
+  seta(x) {
+    if (!x.posicao) return h('span', { class: 'pd-seta igual', text: '—', title: 'Sem pontos no mês' });
+    if (!x.posicaoAnterior) return h('span', { class: 'pd-seta novo', text: 'novo', title: 'Não pontuou no mês anterior' });
+    const d = x.posicaoAnterior - x.posicao;
+    if (!d) return h('span', { class: 'pd-seta igual', text: '=', title: 'Mesma posição do mês anterior' });
+    return h('span', { class: 'pd-seta ' + (d > 0 ? 'sobe' : 'desce'), text: (d > 0 ? '▲ ' : '▼ ') + Math.abs(d), title: (d > 0 ? 'Subiu ' : 'Desceu ') + Math.abs(d) + (Math.abs(d) > 1 ? ' posições' : ' posição') + ' (era ' + x.posicaoAnterior + 'º)' });
+  },
+  preencher(corpo, r) {
+    corpo.textContent = '';
+    const lista = r.ranking || [], top = lista.filter(x => x.posicao).slice(0, 3), rot = {}; (r.regras || []).forEach(g => { rot[g.evento] = g.descricao || g.evento; });
+    if (top.length) {
+      const ordem = [top[1], top[0], top[2]], pos = [2, 1, 3], alt = window.innerWidth < 640 ? { 1: 64, 2: 46, 3: 32 } : { 1: 110, 2: 80, 3: 60 }, med = { 1: '🥇', 2: '🥈', 3: '🥉' }, palco = h('div', { class: 'podio' });
+      ordem.forEach((x, i) => { if (!x) return; const p = pos[i];
+        palco.append(h('div', { class: 'degrau p' + p }, h('div', { class: 'medalha', text: med[p] }), x.avatar ? h('span', { class: 'avatar mot-av' }, avatarNo(x.avatar)) : null, h('b', { text: nomeBonito(x.nome).split(' ')[0] }), h('small', { text: x.pontos.toLocaleString('pt-BR') + ' pts' }), h('div', { class: 'bloco', style: 'height:' + alt[p] + 'px', text: String(p) }))); });
+      corpo.append(h('div', { class: 'card pd-palco' }, palco));
+    } else corpo.append(h('div', { class: 'card empty', text: 'Ninguém pontuou em ' + this.rotMes(r.mes) + '.' }));
+    const tab = h('div', { class: 'card pd-lista' }, h('div', { class: 'pd-lin pd-th' }, h('span', { text: '#' }), h('span', { text: 'Motorista' }), h('span', { text: 'Pontos' }), h('span', { class: 'pd-th-ant', text: 'Mês anterior' })));
+    const motPorId = {}; ((App.dados && App.dados.motoristas) || []).forEach(m => { motPorId[m.id] = m; });
+    lista.forEach(x => {
+      const det = Object.keys(x.eventos || {}).map(e => x.eventos[e] + '× ' + String(rot[e] || e).toLowerCase()).join(' · ');
+      const lin = h('div', { class: 'pd-lin' + (x.posicao && x.posicao <= 3 ? ' top' : '') + (x.posicao ? '' : ' zero') },
+        h('span', { class: 'pd-pos', text: x.posicao ? x.posicao + 'º' : '–' }),
+        h('span', { class: 'pd-nome' }, h('b', { text: nomeBonito(x.nome) }), det ? h('small', { text: det }) : null),
+        h('span', { class: 'pd-pts', text: x.pontos.toLocaleString('pt-BR') }),
+        h('span', { class: 'pd-ant' }, this.seta(x), h('small', { text: x.pontosAnterior ? x.pontosAnterior.toLocaleString('pt-BR') + ' pts' : '' })));
+      if (motPorId[x.id]) { lin.classList.add('click'); lin.title = 'Lançar bônus ou desconto'; lin.onclick = () => Pontos.ajustar(motPorId[x.id]); }
+      tab.append(lin);
+    });
+    if (!lista.length) tab.append(h('div', { class: 'empty', text: 'Nenhum motorista cadastrado.' }));
+    corpo.append(tab, h('p', { class: 'hint pd-nota', text: 'Setas comparam com a posição no mês anterior. Toque num motorista para lançar bônus ou desconto (sempre com motivo).' }));
+  }
+};

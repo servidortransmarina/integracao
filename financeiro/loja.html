@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Financeiro › Loja</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <link rel="stylesheet" href="loja.css?v=hub1">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand-block"><img class="brand-logo" id="brandLogo" alt="Filipini Transportes & Logística"><div>
+      <h1>Painel de Faturamento — Frete</h1>
+      <p>Cada linha da base é 1 viagem do dia (Cluster de até 3 lojas) · valores por FRETE TABELA e VALOR TOTAL</p>
+    </div></div>
+    <div class="period-tag" id="periodTag">—</div>
+    <div class="header-actions">
+      <div class="btn-row">
+        <button class="btn-refresh" id="btnAtualizarPlanilha">Atualizar da planilha online</button>
+        <button class="btn-upload" onclick="document.getElementById('fileUpload').click()">Carregar arquivo (.xlsx/.xlsm)</button>
+      </div>
+      <input type="file" id="fileUpload" accept=".xlsx,.xlsm,.xls" style="display:none">
+      <div class="upload-status" id="uploadStatus">Carregando dados da planilha…</div>
+    </div>
+  </header>
+
+  <div class="filters">
+    <div class="filter-field">
+      <label>Loja / Destino</label>
+      <select id="fLoja"><option value="">Todas as lojas</option></select>
+    </div>
+    <div class="filter-field">
+      <label>Motorista</label>
+      <select id="fMotorista"><option value="">Todos os motoristas</option></select>
+    </div>
+    <div class="filter-field">
+      <label>De</label>
+      <input type="date" id="fDe">
+    </div>
+    <div class="filter-field">
+      <label>Até</label>
+      <input type="date" id="fAte">
+    </div>
+    <button id="btnClear">Limpar filtros</button>
+  </div>
+
+  <nav class="view-nav" aria-label="Áreas do painel">
+    <button class="view-tab active" data-view="operacional">Operacional</button>
+    <button class="view-tab" data-view="financeiro">Financeiro</button>
+    <button class="view-tab" data-view="cb">CB</button>
+  </nav>
+
+  <section id="operationalOverview" class="view-section">
+  <div class="kpis">
+    <div class="kpi accent-teal"><div class="lbl">OTs da semana</div><div class="val" id="opWeekOTs">—</div></div>
+    <div class="kpi"><div class="lbl">Vs. semana anterior</div><div class="val" id="opWeekCompare">—</div></div>
+    <div class="kpi"><div class="lbl">Lojas atendidas</div><div class="val" id="opWeekStores">—</div></div>
+    <div class="kpi"><div class="lbl">Loja Única</div><div class="val" id="opWeekSingle">—</div></div>
+    <div class="kpi"><div class="lbl">Lojas Clusters</div><div class="val" id="opWeekCluster">—</div></div>
+    <div class="kpi accent-amber"><div class="lbl">Exceções de dados</div><div class="val" id="opWeekIssues">—</div></div>
+  </div>
+  <div class="ops-data-note panel">
+    <span><b>Status das OTs:</b> não disponível na BASE.</span>
+    <span><b>Pontualidade:</b> a BASE não contém datas previstas e realizadas.</span>
+    <span><b>Exceções:</b> <i id="opExceptions">—</i></span>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h3>Faturamento por loja</h3>
+      <div class="sub">Valor total atribuído a cada loja, dentro das viagens filtradas</div>
+      <div class="chart-box tall"><canvas id="chartLoja"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Evolução diária</h3>
+      <div class="sub">Soma de VALOR TOTAL e FRETE TABELA por dia, 1x por viagem</div>
+      <div class="chart-box"><canvas id="chartData"></canvas></div>
+      <h3 style="margin-top:18px;">Faturamento por motorista</h3>
+      <div class="sub">Soma de VALOR TOTAL das viagens de cada motorista</div>
+      <div class="chart-box"><canvas id="chartMotorista"></canvas></div>
+    </div>
+  </div>
+
+  </section>
+
+  <section id="cbReportView" class="view-section" hidden>
+    <div class="panel full" style="padding:14px;">
+      <div style="display:flex;justify-content:flex-end;margin:0 0 10px;">
+        <label class="week-picker">Semana do relatório <select id="cbReportWeek" aria-label="Selecionar semana do relatório Casas Bahia"></select></label>
+      </div>
+          <section class="cb-report-card" id="cbFinancialReport" aria-labelledby="cbReportTitle">
+            <div class="cb-report-head">
+              <div><h3 id="cbReportTitle">Relatório financeiro e operacional · Casas Bahia</h3><p id="cbReportPeriod">Período selecionado: —</p></div>
+              <div class="cb-report-actions"><button type="button" id="cbPrintReport">Imprimir / salvar relatório + viagens</button><button type="button" id="cbExportTripsExcel">Exportar viagens da semana em Excel</button><button type="button" class="secondary" id="cbClearForecast">Limpar previsão informada</button></div>
+            </div>
+            <p class="cb-report-note">Documento para acompanhamento gerencial. Os valores realizados refletem os dados carregados no painel; as projeções são estimativas e não representam viagens já executadas.</p>
+            <h4 class="cb-report-section-title">Resumo financeiro da semana</h4>
+            <div class="cb-report-kpis">
+              <div class="cb-report-kpi"><span>Saldo disponível no início do período</span><b id="rptAvailable">—</b></div>
+              <div class="cb-report-kpi"><span>Depósitos registrados na semana</span><b id="rptDeposit">—</b></div>
+              <div class="cb-report-kpi"><span>Consumo realizado até a data-base</span><b id="rptWeeklySpend">—</b></div>
+              <div class="cb-report-kpi"><span>Saldo estimado após o consumo realizado</span><b id="rptCurrentBalance">—</b></div>
+            </div>
+            <h4 class="cb-report-section-title">Viagens realizadas</h4>
+            <div class="cb-report-kpis">
+              <div class="cb-report-kpi"><span>Semana selecionada</span><b id="rptWeekTrips">—</b></div>
+              <div class="cb-report-kpi"><span>Faturamento da semana até a data-base</span><b id="rptWeekBilled">—</b></div>
+              <div class="cb-report-kpi"><span>Mês até a data-base</span><b id="rptMonthTrips">—</b></div>
+              <div class="cb-report-kpi"><span>Faturamento mensal até a data-base</span><b id="rptMonthBilled">—</b></div>
+            </div>
+            <h4 class="cb-report-section-title">Previsão de viagens e necessidade de crédito</h4>
+            <p class="cb-report-note" id="cbForecastGuidance">Informe opcionalmente as viagens previstas para cada dia restante. Dias sem quantidade informada serão estimados pelo ritmo recente; o valor usa o ticket médio da semana selecionada.</p>
+            <div class="table-scroll"><table class="cb-forecast-table"><thead><tr><th>Dia previsto</th><th>Viagens previstas (opcional)</th><th>Critério utilizado</th></tr></thead><tbody id="cbForecastInputs"></tbody></table></div>
+            <div class="cb-report-kpis">
+              <div class="cb-report-kpi"><span>Ticket médio utilizado</span><b id="rptTicket">—</b></div>
+              <div class="cb-report-kpi"><span>Viagens estimadas até sexta-feira</span><b id="rptFridayTrips">—</b></div>
+              <div class="cb-report-kpi"><span>Crédito adicional necessário até sexta</span><b id="rptFridayNeed">—</b></div>
+              <div class="cb-report-kpi"><span>Viagens estimadas até sábado</span><b id="rptSaturdayTrips">—</b></div>
+              <div class="cb-report-kpi"><span>Crédito adicional necessário até sábado</span><b id="rptSaturdayNeed">—</b></div>
+              <div class="cb-report-kpi"><span>Data estimada de esgotamento do crédito</span><b id="rptStopDate">—</b></div>
+            </div>
+            <div class="cb-report-status" id="cbReportValidation" role="status" aria-live="polite">Aguardando validação dos dados financeiros.</div>
+            <p class="cb-report-small" id="cbReportMethod">Critério: crédito anterior + depósito real − consumo; projeção calculada pelo ticket médio e pela quantidade informada ou pelo ritmo recente de viagens. Data-base: —.</p>
+            <h4 class="cb-report-section-title">Anexo · Viagens da semana selecionada</h4>
+            <p class="cb-report-note" id="cbTripsPeriod">Relação extraída da BASE para conferência semanal.</p>
+            <div class="table-scroll"><table class="cb-forecast-table"><thead><tr><th>Viagem</th><th>Data</th><th>Motorista</th><th>Lojas e ordens</th><th>Frete tabela</th><th>Valor total</th></tr></thead><tbody id="tblCBTrips"></tbody><tfoot id="tblCBTripsFoot"></tfoot></table></div>
+            <p class="cb-report-small" id="cbTripsCount">Aguardando os dados da BASE.</p>
+          </section>
+    </div>
+  </section>
+
+  <div class="panel full" id="detailPanel">
+    <div class="pdf-actions" style="justify-content:flex-end;padding:12px 12px 0;">
+      <button class="btn-pdf-geral" id="btnPdfGeral">Baixar resumo executivo em PDF</button>
+      <button class="btn-pdf-all" id="btnPdfAll">Gerar PDF de cobrança (individual por viagem)</button>
+    </div>
+    <div style="border:1px solid var(--border);border-top:none;padding:14px 4px 6px;">
+
+      <div class="tabpanel active" id="tab-casasbahia">
+        <div style="padding:0 12px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <div class="sub" style="margin-bottom:0;">Antecipação semanal fixa da Casas Bahia (Anexo I) x faturamento realmente rodado no período (Anexo II)</div>
+            <label class="week-picker">Semana selecionada <select id="selectedWeek" aria-label="Selecionar semana financeira"></select></label>
+            <button class="btn-pdf-geral" id="btnWhatsApp" style="margin-bottom:0;background:#25D366;">Enviar resumo via WhatsApp</button>
+          </div>
+          <div class="kpis" id="cbKpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px;">
+            <div class="kpi"><div class="lbl">Transportadora</div><div class="val" style="font-size:13px;">FILIPPINI TRANSPORTES</div></div>
+            <div class="kpi"><div class="lbl">Média dos depósitos</div><div class="val" id="cbValorSemana">—</div></div>
+            <div class="kpi accent-teal"><div class="lbl">Total de depósitos registrados</div><div class="val" id="cbTotalPrevisto">—</div></div>
+            <div class="kpi accent-amber"><div class="lbl">Total consumido nos períodos</div><div class="val" id="cbTotalFaturado">—</div></div>
+          </div>
+
+          <div class="kpis weekly-finance-kpis">
+            <div class="kpi accent-teal"><div class="lbl">Valor total faturado na semana</div><div class="val" id="weekBilled">—</div></div>
+            <div class="kpi"><div class="lbl">Depósito real semanal</div><div class="val" id="weekDeposit">—</div></div>
+            <div class="kpi"><div class="lbl">Crédito anterior</div><div class="val" id="weekPreviousCredit">—</div></div>
+            <div class="kpi"><div class="lbl">Total disponível</div><div class="val" id="weekAvailable">—</div></div>
+            <div class="kpi accent-amber"><div class="lbl">Consumo · <span id="weekInterval">—</span></div><div class="val" id="weekConsumption">—</div></div>
+            <div class="kpi"><div class="lbl">Crédito após consumo</div><div class="val" id="weekClosingCredit">—</div></div>
+            <div class="kpi accent-teal"><div class="lbl">Viagens ainda possíveis</div><div class="val" id="weekTripsPossible">—</div><small class="trip-ticket-note" id="weekTicketNote">Ticket médio: —</small></div>
+          </div>
+
+
+
+          <div class="balance-equation"><b>Como ler o saldo:</b> saldo trazido da semana anterior + depósito recebido = total disponível; total disponível − consumo semanal = saldo para a próxima semana.</div>
+          <div class="deposit-status" id="depositStatus">Carregando depósitos…</div>
+          <div class="finance-alert neutral" id="financeAlert" role="status" aria-live="polite">Aguardando os dados para verificar os saldos.</div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data do depósito</th>
+                  <th>Período coberto</th>
+                  <th class="num">Depósito recebido</th>
+                  <th class="num">Saldo trazido da semana anterior</th>
+                  <th class="num">Total disponível</th>
+                  <th class="num">Consumo semanal</th>
+                  <th class="num">Saldo para a próxima semana</th>
+                  <th>Situação</th>
+                </tr>
+              </thead>
+              <tbody id="tblCasasBahia"></tbody>
+            </table>
+          </div>
+          <div class="sub" style="margin-top:10px;">* Se não houver liquidação bancária em 25/12/2026, o último pagamento deve ser feito no dia útil imediatamente anterior. Excedentes precisam de aprovação em <b>suprimentos.indiretos@casasbahia.com.br</b>.</div>
+        </div>
+      </div>
+
+      <div class="tabpanel" id="tab-operacional" hidden>
+          <div class="panel" style="margin:0 0 14px;padding:16px 18px;">
+            <h3 style="margin-bottom:2px;">Meta semanal fixa (baseada no ticket médio)</h3>
+            <div class="sub" id="projSemanaLabel">—</div>
+            <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+              <div class="kpi"><div class="lbl">Ticket médio da semana</div><div class="val" id="projTicket">—</div></div>
+              <div class="kpi accent-teal"><div class="lbl">Meta de crédito do período equivale a</div><div class="val" id="projMetaViagens" style="font-size:16px;">—</div></div>
+              <div class="kpi"><div class="lbl">Já faturado nesta semana</div><div class="val" id="projFaturado">—</div></div>
+            </div>
+
+            <h3 style="margin-bottom:2px;">Quanto falta pra completar o crédito</h3>
+            <div class="sub">Estimativa operacional: faturamento que falta até a meta semanal dividida pelo ticket médio</div>
+            <div class="kpis" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px;">
+              <div class="kpi accent-amber"><div class="lbl">Falta faturar</div><div class="val" id="projFalta">—</div></div>
+              <div class="kpi accent-amber"><div class="lbl">Viagens que faltam</div><div class="val" id="projViagensFaltam" style="font-size:16px;">—</div></div>
+            </div>
+
+            <h3 style="margin-bottom:2px;">Sugestão com base no ritmo atual</h3>
+            <div class="sub">Ritmo já rodado nesta semana: <b id="projRitmo">—</b> · mantendo esse ritmo:</div>
+            <div class="kpis" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px;">
+              <div class="kpi"><div class="lbl">Trabalhando 6 dias na semana</div><div class="val" id="proj6dias" style="font-size:15px;">—</div></div>
+              <div class="kpi"><div class="lbl">Trabalhando 7 dias na semana</div><div class="val" id="proj7dias" style="font-size:15px;">—</div></div>
+            </div>
+
+            <h3 style="margin-bottom:2px;">Viagens e valor faturado por dia — semana atual</h3>
+            <div class="sub">Barras = quantidade de viagens no dia · linha = valor total faturado no dia</div>
+            <div class="chart-box"><canvas id="chartSemanaAtual"></canvas></div>
+          </div>
+
+        <div class="tabs sub-tabs">
+          <div class="tab active" data-subtab="viagens">Viagens</div>
+          <div class="tab" data-subtab="ordens">Lojas e ordens</div>
+        </div>
+        <div class="tabpanel active" id="tab-viagens">
+        <div class="sub" style="padding:0 12px;">Cada linha é uma viagem/OT do dia; o Cluster mostra as lojas atendidas nela</div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-k="viagem_id">Viagem</th>
+                <th data-k="data">Data</th>
+                <th data-k="motorista">Motorista</th>
+                <th>Cluster (lojas · ordem)</th>
+                <th data-k="frete_tabela" class="num">Frete tabela</th>
+                <th data-k="valor_total4" class="num">Valor total</th>
+                <th>Cobrança</th>
+              </tr>
+            </thead>
+            <tbody id="tblViagens"></tbody>
+          </table>
+        </div>
+        <div class="row-count" id="rowCountViagens"></div>
+      </div>
+
+        </div>
+        <div class="tabpanel" id="tab-ordens">
+        <div class="sub" style="padding:0 12px;">Cada linha é uma loja dentro de uma viagem, com a ordem vinculada a ela</div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-k="viagem_id">Viagem</th>
+                <th data-k="data">Data</th>
+                <th data-k="motorista">Motorista</th>
+                <th data-k="loja">Loja</th>
+                <th data-k="destino">Destino</th>
+                <th data-k="ordem">Ordem</th>
+              </tr>
+            </thead>
+            <tbody id="tblOrdens"></tbody>
+          </table>
+        </div>
+        <div class="row-count" id="rowCountOrdens"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>Painel gerado a partir da base de faturamento de frete · valores em R$ · 1 linha da planilha = 1 viagem do dia</footer>
+</div>
+
+<div class="deposit-toast" id="depositToast" role="status" aria-live="polite" hidden>
+  <button class="toast-close" id="depositToastClose" aria-label="Fechar aviso">×</button>
+  <strong>Novo depósito identificado</strong>
+  <span id="depositToastText"></span>
+</div>
+<div class="critical-overlay" id="criticalOverlay" role="alertdialog" aria-modal="true" aria-labelledby="criticalTitle" aria-describedby="criticalMessage" hidden>
+  <section class="critical-card">
+    <div class="critical-mark" aria-hidden="true"><svg class="critical-beacon" viewBox="0 0 128 128" role="img"><g stroke="#D71920" stroke-width="3" stroke-linecap="round"><path d="M64 4v14M24 15l8 13M7 47l14 5M121 47l-14 5M12 83l13-6M116 83l-13-6M40 8l5 13M88 8l-5 13M12 31l12 8M116 31l-12 8"/></g><ellipse cx="64" cy="110" rx="43" ry="10" fill="#151719"/><path d="M21 98h86v13c0 7-19 12-43 12s-43-5-43-12z" fill="#17191B"/><path d="M27 91c0-25 4-51 17-63 10-9 18-12 20-12s10 3 20 12c13 12 17 38 17 63v8H27z" fill="#E5282D" stroke="#99151B" stroke-width="3"/><path d="M33 89c1-22 4-43 14-53 6-6 12-9 17-10v66H33z" fill="#FF4A4A" opacity=".78"/><path d="M48 27c8-5 24-5 32 0" fill="none" stroke="#FFD6D6" stroke-width="5" stroke-linecap="round" opacity=".8"/><path d="M37 91h54" stroke="#790F14" stroke-width="4"/><path d="M57 57c-7-3-14 2-14 10v13c0 8 7 13 14 10l17-10V67z" fill="#F3B2B2" stroke="#9E2429" stroke-width="3"/><path d="M73 67l18-10v33L73 80z" fill="#B41F25"/><path d="M42 99h44" stroke="#45484A" stroke-width="3" stroke-linecap="round"/></svg></div>
+    <h2 id="criticalTitle">CRÍTICO</h2>
+    <p id="criticalMessage">O consumo semanal está se aproximando do saldo disponível.</p>
+    <div class="critical-summary" aria-label="Resumo do saldo e das viagens restantes">
+      <div class="critical-metric"><strong>Saldo atual após retiradas</strong><span id="criticalBalance">—</span></div>
+      <div class="critical-metric"><strong>Ticket médio por viagem</strong><span id="criticalTicket">—</span></div>
+      <div class="critical-metric"><strong>Viagens completas que o saldo cobre</strong><span id="criticalTripsCovered">—</span></div>
+    </div>
+    <div class="critical-scenarios">
+      <section class="critical-scenario"><h3>Trabalho até sexta-feira · <span id="scenarioFridayDate">—</span></h3><p>Viagens estimadas até sexta: <b id="scenarioFridayTrips">—</b></p><p>Consumo previsto: <b id="scenarioFridaySpend">—</b></p><p>Saldo após a previsão: <b id="scenarioFridayBalance">—</b></p><div class="scenario-status" id="scenarioFridayStatus">—</div></section>
+      <section class="critical-scenario"><h3>Trabalho até sábado · <span id="scenarioSaturdayDate">—</span></h3><p>Viagens estimadas até sábado: <b id="scenarioSaturdayTrips">—</b></p><p>Consumo previsto: <b id="scenarioSaturdaySpend">—</b></p><p>Saldo após a previsão: <b id="scenarioSaturdayBalance">—</b></p><div class="scenario-status" id="scenarioSaturdayStatus">—</div></section>
+    </div>
+    <p class="critical-explainer" id="criticalValue"></p>
+    <div class="critical-actions">
+      <button class="critical-request" id="criticalRequest" hidden>Prévia do e-mail de excedente</button>
+      <button class="critical-dismiss" id="criticalDismiss">Entendi</button>
+      <button class="critical-sound" id="criticalSound">Ativar áudio e fala</button>
+    </div>
+    <small class="sound-note">O alarme se repete enquanto esta mensagem crítica estiver pendente. Clique em “Entendi” somente após conferir os detalhes para reconhecê-la e silenciar o alarme. Por segurança, o navegador pode exigir uma interação inicial para liberar o áudio.</small>
+  </section>
+</div>
+<div class="siren-dock" aria-label="Estado dos alertas financeiros">
+  <button class="siren-status" id="sirenStatus" type="button" aria-live="assertive" aria-label="Nenhum alerta crítico">
+    <span class="siren-icon" aria-hidden="true"><svg class="siren-svg" viewBox="0 0 128 128"><path d="M21 98h86v13c0 7-19 12-43 12s-43-5-43-12z" fill="#17191B"/><path d="M27 91c0-25 4-51 17-63 10-9 18-12 20-12s10 3 20 12c13 12 17 38 17 63v8H27z" fill="#E5282D" stroke="#99151B" stroke-width="4"/><path d="M38 88c1-21 4-40 14-51 4-4 8-7 12-8v65H38z" fill="#FF7777" opacity=".75"/><path d="M48 28c9-5 23-5 32 0" fill="none" stroke="#FFD6D6" stroke-width="5" stroke-linecap="round"/><ellipse cx="64" cy="109" rx="43" ry="9" fill="#111"/></svg></span><span id="sirenStatusText">SEM CRÍTICO</span>
+  </button>
+  <button class="siren-email" id="sirenEmail" type="button" hidden>Enviar e-mail de excedente</button>
+  <button class="siren-email" id="advanceEmailOpen" type="button">E-mail - Antecipação</button>
+  <a class="siren-email" id="outlookLogin" href="https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=9199bf20-a13f-4107-85dc-02114787ef48&amp;scope=https%3A%2F%2Foutlook.office.com%2F.default%20openid%20profile%20offline_access&amp;redirect_uri=https%3A%2F%2Foutlook.live.com%2Fmail%2F&amp;client-request-id=9f29d6ed-29f6-476b-157d-67c6af9850ea&amp;response_mode=fragment&amp;client_info=1&amp;clidata=1&amp;prompt=select_account&amp;nonce=01a0eeeb-5aa5-7462-9bf6-682b5322a760&amp;state=eyJpZCI6IjAxYTBlZWViLTVhYTMtN2Y4Mi1iNzZiLTRkYjZhZDJiMGVmZiIsIm1ldGEiOnsiaW50ZXJhY3Rpb25UeXBlIjoicmVkaXJlY3QifX0%3D%7CaHR0cHM6Ly9vdXRsb29rLmxpdmUuY29tL21haWwvP2N1bHR1cmU9cHQtYnImY291bnRyeT1icg%7CeyJwcm9tcHQiOiJzZWxlY3RfYWNjb3VudCJ9&amp;claims=%7B%22id_token%22%3A%7B%22signin_state%22%3A%7B%22essential%22%3Afalse%7D%2C%22login_hint%22%3A%7B%22essential%22%3Afalse%7D%7D%2C%22access_token%22%3A%7B%22xms_cc%22%3A%7B%22values%22%3A%5B%22CP1%22%5D%7D%7D%7D&amp;x-client-SKU=msal.js.browser&amp;x-client-VER=5.19.0&amp;response_type=code&amp;code_challenge=7MgGJPPvsEiosRbjDZz61rkzoJ8mkmvyYeoSL_ZhokI&amp;code_challenge_method=S256&amp;cobrandid=ab0455a0-8d03-46b9-b18b-df2f57b9e44c&amp;fl=dob%2Cflname%2Cwld" target="_blank" rel="noopener noreferrer">Acessar Outlook 365</a>
+</div>
+
+
+<div class="advance-email-overlay" id="advanceEmailOverlay" role="dialog" aria-modal="true" aria-labelledby="advanceEmailTitle" hidden>
+  <section class="advance-email-card">
+    <h2 id="advanceEmailTitle">E-mail - Antecipação</h2>
+    <p>Informe a data a partir da qual não será possível manter as operações. O painel preencherá o saldo disponível calculado após as retiradas.</p>
+    <div class="advance-email-balance" id="advanceEmailBalance">Saldo disponível: —</div>
+    <label for="advanceEmailDate">Data de início da impossibilidade</label>
+    <input id="advanceEmailDate" type="date" required>
+    <p id="advanceEmailStatus" role="status" aria-live="polite"></p>
+    <div class="advance-email-actions">
+      <button id="advanceEmailCancel" type="button">Cancelar</button>
+      <button id="advanceEmailCompose" type="button">Preparar e-mail</button>
+    </div>
+  </section>
+</div>
+<script src="loja.js?v=hub1"></script>
+</body>
+</html>

@@ -32,12 +32,14 @@ const ABAS = [
   { id: 'fin-rota-ticket', sis: 'financeiro', nome: 'Ticket & Escala', curto: 'Ticket', ic: '🎫', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'ticket' },
   { id: 'fin-rota-balancos', sis: 'financeiro', nome: 'Balanços e Escalas', curto: 'Balanços', ic: '⚖️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'balancos' },
   { id: 'fin-rota-hist', sis: 'financeiro', nome: 'Histórico', curto: 'Histórico', ic: '🗓️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'rota', fin: 'hist' },
-  { id: 'fin-loja', sis: 'financeiro', nome: 'Loja', curto: 'Loja', ic: '🏬', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', soon: 'Em breve — o Financeiro da Loja chega depois do da Rota.' },
+  { id: 'fin-loja-op', sis: 'financeiro', nome: 'Operacional', curto: 'Operacional', ic: '🏬', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:operacional' },
+  { id: 'fin-loja-fin', sis: 'financeiro', nome: 'Financeiro', curto: 'Financeiro', ic: '💵', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:financeiro' },
+  { id: 'fin-loja-cb', sis: 'financeiro', nome: 'Relatório CB', curto: 'CB', ic: '📄', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:cb' },
   { id: 'esc-escala', sis: 'escalas', nome: 'Escala do dia', curto: 'Escala', ic: '📅', perfis: GESTAO_P, esc: 'scale' },
   { id: 'esc-cad', sis: 'escalas', nome: 'Cadastros', curto: 'Cadastros', ic: '👥', perfis: GESTAO_P, esc: 'catalog' },
   { id: 'esc-fin', sis: 'escalas', nome: 'Financeiro da escala', curto: 'Financeiro', ic: '💰', perfis: GESTAO_P, esc: 'finance', visivel: () => (App.sessao.sistemas || []).indexOf('financeiro') >= 0 },
   { id: 'esc-hist', sis: 'escalas', nome: 'Histórico de cargas', curto: 'Histórico', ic: '🗂️', perfis: GESTAO_P, esc: 'history' },
-  { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: GESTAO_P, soon: 'Em breve — ranking dos motoristas com setas de subida e descida.' }
+  { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: GESTAO_P, hub: () => Podio.tela() }
 ];
 
 /** Se o servidor ainda for a versão antiga (sem "sistemas"), usa o padrão do perfil para nada sumir. */
@@ -92,6 +94,7 @@ const App = {
     Hub.aposDados(); this.montarUsuario(); this.montarNavegacao();
     if (this.sessao.perfil === 'master') await Usuarios.contarPendentes();
     this.abrirAba(this.abaValida(this.aba));
+    Online.atualizar(this.dados);
   },
 
   abasDoPerfil() { const sis = this.sistemasDoPerfil().map(x => x.id), pp = this.sessao.pontoPerfil || ''; return ABAS.filter(a => a.perfis.indexOf(this.sessao.perfil) >= 0 && (a.sis === 'painel' || sis.indexOf(a.sis) >= 0) && (!a.visivel || a.visivel()) && (!a.ponto || (pp && (a.pontoPerfis || ['adm', 'encarregado']).indexOf(pp) >= 0))); },
@@ -203,7 +206,7 @@ const App = {
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
-    API.guardar(''); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
+    API.guardar(''); Online.parar(); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
     $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar');
@@ -247,10 +250,53 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => { try { el.scrollTo({ left: 56, behavior: 'smooth' }); setTimeout(() => el.scrollTo({ left: 0, behavior: 'smooth' }), 650); } catch (e) { /* ok */ } }, 500);
     }
   }
-  function varre() { agendado = false; document.querySelectorAll('.sub-tabs, .chips').forEach(marca); }
+  function varre() { agendado = false; document.querySelectorAll('.sub-tabs, .chips').forEach(marca); if (typeof Online !== 'undefined' && Online._dados.online) Online.montar(); }
   function pede() { if (!agendado) { agendado = true; requestAnimationFrame(varre); } }
   document.addEventListener('scroll', e => { if (e.target && e.target.classList && (e.target.classList.contains('sub-tabs') || e.target.classList.contains('chips'))) pede(); }, true);
   window.addEventListener('resize', pede);
   new MutationObserver(pede).observe(document.body, { childList: true, subtree: true });
   pede();
 })();
+
+/* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
+const Online = {
+  VERSAO: '3o',
+  _avisouVersao: false, _timer: null, _dados: { online: 0 },
+  nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
+  /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */
+  montar() {
+    if (!App.sessao) return;
+    const cria = () => { const b = h('button', { class: 'online-ind', type: 'button' }, h('span', { class: 'on-barras', 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i')), h('b', { class: 'on-n' })); b.onclick = () => this.abrirLista(); this.pintar(b); return b; };
+    const tog = document.getElementById('sideToggle');
+    if (tog && !tog.parentElement.classList.contains('side-linha')) { const l = h('div', { class: 'side-linha' }); tog.before(l); l.append(cria(), tog); }
+    ['.rel-prob-linha', '.hub-acoes'].forEach(sel => { const el = document.querySelector(sel); if (el && !el.querySelector('.online-ind')) el.insertBefore(cria(), el.firstChild); });
+  },
+  pintar(b) {
+    const n = this._dados.online || 1, txt = n === 1 ? 'Só você online agora' : n + ' pessoas online agora';
+    b.dataset.nivel = this.nivel(n); b.querySelector('.on-n').textContent = n; b.title = txt; b.setAttribute('aria-label', txt);
+  },
+  atualizar(d) {
+    if (!d || !App.sessao) return;
+    if (d.online) this._dados = { online: d.online, nomes: d.onlineNomes };
+    this.montar();
+    document.querySelectorAll('.online-ind').forEach(b => this.pintar(b));
+    if (App.sessao.perfil === 'master' && !this._avisouVersao && String(d.versaoApi || '') !== this.VERSAO) {
+      this._avisouVersao = true;
+      toast('O servidor está numa versão anterior (' + (d.versaoApi || 'antiga') + '). No Apps Script: Implantar → Gerenciar implantações → editar → Nova versão.', true);
+    }
+    if (!this._timer) this._timer = setInterval(() => this.pingar(), 60000);
+  },
+  async pingar() {
+    if (!App.sessao || document.hidden) return;
+    try { const r = await API.chamar('presenca', {}, { mudo: true }); this.atualizar(r); } catch (e) { /* indicador é só informativo */ }
+  },
+  parar() { if (this._timer) clearInterval(this._timer); this._timer = null; this._dados = { online: 0 }; document.querySelectorAll('.online-ind').forEach(b => b.remove()); },
+  abrirLista() {
+    const n = this._dados.online || 1, nomes = this._dados.nomes;
+    if (!nomes) { toast(n === 1 ? 'Só você está online agora.' : n + ' pessoas estão online agora.'); return; }
+    const PERFIL = { master: 'Master', admin: 'Gestão', mecanico: 'Oficina', motorista: 'Motorista' };
+    abrirModal(n + (n > 1 ? ' pessoas online' : ' pessoa online'), h('div', { class: 'on-lista' }, nomes.map(p => h('div', { class: 'on-pessoa' }, h('span', { class: 'on-ponto' }), h('b', { text: nomeBonito(p.nome) }), h('small', { text: PERFIL[p.perfil] || '' }))),
+      h('small', { class: 'hint', text: 'Conta quem usou o sistema nos últimos 3 minutos.' })));
+  }
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden && App.sessao) Online.pingar(); });

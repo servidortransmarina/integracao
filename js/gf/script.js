@@ -78,7 +78,7 @@ function normalizarDadosDaPlanilha(raw) {
   const abast = (raw.abastecimentos || []).filter(a => a.origem !== 'motorista' && a.status !== 'expirado' && a.placa).map(a => {
     const l = Number(a.litros) || 0, vu = Number(a.valorUnit) || 0;
     return { id: String(a.id), placa: a.placa, tipo: 'abastecimento', descricao: a.produto || 'Diesel S10', km: a.km, data: a.data, valor: a.valor,
-      observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L' + (a.hora ? ' | ' + a.hora : ''), nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
+      observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L', nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
   });
   const manutencoes = (raw.manutencoes || []).concat(abast).map(m => ({ _abs: m._abs, _litros: m._litros, _hora: m._hora,
     id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: String(m.tipo || '').trim().toLowerCase(),
@@ -749,7 +749,7 @@ function renderDashboard() {
   let diasCobertosGeral = 0;
   const chartData = [];
   
-  let gastoGeral = 0, manutGeral = 0, kmGeralMatematica = 0, litrosGerais = 0;
+  let gastoGeral = 0, manutGeral = 0, kmGeralMatematica = 0, litrosGerais = 0, kmConsumo = 0, litConsumo = 0;
 
   db.veiculos.forEach(v => {
       let msV_All = db.manutencoes.filter(m => m.placa === v.placa).sort((a,b) => new Date(a.data) - new Date(b.data));
@@ -790,6 +790,7 @@ function renderDashboard() {
           gastoGeral += gastoTotalV; 
           manutGeral += qtdeV; 
           kmGeralMatematica += distanciaReal; 
+          { const c = consumoPares(msV_All, dtInicioStr || '', dtFimStr || ''); kmConsumo += c.km; litConsumo += c.lit; }
           
           if (gastoTotalV > 0 || kmRodadoGrafico > 0 || msV_Per.length > 0 || (!dtInicioStr && !dtFimStr)) {
               chartData.push({ placa: v.placa, gastoTotal: gastoTotalV, gastoComb: gastoComb, gastoOfic: gastoOfic, km: kmRodadoGrafico });
@@ -836,7 +837,7 @@ function renderDashboard() {
      custoKmGlobal = (calc > 0 && calc < 0.01) ? calc.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4 }) + ' / km' : fmtMoeda(calc) + ' / km';
   }
   
-  let consumoMedio = (litrosGerais > 0 && kmGeralMatematica > 0) ? (kmGeralMatematica / litrosGerais).toFixed(2) + ' Km/L' : '-';
+  let consumoMedio = litConsumo > 0 ? (kmConsumo / litConsumo).toFixed(2).replace('.', ',') + ' Km/L' : '-';   // tanque a tanque (ver consumoPares)
 
   document.getElementById('dashKpis').innerHTML = `
     <div class="kpi"><div class="label">Média estimada diária</div><div class="value">${fmtKm(mediaKmDia)}</div></div>
@@ -1136,30 +1137,33 @@ function osItens() {
 function imprimirRelatorioMecanico() {
   const itens = osItens();
   if (!itens.length) { toast('Nenhum serviço vencido, agendado ou ocorrência aberta para imprimir.'); return; }
-  const marcados = {}, tipo = { v: 'interna' };
-  const cx = h('div', { class: 'os-sel' });
-  const radios = h('div', { class: 'os-tipo' }), prest = h('input', { type: 'text', placeholder: 'Para onde vai? Ex.: Elétrica do Zé, Retífica Sul', maxlength: 80 }), obs = h('textarea', { rows: 2, placeholder: 'Observações para quem vai executar (opcional)', maxlength: 400 });
-  const extra = h('div', { class: 'os-externa', hidden: true }, h('label', { text: 'Prestador / oficina externa' }), prest, h('label', { text: 'Observações' }), obs);
-  [['interna', 'OS interna (nossa oficina)'], ['externa', 'OS externa (prestador de fora)']].forEach(([v, t]) => {
-    const r = h('input', { type: 'radio', name: 'os-tipo', value: v, checked: v === 'interna' }); r.onchange = () => { tipo.v = v; extra.hidden = v !== 'externa'; };
-    radios.append(h('label', { class: 'os-op' }, r, ' ' + t));
-  });
-  const cont = h('small', { class: 'hint' }), lista = h('div', { class: 'os-lista' }), imp = h('button', { class: 'btn', type: 'button', text: 'Imprimir' });
-  const att = () => { const n = Object.keys(marcados).filter(k => marcados[k]).length; cont.textContent = n + ' de ' + itens.length + ' selecionado(s)'; imp.disabled = !n; };
-  const cks = {};
-  const placas = Array.from(new Set(itens.map(i => i.placa)));
-  placas.forEach(pl => {
-    const doVeic = itens.filter(i => i.placa === pl), tudo = h('input', { type: 'checkbox' });
-    tudo.onchange = () => { doVeic.forEach(i => { marcados[i.id] = tudo.checked; cks[i.id].checked = tudo.checked; }); att(); };
-    lista.append(h('label', { class: 'os-placa' }, tudo, h('b', { text: ' ' + pl }), h('small', { text: ' · ' + doVeic.length })));
+  const marcados = {}, cks = {}, tipo = { v: 'interna' };
+  const prest = h('input', { type: 'text', placeholder: 'Ex.: Elétrica do Zé, Retífica Sul', maxlength: 80 });
+  const obs = h('textarea', { rows: 2, placeholder: 'Opcional', maxlength: 400 });
+  const extra = h('div', { class: 'os-externa', hidden: true }, h('label', {}, h('span', { text: 'Para onde vai' }), prest), h('label', {}, h('span', { text: 'Observações para quem vai executar' }), obs));
+  const seg = h('div', { class: 'os-seg', role: 'radiogroup' });
+  const opcao = (v, t, sub) => { const b = h('button', { type: 'button', class: 'os-seg-b' + (v === 'interna' ? ' on' : ''), role: 'radio', 'aria-checked': v === 'interna' ? 'true' : 'false' }, h('b', { text: t }), h('small', { text: sub }));
+    b.onclick = () => { tipo.v = v; extra.hidden = v !== 'externa'; seg.querySelectorAll('.os-seg-b').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); }); }; return b; };
+  seg.append(opcao('interna', 'OS interna', 'Nossa oficina'), opcao('externa', 'OS externa', 'Prestador de fora'));
+  const cont = h('span', { class: 'os-cont' }), lista = h('div', { class: 'os-lista' }), imp = h('button', { class: 'btn', type: 'button', text: 'Imprimir' });
+  const tudoPl = {};
+  const att = () => {
+    const n = itens.filter(i => marcados[i.id]).length; cont.textContent = n ? n + ' de ' + itens.length + ' selecionado' + (n > 1 ? 's' : '') : 'Nada selecionado'; imp.disabled = !n;
+    Object.keys(tudoPl).forEach(pl => { const d = itens.filter(i => i.placa === pl), k = d.filter(i => marcados[i.id]).length; tudoPl[pl].checked = k === d.length; tudoPl[pl].indeterminate = k > 0 && k < d.length; });
+  };
+  const marcar = (lst, v) => { lst.forEach(i => { marcados[i.id] = v; cks[i.id].checked = v; }); att(); };
+  Array.from(new Set(itens.map(i => i.placa))).forEach(pl => {
+    const doVeic = itens.filter(i => i.placa === pl), tudo = h('input', { type: 'checkbox', 'aria-label': 'Marcar tudo de ' + pl }); tudoPl[pl] = tudo;
+    tudo.onchange = () => marcar(doVeic, tudo.checked);
+    const grupo = h('div', { class: 'os-grupo' }, h('label', { class: 'os-placa' }, tudo, h('b', { text: pl }), h('span', { text: doVeic.length + (doVeic.length > 1 ? ' itens' : ' item') })));
     doVeic.forEach(i => { const c = h('input', { type: 'checkbox' }); cks[i.id] = c; c.onchange = () => { marcados[i.id] = c.checked; att(); };
-      lista.append(h('label', { class: 'os-item' }, c, h('div', {}, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), i.kind === 'ocorrencia' ? h('span', { class: 'badge ' + (i.alta ? 'red' : 'amber'), text: 'motorista' }) : null)); });
+      grupo.append(h('label', { class: 'os-item' }, c, h('span', { class: 'os-tx' }, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), i.kind === 'ocorrencia' ? h('span', { class: 'badge ' + (i.alta ? 'red' : 'amber'), text: 'motorista' }) : null)); });
+    lista.append(grupo);
   });
-  const todos = h('button', { class: 'btn small secondary', type: 'button', text: 'Marcar tudo', onclick: () => { itens.forEach(i => { marcados[i.id] = true; cks[i.id].checked = true; }); att(); } });
-  const nenhum = h('button', { class: 'btn small secondary', type: 'button', text: 'Limpar', onclick: () => { itens.forEach(i => { marcados[i.id] = false; cks[i.id].checked = false; }); att(); } });
+  const barra = h('div', { class: 'os-barra' }, h('button', { class: 'btn small secondary', type: 'button', text: 'Marcar tudo', onclick: () => marcar(itens, true) }), h('button', { class: 'btn small secondary', type: 'button', text: 'Limpar', onclick: () => marcar(itens, false) }));
   imp.onclick = () => { const escolhidos = itens.filter(i => marcados[i.id]); if (!escolhidos.length) return; imprimirOS(escolhidos, tipo.v, prest.value.trim(), obs.value.trim()); m.fechar(); };
-  cx.append(radios, extra, h('div', { class: 'os-barra' }, todos, nenhum, cont), lista, h('div', { class: 'modal-actions' }, imp));
-  const m = abrirModal('Ordem de serviço', cx); att();
+  const cx = h('div', { class: 'os-sel' }, seg, extra, barra, lista, h('div', { class: 'os-rodape' }, cont, imp));
+  const m = abrirModal('Ordem de serviço', cx, { largo: true }); att();
 }
 
 function imprimirOS(itens, tipo, prestador, obs) {
