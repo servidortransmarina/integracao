@@ -59,9 +59,15 @@ const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
   });
 })();
 
+/** Ícone: emoji em texto, exceto o pneu 🛞 (emoji novo que o Windows 10 e celulares mais antigos não mostram): vira desenho. */
+const PNEU_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" style="vertical-align:-.15em"><circle cx="12" cy="12" r="10.5" fill="#2b2b2b"/><circle cx="12" cy="12" r="10.5" fill="none" stroke="#555" stroke-width="1.6" stroke-dasharray="2.2 1.6"/><circle cx="12" cy="12" r="5.2" fill="#c9cdd3"/><circle cx="12" cy="12" r="1.7" fill="#6b7280"/><g fill="#6b7280"><circle cx="12" cy="8.6" r=".8"/><circle cx="15.2" cy="13.1" r=".8"/><circle cx="8.8" cy="13.1" r=".8"/></g></svg>';
+function icone(ic) {
+  if (ic === '🛞') { const sp = document.createElement('span'); sp.className = 'ic-pneu'; sp.innerHTML = PNEU_SVG; return sp; }
+  return document.createTextNode(ic || '');
+}
 /** Foto de perfil: emoji ou a logo da empresa ("logo:trm"). */
 function avatarNo(av) {
   if (/^logo:/.test(av || '')) return h('img', { src: 'logotrm.png', alt: '', class: 'av-logo' });
   if (/^img:[a-z0-9_]{1,24}$/.test(av || '')) return h('img', { src: 'icons/avatares/' + av.slice(4) + '.png', alt: '', class: 'av-logo' });   // logos de marcas/empresas: coloque o PNG em icons/avatares/ e acrescente 'img:nome' em AVATARES (perfil.js)
-  return document.createTextNode(av || '🔧');
+  return icone(av || '🔧');
 }

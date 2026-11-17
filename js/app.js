@@ -146,7 +146,7 @@ const App = {
     // abas do sistema aberto (topo, PC)
     const topo = limpar($('#subTabs')), abasSis = this.abasDoPerfil().filter(a => a.sis === sisAtual && sisAtual !== 'painel');
     topo.hidden = !abasSis.length; $('.hub-bar').hidden = topo.hidden;
-    abasSis.forEach(a => { const n = this.badge(a); topo.append(h('button', { type: 'button', class: 'subtab' + (a.id === this.aba ? ' active' : ''), dataset: { aba: a.id }, onclick: () => this.abrirAba(a.id) }, a.ic ? h('span', { class: 'st-ic', text: a.ic }) : null, a.nome, n ? h('span', { class: 'n', text: String(n) }) : null)); });
+    abasSis.forEach(a => { const n = this.badge(a); topo.append(h('button', { type: 'button', class: 'subtab' + (a.id === this.aba ? ' active' : ''), dataset: { aba: a.id }, onclick: () => this.abrirAba(a.id) }, a.ic ? h('span', { class: 'st-ic' }, icone(a.ic)) : null, a.nome, n ? h('span', { class: 'n', text: String(n) }) : null)); });
 
     // barra inferior (celular): Painel + um botão por sistema ativo + Mais. As abas do sistema aparecem numa faixa no topo.
     const barra = limpar($('#bottombar'));
@@ -332,14 +332,19 @@ const Online = {
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && App.sessao) Online.pingar(); });
 
-/* Abertura do portal: tempo mínimo para a animação terminar; depois some com um fade. */
+/* Abertura do portal: tempo mínimo para a animação terminar; depois sai com zoom (estilo PS2). */
 const Splash = {
   t0: (window.performance && performance.now()) || 0,
   el() { return document.getElementById('splash'); },
   minimo() {
-    const reduz = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches, alvo = reduz ? 500 : 1900;
+    const reduz = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches, alvo = reduz ? 500 : 2700;
     const falta = Math.max(0, alvo - (performance.now() - this.t0)); return new Promise(r => setTimeout(r, falta));
   },
   carregando() { const e = this.el(); if (e) e.classList.add('carregando'); },
-  sair() { const e = this.el(); if (!e || e.classList.contains('sai')) return; e.classList.add('sai'); setTimeout(() => e.remove(), 500); }
+  sair() {
+    const e = this.el(); if (!e || e.classList.contains('sai')) return;
+    const alvo = !$('#app').hidden ? $('#app') : $('#auth');                // a tela de baixo "chega" enquanto a câmera entra na logo
+    if (alvo) { alvo.classList.add('chegando'); setTimeout(() => alvo.classList.remove('chegando'), 1100); }
+    e.classList.add('sai'); setTimeout(() => e.remove(), 800);
+  }
 };

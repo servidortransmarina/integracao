@@ -5,7 +5,7 @@ const Auth = {
 
   cartao(titulo, sub, ...filhos) {
     return h('div', { class: 'auth-card' },
-      h('div', { class: 'brand' }, h('img', { src: 'logotrm.png', alt: 'Transmarina', onerror: function () { this.replaceWith(h('div', { class: 'logo-txt', text: 'TRANSMARINA' })); } })),
+      h('div', { class: 'brand' }, h('img', { src: 'logotrm.png', alt: 'Transmarina', decoding: 'async', onload: function () { this.classList.add('pronta'); }, onerror: function () { this.replaceWith(h('div', { class: 'logo-txt', text: 'TRANSMARINA' })); } })),
       h('h1', { text: titulo }), h('p', { class: 'sub', text: sub }), ...filhos);
   }
 };

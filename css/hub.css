@@ -513,26 +513,60 @@ body.side-min .side-linha .online-ind{padding:4px 6px}
   .pd-cab{padding:8px 10px}.pd-nav{width:32px;height:32px}
 }
 
-/* ---------- abertura: logo girando + PORTAL TRANSMARINA enquanto o servidor acorda e os dados chegam ---------- */
-.splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;color:#fff;
-  background:radial-gradient(120% 90% at 50% 35%,#3730a3 0%,#1e1b4b 58%,#110f2e 100%);transition:opacity .45s ease,transform .45s ease}
-.splash.sai{opacity:0;transform:scale(1.04);pointer-events:none}
-.sp-centro{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
-.sp-logo{width:112px;height:112px;border-radius:30px;background:#fff;display:grid;place-items:center;box-shadow:0 18px 50px rgba(0,0,0,.35),0 0 0 6px rgba(255,255,255,.08);
-  perspective:600px;animation:sp-gira 1.05s cubic-bezier(.2,.8,.2,1) both}
-.sp-logo img{width:78%;height:78%;object-fit:contain}
-.sp-t{display:none;font:800 54px/1 system-ui,sans-serif;color:#3730a3}
-.sp-logo.sem-img img{display:none}.sp-logo.sem-img .sp-t{display:block}
-@keyframes sp-gira{0%{opacity:0;transform:scale(.45) rotateY(-540deg)}60%{opacity:1}100%{opacity:1;transform:scale(1) rotateY(0)}}
-.sp-tit{margin:10px 0 0;font-size:clamp(24px,5.4vw,38px);font-weight:800;letter-spacing:.08em;line-height:1.1;display:flex;flex-wrap:wrap;justify-content:center;gap:.32em}
-.sp-tit span{display:inline-block;animation:sp-letra .7s cubic-bezier(.2,.8,.2,1) both}
-.sp-tit span:first-child{animation-delay:.55s;font-weight:500;color:#c7d2fe}.sp-tit span:last-child{animation-delay:.7s}
-@keyframes sp-letra{from{opacity:0;letter-spacing:.5em;filter:blur(6px)}to{opacity:1;letter-spacing:.08em;filter:blur(0)}}
-.sp-sub{margin:0;font-size:15px;color:#c7d2fe;animation:sp-sobe .6s 1.1s ease both}
+/* ---------- abertura (estilo PS2): logo girando, título com brilho que passa, saída com zoom para dentro da logo ---------- */
+:root{--trm-vermelho:#d0202a;--trm-preto:#0b0b0c}
+.splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;color:#fff;overflow:hidden;
+  background:radial-gradient(70% 55% at 50% 42%,#3a0a0e 0%,#140405 55%,#050505 100%)}
+.sp-luz{position:absolute;left:50%;top:42%;width:120vmax;height:120vmax;pointer-events:none;
+  background:conic-gradient(from 0deg,transparent 0 40deg,rgba(208,32,42,.16) 55deg,transparent 75deg 190deg,rgba(255,255,255,.06) 205deg,transparent 225deg);animation:sp-luz 7s .2s linear infinite both}
+@keyframes sp-luz{from{opacity:0;transform:translate(-50%,-50%) rotate(0)}12%{opacity:1}to{opacity:1;transform:translate(-50%,-50%) rotate(360deg)}}
+.sp-centro{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;transform-origin:50% 64px}
+.sp-logo{width:128px;height:128px;border-radius:32px;overflow:hidden;background:#fff;display:grid;place-items:center;position:relative;
+  box-shadow:0 0 0 3px rgba(208,32,42,.55),0 0 46px rgba(208,32,42,.55),0 20px 50px rgba(0,0,0,.6);animation:sp-gira 1.15s cubic-bezier(.2,.8,.2,1) both}
+.sp-logo img{width:80%;height:80%;object-fit:contain;opacity:0;transition:opacity .25s}
+.sp-logo.pronta img{opacity:1}                                      /* só aparece inteira, nunca "em faixas" */
+.sp-t{position:absolute;font:900 34px/1 system-ui,sans-serif;letter-spacing:.04em;color:var(--trm-vermelho);transition:opacity .25s}
+.sp-logo.pronta .sp-t{opacity:0}.sp-logo.sem-img img{display:none}
+@keyframes sp-gira{0%{opacity:0;transform:scale(.4) rotateY(-720deg)}55%{opacity:1}100%{opacity:1;transform:scale(1) rotateY(0)}}
+.sp-tit{position:relative;margin:14px 0 0;font-size:clamp(24px,5.6vw,40px);font-weight:800;letter-spacing:.14em;line-height:1.1;display:flex;flex-wrap:wrap;justify-content:center;gap:.36em;
+  color:#d4d4dc;filter:drop-shadow(0 0 10px rgba(255,255,255,.28)) drop-shadow(0 0 22px rgba(208,32,42,.45))}
+.sp-tit span{display:inline-block;color:transparent;-webkit-background-clip:text;background-clip:text;background-size:300% 100%;background-position:100% 0;
+  background-image:linear-gradient(105deg,#d4d4dc 0%,#d4d4dc 40%,#fff 47%,#fff 49%,#ffc9ce 53%,#d4d4dc 60%,#d4d4dc 100%);
+  animation:sp-letra .9s cubic-bezier(.2,.8,.2,1) both,sp-brilho 1.1s ease-in-out both}
+.sp-tit span:first-child{animation-delay:.75s,1.6s;font-weight:500}.sp-tit span:last-child{animation-delay:.9s,1.75s}
+@keyframes sp-letra{from{opacity:0;letter-spacing:.6em;filter:blur(8px)}to{opacity:1;letter-spacing:.14em;filter:blur(0)}}
+/* o brilho que atravessa o texto, como no PS2 */
+@keyframes sp-brilho{from{background-position:100% 0}to{background-position:0 0}}
+.sp-sub{margin:0;font-size:15px;letter-spacing:.06em;color:#d9a7ab;animation:sp-sobe .7s 1.7s ease both}
 @keyframes sp-sobe{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.sp-barra{width:140px;height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;margin-top:14px;opacity:0;transition:opacity .3s}
+.sp-barra{width:140px;height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:14px;opacity:0;transition:opacity .3s}
 .splash.carregando .sp-barra{opacity:1}
-.sp-barra i{display:block;width:40%;height:100%;border-radius:3px;background:#a5b4fc;animation:sp-vai 1.1s ease-in-out infinite}
+.sp-barra i{display:block;width:40%;height:100%;border-radius:3px;background:var(--trm-vermelho);animation:sp-vai 1.1s ease-in-out infinite}
 @keyframes sp-vai{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
-@media (prefers-reduced-motion:reduce){.sp-logo,.sp-tit span,.sp-sub{animation:sp-sobe .3s ease both}.sp-barra i{animation:none;width:100%;opacity:.6}}
+/* saída: a câmera entra na logo e a tela de baixo chega */
+.splash.sai{pointer-events:none;animation:sp-fundo .75s ease-in forwards}
+.splash.sai .sp-centro{animation:sp-zoom .75s cubic-bezier(.6,0,.9,.4) forwards}
+.splash.sai .sp-luz,.splash.sai .sp-barra{opacity:0;transition:opacity .2s}
+@keyframes sp-zoom{to{transform:scale(9);opacity:0}}
+@keyframes sp-fundo{0%,45%{opacity:1}100%{opacity:0}}
+.chegando{animation:chega .6s .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes chega{from{opacity:0;transform:scale(1.06)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){
+  .sp-logo,.sp-tit span,.sp-sub{animation:sp-sobe .3s ease both}.sp-luz{display:none}.sp-barra i{animation:none;width:100%;opacity:.6}
+  .splash.sai,.splash.sai .sp-centro{animation:sp-fundo .3s ease forwards}.chegando{animation:none}
+}
+
+/* ---------- tela de acesso: preto e vermelho da Transmarina, com a logo repetida ao fundo ---------- */
+.auth-wrap{position:relative;isolation:isolate;overflow:hidden;background:radial-gradient(90% 70% at 50% 40%,#5a0b12 0%,#1a0507 55%,#070707 100%)}
+.auth-wrap::before{content:'';position:absolute;inset:-30%;z-index:-1;background:url("../logotrm.png") 0 0/120px 120px repeat;transform:rotate(-14deg);
+  filter:grayscale(1) invert(1);mix-blend-mode:screen;opacity:.1}            /* o fundo branco da logo some; o desenho fica como marca d'água clara */
+.auth-wrap::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(60% 50% at 50% 45%,transparent 0%,rgba(5,5,5,.55) 100%)}
+#auth .auth-card{border:0;box-shadow:0 30px 70px -20px rgba(0,0,0,.75),0 0 0 1px rgba(208,32,42,.25);position:relative;overflow:hidden}
+#auth .auth-card::before{content:'';position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,var(--trm-vermelho),#ff4a55,var(--trm-vermelho))}
+#auth .auth-card .brand img{opacity:0;transition:opacity .25s}#auth .auth-card .brand img.pronta{opacity:1}
+#auth button.btn:not(.secondary){background:var(--trm-vermelho);border-color:var(--trm-vermelho)}#auth button.btn:not(.secondary):hover{background:#b0141e}
+#auth button.link{color:var(--trm-vermelho)}
+#auth input:focus{border-color:var(--trm-vermelho);box-shadow:0 0 0 3px rgba(208,32,42,.15);outline:none}
 .hist-mais{display:flex;justify-content:center;padding:10px 0 2px}
+#app.chegando{animation-name:chega-op}                                   /* no app só o fade: transformar o #app soltaria a barra de baixo */
+@keyframes chega-op{from{opacity:0}to{opacity:1}}

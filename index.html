@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <link rel="manifest" href="manifest.json">
+<link rel="preload" as="image" href="logotrm.png" fetchpriority="high">
 <link rel="icon" type="image/png" href="logotrm.png?v=2">
 <link rel="shortcut icon" type="image/png" href="logotrm.png?v=2">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -21,8 +22,9 @@
 <body>
 
 <div id="splash" class="splash" role="status" aria-label="Abrindo o Portal Transmarina">
+  <div class="sp-luz" aria-hidden="true"></div>
   <div class="sp-centro">
-    <div class="sp-logo"><img src="logotrm.png" alt="" onerror="this.parentNode.classList.add('sem-img')"><span class="sp-t" aria-hidden="true">T</span></div>
+    <div class="sp-logo"><img src="logotrm.png" alt="" decoding="async" onload="this.parentNode.classList.add('pronta')" onerror="this.parentNode.classList.add('sem-img')"><span class="sp-t" aria-hidden="true">TRM</span></div>
     <h1 class="sp-tit"><span>PORTAL</span> <span>TRANSMARINA</span></h1>
     <p class="sp-sub">Tudo em um só lugar</p>
     <div class="sp-barra" aria-hidden="true"><i></i></div>
