@@ -128,8 +128,7 @@ const Motorista = {
         await fotosCx.esperar(); env.textContent = 'Enviando…';
         const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos: fotosCx.valor() });
         App.recarregar(true);
-        const aviso = { OK: 'Tudo certo!', ATENCAO: 'Itens com atenção foram avisados à oficina.', CRITICO: 'Itens ruins foram avisados à oficina agora.' }[r.statusGeral];
-        const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: aviso }), r.pontos ? h('p', { class: 'ck-pts', text: '+' + r.pontos + ' pontos 🎉' }) : h('p', { class: 'hint', text: 'Pontos do checklist já foram contados hoje.' }),
+        const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
           h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver no histórico', onclick: () => { m.fechar(); App.abrirAba('historico'); } }))), { aoFechar: () => App.abrirAba('inicio') });
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar checklist'; }
     };
@@ -183,9 +182,10 @@ const Motorista = {
     pinta(); return h('div', {}, chips, corpo);
   },
   STC: { OK: ['✅ tudo certo', 'green'], ATENCAO: ['⚠️ com atenção', 'amber'], CRITICO: ['❌ itens ruins', 'red'] },
+  APR: { PENDENTE: ['aguardando aprovação', 'amber'], REJEITADO: ['devolvido', 'red'] },
   linhaCheck(c) {
-    const s = this.STC[c.statusGeral] || [c.statusGeral, 'gray'], itens = (this.d().checklistItens || []).filter(i => String(i.checklistId) === String(c.id));
-    return h('div', { class: 'hist-lin click', onclick: () => this.detalheCheck(c, itens) }, h('div', {}, h('b', { text: 'Checklist · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo })), h('span', { class: 'badge ' + s[1], text: s[0] }));
+    const s = this.APR[c.aprovacao] || this.STC[c.statusGeral] || [c.statusGeral, 'gray'], itens = (this.d().checklistItens || []).filter(i => String(i.checklistId) === String(c.id));
+    return h('div', { class: 'hist-lin click', onclick: () => this.detalheCheck(c, itens) }, h('div', {}, h('b', { text: 'Checklist · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + (c.aprovacao === 'REJEITADO' && c.obsAprov ? ' · ' + c.obsAprov : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }));
   },
   detalheCheck(c, itens) {
     const ruins = itens.filter(i => i.status !== 'ok' && i.status), cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + c.placa + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'),
@@ -206,8 +206,8 @@ const Motorista = {
     g.append(lista); return g;
   },
   linhaOc(o) {
-    const ST = { ABERTA: ['aberta', 'amber'], RESOLVIDA: ['resolvida', 'green'] }, s = ST[String(o.status).toUpperCase()] || [o.status, 'gray'];
-    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: '⚠️ ' + o.item + ' · ' + o.placa }), h('small', { text: this.dia(o.dataAbertura) + ' · ' + o.descricao + (o.resolucao ? ' → ' + o.resolucao : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }));
+    const ST = { ABERTA: ['pendente', 'amber'], AGUARDANDO: ['aguardando aprovação', 'gray'], DESCARTADA: ['descartada', 'gray'], RESOLVIDA: ['resolvida', 'green'] }, s = ST[String(o.status).toUpperCase()] || [o.status, 'gray'];
+    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: '⚠️ ' + o.item + ' · ' + o.placa }), h('small', { text: this.dia(o.dataAbertura) + ' · ' + o.descricao + (o.resolucao ? ' → ' + o.resolucao : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }), o.resolver && String(o.status).toUpperCase() === 'ABERTA' ? h('button', { class: 'btn mini', type: 'button', text: 'Resolvido', onclick: () => o.resolver(o) }) : null);
   },
 
   /* ---------- ESCALAS (só leitura) ---------- */
@@ -222,18 +222,44 @@ const Motorista = {
 
   /* ---------- GESTÃO: listas ---------- */
   gestaoChecklists() {
-    const l = (this.d().checklists || []).slice().sort((a, b) => (String(b.data).slice(0, 10) + b.hora).localeCompare(String(a.data).slice(0, 10) + a.hora)).slice(0, 100);
-    const cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }));
+    const pend = c => c.aprovacao === 'PENDENTE', gestor = ['master', 'admin'].indexOf(this.d().perfil) >= 0;
+    const l = (this.d().checklists || []).slice().sort((a, b) => (pend(b) - pend(a)) || (String(b.data).slice(0, 10) + b.hora).localeCompare(String(a.data).slice(0, 10) + a.hora)).slice(0, 100);
+    const np = l.filter(pend).length, cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }), np && gestor ? h('div', { class: 'aviso-aprov', text: np + (np > 1 ? ' checklists aguardam' : ' checklist aguarda') + ' sua aprovação' }) : null);
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum checklist enviado ainda.' }));
-    l.forEach(c => { const s = this.STC[c.statusGeral] || [c.statusGeral, 'gray'];
-      cx.append(h('div', { class: 'hist-lin click', onclick: () => abrirModal('Checklist · ' + c.placa, h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '')), h('p', { text: c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' }), this.galeria(c))) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
+    l.forEach(c => { const s = this.APR[c.aprovacao] || this.STC[c.statusGeral] || [c.statusGeral, 'gray'];
+      cx.append(h('div', { class: 'hist-lin click', onclick: () => this.abrirCheckGestao(c, gestor) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
     return cx;
+  },
+  /** Abre o checklist com itens, ocorrências e fotos; admin/master aprovam ou devolvem. */
+  async abrirCheckGestao(c, gestor) {
+    const cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'), h('p', { text: c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' }));
+    const m = abrirModal('Checklist · ' + c.placa, cx), corpo = h('div', {}, h('div', { class: 'hint', text: 'Carregando…' })); cx.append(corpo);
+    let det; try { det = await API.chamar('checklistDetalhe', { id: c.id }, { mudo: true }); } catch (e) { corpo.textContent = e.message; return; }
+    corpo.textContent = '';
+    const desc = {}, ocs = det.ocorrencias || [];
+    ocs.forEach(o => {
+      const ck = h('input', { type: 'checkbox', checked: true }); desc[o.id] = ck;
+      corpo.append(h('label', { class: 'hist-lin' + (c.aprovacao === 'PENDENTE' && gestor ? '' : ' sem-ck') }, c.aprovacao === 'PENDENTE' && gestor ? ck : null, h('div', {}, h('b', { text: '⚠️ ' + o.item }), h('small', { text: o.descricao })), h('span', { class: 'badge ' + (o.prioridade === 'ALTA' ? 'red' : 'amber'), text: o.prioridade === 'ALTA' ? 'ruim' : 'atenção' })));
+    });
+    if (ocs.length && c.aprovacao === 'PENDENTE' && gestor) corpo.append(h('small', { class: 'hint', text: 'Desmarque o que não deve virar pendência para a oficina.' }));
+    if (!ocs.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
+    corpo.append(this.galeria(c));
+    if (c.aprovacao === 'APROVADO' || c.aprovacao === 'REJEITADO') corpo.append(h('p', { class: 'hint', text: (c.aprovacao === 'APROVADO' ? 'Aprovado' : 'Devolvido') + ' por ' + c.aprovadoPor + (c.obsAprov ? ' · ' + c.obsAprov : '') }));
+    if (c.aprovacao === 'PENDENTE' && gestor) {
+      const msg = h('div', { class: 'msg' }), mot = h('input', { type: 'text', placeholder: 'Motivo (só para devolver)', maxlength: 200 });
+      const ok = h('button', { class: 'btn', type: 'button', text: 'Aprovar e liberar pontos' }), no = h('button', { class: 'btn sec', type: 'button', text: 'Devolver' });
+      const enviar = async (decisao) => { ok.disabled = no.disabled = true; try { const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, descartar: ocs.filter(o => !desc[o.id].checked).map(o => o.id) }); m.fechar(); App.recarregar(true); } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
+      ok.onclick = () => enviar('aprovar'); no.onclick = () => enviar('devolver');
+      corpo.append(mot, msg, h('div', { class: 'modal-actions' }, no, ok));
+    }
   },
   gestaoOcorrencias() {
     const l = (this.d().ocorrencias || []).slice().sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura))).slice(0, 100);
     const cx = h('div', { class: 'card' }, h('h2', { text: 'Ocorrências dos checklists' }));
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhuma ocorrência registrada.' }));
-    l.forEach(o => cx.append(this.linhaOc(o))); return cx;
+    const pode = ['master', 'admin', 'mecanico'].indexOf(this.d().perfil) >= 0, n = l.filter(o => o.status === 'AGUARDANDO').length;
+    if (n) cx.append(h('small', { class: 'hint', text: n + ' aguardando aprovação do checklist.' }));
+    l.forEach(o => { if (pode) o.resolver = async x => { try { await API.chamar('resolverOcorrencia', { id: x.id }); App.recarregar(true); } catch (e) { toast(e.message, true); } }; cx.append(this.linhaOc(o)); }); return cx;
   },
 
   /* ---------- PAINEL ---------- */

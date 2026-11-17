@@ -874,6 +874,11 @@ function alterarAlerta(id, status) {
   const a = db.alertas.find(x => x.id === id); if (!a) return;
   a.status = status; a.dataAnalise = status === 'analise' ? hojeISO() : null; a.classificadoPor = quemEQuando(); salvarCache(); renderTelaAtual(); execBackground(async () => { await apiPost('updateAlerta', { id, status, dataAnalise: a.dataAnalise, dataResolucao: null, classificadoPor: a.classificadoPor }); }, 'Erro alerta');
 }
+function resolverOcorrenciaGF(id) {
+  const d = App.dados, o = (d.ocorrencias || []).find(x => x.id === id); if (!o) return;
+  o.status = 'RESOLVIDA'; renderTelaAtual();
+  execBackground(async () => { await apiPost('resolverOcorrencia', { id }); if (typeof App !== 'undefined' && App.recarregar) App.recarregar(true); }, 'Não foi possível marcar a ocorrência como resolvida');
+}
 function marcarAnalise(id) { alterarAlerta(id, 'analise'); }
 function reabrirAlerta(id) { alterarAlerta(id, 'ativo'); }
 
@@ -914,12 +919,12 @@ function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.n
 /** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
 function montarCardOcorrencias(placa) {
   const d = (typeof App !== 'undefined' && App.dados) || {}, mot = {}; (d.motoristas || []).forEach(m => { mot[m.id] = m.nome; });
-  const lista = (d.ocorrencias || []).filter(o => o.placa === placa && String(o.status || '').toLowerCase() !== 'resolvida' && String(o.status || '').toLowerCase() !== 'resolvido')
+  const lista = (d.ocorrencias || []).filter(o => o.placa === placa && String(o.status || '').toUpperCase() === 'ABERTA')
     .sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
   const cards = lista.map(o => {
     const alta = /alta|grave|urgente/i.test(o.prioridade || '') || /sim/i.test(o.restringeCirculacao || '');
     return `<div class="alert-card ${alta ? 'atrasado' : 'pendente'}"><div class="alert-info"><div class="alert-title">${escHtml(o.item || 'Ocorrência')}${/sim/i.test(o.restringeCirculacao || '') ? ' · 🚫 restringe circulação' : ''}</div>
-      <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(mot[o.motoristaId] || 'Motorista')}</div></div></div>`;
+      <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(mot[o.motoristaId] || 'Motorista')}</div></div><div class="alert-actions"><button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button></div></div>`;
   }).join('');
   return `<div class="card"><h2>📣 Ocorrências dos motoristas</h2>${cards || '<p class="empty" style="padding:12px;">Nenhuma ocorrência aberta neste caminhão. ✅</p>'}</div>`;
 }
@@ -1101,150 +1106,94 @@ function calcularCicloServico(servicoNome) {
 /* =======================================================
    FUNÇÃO DE IMPRESSÃO (Aviso de Serviço para Oficina)
    ======================================================= */
-function imprimirRelatorioMecanico() {
-    // 1. Busca alertas pendentes, ignorando os que são por "falta de lançamento"
-    const alertasPendentes = db.alertas.filter(a => {
-        if (a.status === 'resolvido' || a.tipo === 'Registro de KM') return false;
-        const temHistorico = ultimaManut(a.placa, a.tipo);
-        return temHistorico !== null;
-    });
-    
-    // 2. Busca agendamentos pendentes
-    const agendamentosPendentes = db.agendamentos.filter(ag => !db.alertas.some(a => a.placa === ag.placa && normPeca(a.tipo) === normPeca(ag.tipo === 'outro' ? ag.descricao : ag.tipo) && a.status !== 'resolvido'));
-
-    if (alertasPendentes.length === 0 && agendamentosPendentes.length === 0) {
-        alert("✅ Nenhum serviço realmente expirado ou agendado no momento. Os alertas visíveis são apenas por falta de histórico.");
-        return;
+/* ---------- Ordem de Serviço: escolhe o que imprimir (interna ou externa) ---------- */
+function osItens() {
+  const itens = [], d = (typeof App !== 'undefined' && App.dados) || {}, mot = {}; (d.motoristas || []).forEach(m => { mot[m.id] = m.nome; });
+  db.alertas.forEach(a => {
+    if (a.status === 'resolvido' || a.tipo === 'Registro de KM' || ultimaManut(a.placa, a.tipo) === null) return;
+    const v = db.veiculos.find(x => x.placa === a.placa), kmAtual = v ? v.kmAtual : 0, info = calcularLimite(a.placa, a.tipo);
+    let ultima = 'Sem histórico', sit = '-';
+    if (info && info.temUltima) {
+      ultima = `${fmtData(info.ultima.data)} (aos ${fmtKm(info.ultima.km)})`;
+      let txtKm = '', txtData = '';
+      if (info.limiteKm !== null) { const f = info.limiteKm - kmAtual; txtKm = f >= 0 ? `Faltam ${fmtKm(f)}` : `Excedido há ${fmtKm(-f)}`; }
+      if (info.limiteData !== null) { const dd = Math.round((new Date(info.limiteData + 'T00:00:00') - new Date(hojeISO() + 'T00:00:00')) / 864e5); txtData = dd >= 0 ? `Faltam ${dd} dias` : `Excedido há ${-dd} dias`; }
+      sit = info.cfg.modo === 'km' ? txtKm : info.cfg.modo === 'meses' ? txtData : `${txtKm} | ${txtData}`;
     }
+    itens.push({ id: 'al:' + a.id, kind: 'alerta', placa: a.placa, nome: nomeTipo(a.tipo), ultima, sit, detalhe: '' });
+  });
+  db.agendamentos.forEach(ag => {
+    if (db.alertas.some(a => a.placa === ag.placa && normPeca(a.tipo) === normPeca(ag.tipo === 'outro' ? ag.descricao : ag.tipo) && a.status !== 'resolvido')) return;
+    const nome = (ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo), h0 = ultimaManut(ag.placa, ag.tipo === 'outro' ? ag.descricao : ag.tipo);
+    itens.push({ id: 'ag:' + (ag.id || ag.placa + nome), kind: 'agend', placa: ag.placa, nome: nome + ' (agendado)', ultima: h0 ? `${fmtData(h0.data)} (aos ${fmtKm(h0.km)})` : 'Serviço avulso (sem histórico)', sit: ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : 'Agendamento pendente', detalhe: ag.descricao || '' });
+  });
+  (d.ocorrencias || []).filter(o => String(o.status || '').toUpperCase() === 'ABERTA').forEach(o => {
+    itens.push({ id: 'oc:' + o.id, kind: 'ocorrencia', placa: o.placa, nome: 'Ocorrência: ' + (o.item || ''), ultima: '-', sit: (o.dataAbertura ? 'Relatada em ' + fmtData(String(o.dataAbertura).slice(0, 10)) : 'Relatada pelo motorista') + (/sim/i.test(o.restringeCirculacao || '') ? ' · restringe circulação' : ''), detalhe: (o.descricao || '') + (mot[o.motoristaId] ? ' (relato de ' + mot[o.motoristaId] + ')' : ''), alta: /alta/i.test(o.prioridade || '') });
+  });
+  return itens.sort((a, b) => a.placa.localeCompare(b.placa) || a.nome.localeCompare(b.nome));
+}
 
-    let htmlImp = `
-        <html>
-        <head>
-            <title>Ordem de Manutenção</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-                h1 { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; text-transform: uppercase; }
-                .data-emissao { text-align: right; margin-bottom: 20px; font-size: 14px; color: #333; }
-                .item-alerta {
-                    border: 2px solid #000;
-                    margin-bottom: 20px;
-                    padding: 15px;
-                    border-radius: 8px;
-                    page-break-inside: avoid;
-                }
-                .placa { font-size: 26px; font-weight: bold; margin-bottom: 10px; }
-                
-                /* Ajuste para o checkbox ficar alinhado ao texto */
-                .servico { font-size: 22px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-                
-                /* O quadrado para dar o check de caneta */
-                .checkbox {
-                    width: 30px;
-                    height: 30px;
-                    border: 3px solid #000;
-                    border-radius: 4px;
-                    display: inline-block;
-                }
+function imprimirRelatorioMecanico() {
+  const itens = osItens();
+  if (!itens.length) { toast('Nenhum serviço vencido, agendado ou ocorrência aberta para imprimir.'); return; }
+  const marcados = {}, tipo = { v: 'interna' };
+  const cx = h('div', { class: 'os-sel' });
+  const radios = h('div', { class: 'os-tipo' }), prest = h('input', { type: 'text', placeholder: 'Para onde vai? Ex.: Elétrica do Zé, Retífica Sul', maxlength: 80 }), obs = h('textarea', { rows: 2, placeholder: 'Observações para quem vai executar (opcional)', maxlength: 400 });
+  const extra = h('div', { class: 'os-externa', hidden: true }, h('label', { text: 'Prestador / oficina externa' }), prest, h('label', { text: 'Observações' }), obs);
+  [['interna', 'OS interna (nossa oficina)'], ['externa', 'OS externa (prestador de fora)']].forEach(([v, t]) => {
+    const r = h('input', { type: 'radio', name: 'os-tipo', value: v, checked: v === 'interna' }); r.onchange = () => { tipo.v = v; extra.hidden = v !== 'externa'; };
+    radios.append(h('label', { class: 'os-op' }, r, ' ' + t));
+  });
+  const cont = h('small', { class: 'hint' }), lista = h('div', { class: 'os-lista' }), imp = h('button', { class: 'btn', type: 'button', text: 'Imprimir' });
+  const att = () => { const n = Object.keys(marcados).filter(k => marcados[k]).length; cont.textContent = n + ' de ' + itens.length + ' selecionado(s)'; imp.disabled = !n; };
+  const cks = {};
+  const placas = Array.from(new Set(itens.map(i => i.placa)));
+  placas.forEach(pl => {
+    const doVeic = itens.filter(i => i.placa === pl), tudo = h('input', { type: 'checkbox' });
+    tudo.onchange = () => { doVeic.forEach(i => { marcados[i.id] = tudo.checked; cks[i.id].checked = tudo.checked; }); att(); };
+    lista.append(h('label', { class: 'os-placa' }, tudo, h('b', { text: ' ' + pl }), h('small', { text: ' · ' + doVeic.length })));
+    doVeic.forEach(i => { const c = h('input', { type: 'checkbox' }); cks[i.id] = c; c.onchange = () => { marcados[i.id] = c.checked; att(); };
+      lista.append(h('label', { class: 'os-item' }, c, h('div', {}, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), i.kind === 'ocorrencia' ? h('span', { class: 'badge ' + (i.alta ? 'red' : 'amber'), text: 'motorista' }) : null)); });
+  });
+  const todos = h('button', { class: 'btn small secondary', type: 'button', text: 'Marcar tudo', onclick: () => { itens.forEach(i => { marcados[i.id] = true; cks[i.id].checked = true; }); att(); } });
+  const nenhum = h('button', { class: 'btn small secondary', type: 'button', text: 'Limpar', onclick: () => { itens.forEach(i => { marcados[i.id] = false; cks[i.id].checked = false; }); att(); } });
+  imp.onclick = () => { const escolhidos = itens.filter(i => marcados[i.id]); if (!escolhidos.length) return; imprimirOS(escolhidos, tipo.v, prest.value.trim(), obs.value.trim()); m.fechar(); };
+  cx.append(radios, extra, h('div', { class: 'os-barra' }, todos, nenhum, cont), lista, h('div', { class: 'modal-actions' }, imp));
+  const m = abrirModal('Ordem de serviço', cx); att();
+}
 
-                .info-bloco { 
-                    margin-top: 15px; 
-                    border-top: 1px dashed #666; 
-                    padding-top: 15px; 
-                    font-size: 18px; 
-                    line-height: 1.6;
-                }
-                .info-label { color: #555; }
-                .info-val { font-weight: bold; }
-                .assinatura { margin-top: 60px; text-align: center; font-size: 18px; font-weight: bold; }
-                .linha-ass { border-top: 2px solid #000; width: 400px; margin: 0 auto; padding-top: 5px; }
-                @media print {
-                    @page { margin: 1cm; }
-                }
-            </style>
-        </head>
-        <body>
-            <h1>🔧 Aviso de Serviço - Oficina</h1>
-            <div class="data-emissao">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</div>
-    `;
-
-    // Constrói o bloco de impressão simplificado
-    const renderBloco = (placa, servicoStr, ultimaTrocaStr, expiracaoStr) => {
-        return `
-            <div class="item-alerta">
-                <div class="placa">🚛 Placa: ${placa}</div>
-                <div class="servico">
-                    <div class="checkbox"></div> ⚠️ Serviço: <strong>${servicoStr}</strong>
-                </div>
-                <div class="info-bloco">
-                    <span class="info-label">Última Troca:</span> <span class="info-val">${ultimaTrocaStr}</span><br>
-                    <span class="info-label">Situação atual:</span> <span class="info-val">${expiracaoStr}</span>
-                </div>
-            </div>
-        `;
-    };
-
-    alertasPendentes.forEach(alerta => {
-        const v = db.veiculos.find(x => x.placa === alerta.placa);
-        const kmAtual = v ? v.kmAtual : 0;
-        const info = calcularLimite(alerta.placa, alerta.tipo);
-        
-        let ultimaTrocaStr = "Sem histórico";
-        let expiracaoStr = "-";
-        
-        if (info && info.temUltima) {
-            ultimaTrocaStr = `${fmtData(info.ultima.data)} (Aos ${fmtKm(info.ultima.km)})`;
-            
-            let txtKm = '';
-            let txtData = '';
-            
-            if (info.limiteKm !== null) {
-                const faltaKm = info.limiteKm - kmAtual;
-                txtKm = faltaKm >= 0 ? `Faltam ${fmtKm(faltaKm)}` : `Excedido há ${fmtKm(-faltaKm)}`;
-            }
-            
-            if (info.limiteData !== null) {
-                const hojeObj = new Date(hojeISO() + 'T00:00:00');
-                const limiteObj = new Date(info.limiteData + 'T00:00:00');
-                const diffDias = Math.round((limiteObj - hojeObj) / (1000 * 60 * 60 * 24));
-                txtData = diffDias >= 0 ? `Faltam ${diffDias} dias` : `Excedido há ${-diffDias} dias`;
-            }
-            
-            if (info.cfg.modo === 'km') expiracaoStr = txtKm;
-            else if (info.cfg.modo === 'meses') expiracaoStr = txtData;
-            else expiracaoStr = `${txtKm} | ${txtData}`;
-        }
-
-        htmlImp += renderBloco(alerta.placa, nomeTipo(alerta.tipo).toUpperCase(), ultimaTrocaStr, expiracaoStr);
-    });
-    
-    agendamentosPendentes.forEach(ag => {
-        const servicoNome = (ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo);
-        
-        const historicoAnterior = ultimaManut(ag.placa, ag.tipo === 'outro' ? ag.descricao : ag.tipo);
-        const ultimaTrocaStr = historicoAnterior ? `${fmtData(historicoAnterior.data)} (Aos ${fmtKm(historicoAnterior.km)})` : "Serviço Avulso (Sem histórico)";
-        
-        const expiracaoStr = ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : `Agendamento pendente`;
-
-        htmlImp += renderBloco(ag.placa, servicoNome.toUpperCase() + " (AGENDADO)", ultimaTrocaStr, expiracaoStr);
-    });
-
-    htmlImp += `
-            <div class="assinatura">
-                <br><br><br>
-                <div class="linha-ass">Visto da Oficina</div>
-            </div>
-        </body>
-        </html>
-    `;
-
-    const janelaImpressao = window.open('', '_blank', 'width=800,height=600');
-    janelaImpressao.document.write(htmlImp);
-    janelaImpressao.document.close();
-    janelaImpressao.focus();
-    
-    setTimeout(() => {
-        janelaImpressao.print();
-    }, 500);
+function imprimirOS(itens, tipo, prestador, obs) {
+  const esc = escHtml, hoje = new Date().toLocaleDateString('pt-BR'), externa = tipo === 'externa';
+  const css = `body{font-family:Arial,sans-serif;padding:20px;color:#000}h1{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;text-transform:uppercase;font-size:22px}
+  .emissao{text-align:right;margin-bottom:16px;font-size:13px;color:#333}.item{border:2px solid #000;margin-bottom:16px;padding:14px;border-radius:8px;page-break-inside:avoid}
+  .placa{font-size:24px;font-weight:bold;margin-bottom:8px}.servico{font-size:20px;margin-bottom:10px;display:flex;align-items:center;gap:10px}.cb{width:28px;height:28px;border:3px solid #000;border-radius:4px;display:inline-block;flex:0 0 auto}
+  .info{margin-top:10px;border-top:1px dashed #666;padding-top:10px;font-size:16px;line-height:1.6}.lb{color:#555}.vl{font-weight:bold}
+  .veiculo{border:2px solid #000;border-radius:8px;padding:12px;margin-bottom:14px;font-size:16px;line-height:1.6}.pagina{page-break-after:always}.pagina:last-child{page-break-after:auto}
+  .linha{border-bottom:1px solid #000;display:inline-block;min-width:160px}.campos{display:flex;gap:30px;margin:14px 0;font-size:15px}.ass{display:flex;gap:40px;margin-top:50px;text-align:center;font-size:14px;font-weight:bold}.ass div{flex:1;border-top:2px solid #000;padding-top:4px}
+  .def{font-size:16px;line-height:1.5;margin:4px 0}.obs{border:1px solid #666;border-radius:6px;padding:8px;margin:10px 0;font-size:15px}
+  @media print{@page{margin:1cm}}`;
+  let corpo = '';
+  if (!externa) {
+    corpo = `<h1>🔧 Aviso de Serviço - Oficina</h1><div class="emissao">Impresso em: ${hoje}</div>` + itens.map(i => `<div class="item"><div class="placa">🚛 Placa: ${esc(i.placa)}</div><div class="servico"><div class="cb"></div> ⚠️ Serviço: <strong>${esc(i.nome.toUpperCase())}</strong></div>
+      <div class="info">${i.detalhe ? `<span class="lb">Relato:</span> <span class="vl">${esc(i.detalhe)}</span><br>` : ''}<span class="lb">Última troca:</span> <span class="vl">${esc(i.ultima)}</span><br><span class="lb">Situação atual:</span> <span class="vl">${esc(i.sit)}</span></div></div>`).join('')
+      + `<div class="ass"><div>Visto da Oficina</div></div>`;
+  } else {
+    const placas = Array.from(new Set(itens.map(i => i.placa)));
+    corpo = placas.map(pl => {
+      const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl);
+      return `<div class="pagina"><h1>Ordem de Serviço Externa</h1><div class="emissao">Emitida em: ${hoje} · Transmarina</div>
+        <div class="veiculo"><b>Veículo:</b> ${esc(pl)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(String(v.ano)) : ''}<br><b>Km atual:</b> ${fmtKm(v.kmAtual || 0)}<br><b>Prestador / local:</b> ${prestador ? esc(prestador) : '<span class="linha"></span>'}</div>
+        <div style="font-size:18px;font-weight:bold;margin-bottom:6px">O que precisa ser feito</div>
+        ${doVeic.map(i => `<div class="item"><div class="servico"><div class="cb"></div><strong>${esc(i.nome)}</strong></div><div class="def">${i.detalhe ? `<b>Defeito / relato:</b> ${esc(i.detalhe)}<br>` : ''}<b>Situação:</b> ${esc(i.sit)}${i.ultima && i.ultima !== '-' ? `<br><b>Última vez feito:</b> ${esc(i.ultima)}` : ''}</div></div>`).join('')}
+        ${obs ? `<div class="obs"><b>Observações:</b> ${esc(obs)}</div>` : ''}
+        <div class="campos"><span>Orçamento: R$ <span class="linha"></span></span><span>Prazo: <span class="linha"></span></span></div>
+        <div class="campos"><span>Entrada: ___/___/______</span><span>Saída: ___/___/______</span><span>Km: <span class="linha" style="min-width:90px"></span></span></div>
+        <div class="obs" style="min-height:70px"><b>Serviço realizado / peças trocadas:</b></div>
+        <div class="ass"><div>Responsável Transmarina</div><div>Prestador</div></div></div>`;
+    }).join('');
+  }
+  const w = window.open('', '_blank', 'width=800,height=600'); if (!w) { toast('O navegador bloqueou a janela de impressão. Libere pop-ups para este site.', true); return; }
+  w.document.write(`<html><head><title>${externa ? 'OS Externa' : 'Ordem de Manutenção'}</title><style>${css}</style></head><body>${corpo}</body></html>`); w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
 }
 
 function notificarNovosAlertas() {}  // o Hub mostra os alertas na tela Início (sem pop-up)

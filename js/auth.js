@@ -11,16 +11,18 @@ const Auth = {
 };
 
 Auth.telas.entrar = () => {
-  const u = h('input', { type: 'text', autocomplete: 'username', autocapitalize: 'none', placeholder: 'Joao.123456' });
-  const s = h('input', { type: 'password', autocomplete: 'current-password' });
+  const u = h('input', { type: 'text', id: 'usuario', name: 'username', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', inputmode: 'text', enterkeyhint: 'next', placeholder: 'Joao.123456' });
+  const s = h('input', { type: 'password', id: 'senha', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go' });
   const m = h('div', { class: 'msg' }), b = h('button', { class: 'btn block', type: 'submit', text: 'Entrar' });
-  const f = h('form', { onsubmit: async e => {
+  const f = h('form', { method: 'post', action: '#', id: 'form-login', onsubmit: async e => {
     e.preventDefault(); mensagem(m, ''); b.disabled = true; b.textContent = 'Entrando…';
     try {
       const usuario = u.value.trim(); if (usuario.indexOf('@') >= 0) { mensagem(m, 'Aqui vai o seu usuário (como Nome.123456), não o e-mail. Se não lembra, use "Esqueci a senha".'); b.disabled = false; b.textContent = 'Entrar'; return; }
       const chave = await Cripto.chave(usuario, s.value); let r;
       try { r = await API.chamar('login', { usuario, chave, comDados: true }, { semExpirar: true }); }
       catch (e1) { if (e1.codigo !== 'ATUALIZAR') throw e1; r = await API.chamar('login', { usuario, chave, senha: s.value, comDados: true }, { semExpirar: true }); }   // conta antiga: converte uma vez
+      // Pede ao navegador para guardar/atualizar a senha (Chrome/Android e Edge); no iPhone o preenchimento vem do Chaveiro do Safari.
+      try { if (window.PasswordCredential && navigator.credentials && navigator.credentials.store) await navigator.credentials.store(new PasswordCredential({ id: usuario, password: s.value, name: usuario })); } catch (e2) { /* sem suporte: segue */ }
       s.value = ''; await App.iniciar(r);
     }
     catch (err) { mensagem(m, err.message); }

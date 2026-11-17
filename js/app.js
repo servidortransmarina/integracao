@@ -234,3 +234,23 @@ document.addEventListener('DOMContentLoaded', () => {
   App.retomar();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
+
+/* Dica de rolagem: marca a faixa de abas que ainda tem conteúdo escondido (borda esmaecida) e dá um empurrãozinho na primeira vez. */
+(function () {
+  let agendado = false, nudged = false;
+  try { nudged = localStorage.getItem('trm-dica-abas') === '1'; } catch (e) { /* sem armazenamento */ }
+  function marca(el) {
+    const max = el.scrollWidth - el.clientWidth, x = el.scrollLeft;
+    el.classList.toggle('rola-dir', max > 4 && x < max - 4); el.classList.toggle('rola-esq', max > 4 && x > 4);
+    if (!nudged && max > 24 && el.offsetParent !== null && window.innerWidth <= 820) {
+      nudged = true; try { localStorage.setItem('trm-dica-abas', '1'); } catch (e) { /* ok */ }
+      setTimeout(() => { try { el.scrollTo({ left: 56, behavior: 'smooth' }); setTimeout(() => el.scrollTo({ left: 0, behavior: 'smooth' }), 650); } catch (e) { /* ok */ } }, 500);
+    }
+  }
+  function varre() { agendado = false; document.querySelectorAll('.sub-tabs, .chips').forEach(marca); }
+  function pede() { if (!agendado) { agendado = true; requestAnimationFrame(varre); } }
+  document.addEventListener('scroll', e => { if (e.target && e.target.classList && (e.target.classList.contains('sub-tabs') || e.target.classList.contains('chips'))) pede(); }, true);
+  window.addEventListener('resize', pede);
+  new MutationObserver(pede).observe(document.body, { childList: true, subtree: true });
+  pede();
+})();
