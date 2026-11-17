@@ -512,3 +512,27 @@ body.side-min .side-linha .online-ind{padding:4px 6px}
   .pd-palco{padding:10px 10px 0}.pd-palco .podio{min-height:0}.pd-palco .degrau .medalha{font-size:20px}
   .pd-cab{padding:8px 10px}.pd-nav{width:32px;height:32px}
 }
+
+/* ---------- abertura: logo girando + PORTAL TRANSMARINA enquanto o servidor acorda e os dados chegam ---------- */
+.splash{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:24px;color:#fff;
+  background:radial-gradient(120% 90% at 50% 35%,#3730a3 0%,#1e1b4b 58%,#110f2e 100%);transition:opacity .45s ease,transform .45s ease}
+.splash.sai{opacity:0;transform:scale(1.04);pointer-events:none}
+.sp-centro{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+.sp-logo{width:112px;height:112px;border-radius:30px;background:#fff;display:grid;place-items:center;box-shadow:0 18px 50px rgba(0,0,0,.35),0 0 0 6px rgba(255,255,255,.08);
+  perspective:600px;animation:sp-gira 1.05s cubic-bezier(.2,.8,.2,1) both}
+.sp-logo img{width:78%;height:78%;object-fit:contain}
+.sp-t{display:none;font:800 54px/1 system-ui,sans-serif;color:#3730a3}
+.sp-logo.sem-img img{display:none}.sp-logo.sem-img .sp-t{display:block}
+@keyframes sp-gira{0%{opacity:0;transform:scale(.45) rotateY(-540deg)}60%{opacity:1}100%{opacity:1;transform:scale(1) rotateY(0)}}
+.sp-tit{margin:10px 0 0;font-size:clamp(24px,5.4vw,38px);font-weight:800;letter-spacing:.08em;line-height:1.1;display:flex;flex-wrap:wrap;justify-content:center;gap:.32em}
+.sp-tit span{display:inline-block;animation:sp-letra .7s cubic-bezier(.2,.8,.2,1) both}
+.sp-tit span:first-child{animation-delay:.55s;font-weight:500;color:#c7d2fe}.sp-tit span:last-child{animation-delay:.7s}
+@keyframes sp-letra{from{opacity:0;letter-spacing:.5em;filter:blur(6px)}to{opacity:1;letter-spacing:.08em;filter:blur(0)}}
+.sp-sub{margin:0;font-size:15px;color:#c7d2fe;animation:sp-sobe .6s 1.1s ease both}
+@keyframes sp-sobe{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.sp-barra{width:140px;height:3px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;margin-top:14px;opacity:0;transition:opacity .3s}
+.splash.carregando .sp-barra{opacity:1}
+.sp-barra i{display:block;width:40%;height:100%;border-radius:3px;background:#a5b4fc;animation:sp-vai 1.1s ease-in-out infinite}
+@keyframes sp-vai{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+@media (prefers-reduced-motion:reduce){.sp-logo,.sp-tit span,.sp-sub{animation:sp-sobe .3s ease both}.sp-barra i{animation:none;width:100%;opacity:.6}}
+.hist-mais{display:flex;justify-content:center;padding:10px 0 2px}

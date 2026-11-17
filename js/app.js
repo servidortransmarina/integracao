@@ -91,10 +91,13 @@ const App = {
   },
   async aplicarDados() {
     this.sessao.perfil = this.dados.perfil || this.sessao.perfil;
+    this.juntarHistorico();
     Hub.aposDados(); this.montarUsuario(); this.montarNavegacao();
     if (this.sessao.perfil === 'master') await Usuarios.contarPendentes();
     this.abrirAba(this.abaValida(this.aba));
     Online.atualizar(this.dados);
+    // depois de abrir: completa os últimos 12 meses em segundo plano, sem travar a tela
+    if (this.hist && !this.hist.fundo) { this.hist.fundo = true; setTimeout(() => this.pedirHistorico(this.isoMenos(365)), 2500); }
   },
 
   abasDoPerfil() { const sis = this.sistemasDoPerfil().map(x => x.id), pp = this.sessao.pontoPerfil || ''; return ABAS.filter(a => a.perfis.indexOf(this.sessao.perfil) >= 0 && (a.sis === 'painel' || sis.indexOf(a.sis) >= 0) && (!a.visivel || a.visivel()) && (!a.ponto || (pp && (a.pontoPerfis || ['adm', 'encarregado']).indexOf(pp) >= 0))); },
@@ -206,16 +209,44 @@ const App = {
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
-    API.guardar(''); Online.parar(); this.sessao = null; this.dados = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
+    API.guardar(''); Online.parar(); this.sessao = null; this.dados = null; this.hist = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
     $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar');
   },
   async retomar() {
-    if (!API.token()) return Auth.mostrar('entrar');
-    $('#auth').hidden = true; $('#carregando').hidden = false;
-    try { await this.iniciar({}); } catch (e) { $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar'); }
-    $('#carregando').hidden = true;
+    // Sem sessão: a abertura roda enquanto o servidor acorda, e sai mostrando o login.
+    if (!API.token()) { Auth.mostrar('entrar'); await Splash.minimo(); Splash.sair(); return; }
+    // Com sessão salva: os dados já vêm durante a animação.
+    $('#auth').hidden = true; Splash.carregando();
+    try { await Promise.all([this.iniciar({}), Splash.minimo()]); }
+    catch (e) { $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar'); }
+    Splash.sair();
+  },
+
+  /* ---------- histórico em partes ---------- */
+  hist: null,          // { inicio: data mais antiga já completa, completo, lotes: registros antigos já buscados, carregando }
+  isoMenos(dias) { const b = new Date(((this.dados && this.dados.hoje) || new Date().toISOString().slice(0, 10)) + 'T12:00:00'); b.setDate(b.getDate() - dias); return b.toISOString().slice(0, 10); },
+  /** Junta o que já foi buscado do histórico aos dados novos (o recarregar traz só os 6 meses). */
+  juntarHistorico() {
+    const d = this.dados; if (!d || !d.historico) return;
+    if (!this.hist) { this.hist = { inicio: d.historico.desde, completo: false, lotes: { manutencoes: [], abastecimentos: [], alertas: [] } }; return; }
+    Object.keys(this.hist.lotes).forEach(k => { if (!d[k]) return; const ids = new Set(d[k].map(x => x.id)); this.hist.lotes[k].forEach(x => { if (!ids.has(x.id)) d[k].push(x); }); });
+  },
+  /** Busca o histórico a partir de "de" ('' = tudo). Devolve true se buscou algo novo. */
+  precisaHistorico(de) { const h = this.hist; return !!(h && !h.completo && (!de || de < h.inicio)); },
+  async pedirHistorico(de, avisar) {
+    const h = this.hist; if (!this.precisaHistorico(de) || h.carregando) return false;
+    h.carregando = true; if (avisar) toast('Buscando o histórico mais antigo…');
+    try {
+      const r = await API.chamar('getHistorico', { de: de || '', ate: h.inicio }, { mudo: true });
+      ['manutencoes', 'abastecimentos', 'alertas'].forEach(k => { h.lotes[k] = h.lotes[k].concat(r[k] || []); });
+      h.inicio = de || '0000-00-00'; if (!de) h.completo = true;
+      this.juntarHistorico(); Hub.aposDados();
+      if (this.aba && (ABAS.find(a => a.id === this.aba) || {}).gf) renderTelaAtual();
+      return true;
+    } catch (e) { if (avisar) toast(e.message, true); return false; }
+    finally { h.carregando = false; }
   }
 };
 
@@ -260,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '3o',
+  VERSAO: '3s',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */
@@ -300,3 +331,15 @@ const Online = {
   }
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && App.sessao) Online.pingar(); });
+
+/* Abertura do portal: tempo mínimo para a animação terminar; depois some com um fade. */
+const Splash = {
+  t0: (window.performance && performance.now()) || 0,
+  el() { return document.getElementById('splash'); },
+  minimo() {
+    const reduz = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches, alvo = reduz ? 500 : 1900;
+    const falta = Math.max(0, alvo - (performance.now() - this.t0)); return new Promise(r => setTimeout(r, falta));
+  },
+  carregando() { const e = this.el(); if (e) e.classList.add('carregando'); },
+  sair() { const e = this.el(); if (!e || e.classList.contains('sai')) return; e.classList.add('sai'); setTimeout(() => e.remove(), 500); }
+};

@@ -450,7 +450,7 @@ function renderDetalhe() {
           </tbody>
         </table>
       </div>
-      
+      ${(typeof App !== 'undefined' && App.precisaHistorico && App.precisaHistorico('')) ? `<div class="hist-mais"><button class="btn small secondary" type="button" onclick="App.pedirHistorico('', true)">Carregar histórico anterior a ${fmtData(App.hist.inicio)}</button></div>` : ''}
     </div>
     ${(isAdmin && agends.length) ? `<div class="card"><h2>Agendadas</h2><div class="tabela-responsiva"><table><thead><tr><th>Tipo</th><th>Previsão</th><th>Valor</th><th>Obs</th><th>Ações</th></tr></thead><tbody>${agends.map(g => `<tr title="👤 Registrado por: ${g.nome || 'Não identificado'}"><td>${nomeManutencao(g)}</td><td>${g.dataPrevista ? fmtData(g.dataPrevista) : '-'}</td><td>${g.valor ? fmtMoeda(g.valor) : '-'}</td><td>${g.observacao || '-'}</td><td><button class="btn success small" onclick="resolverAgendamento('${g.id}')">Resolvido</button> <button class="btn secondary small" onclick="editarAgendamento('${g.id}')">Editar</button> ${isAdmin ? `<button class="btn danger small" onclick="cancelarAgendamento('${g.id}')">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
   `;
@@ -740,6 +740,8 @@ function renderDashboard() {
   
   const dtInicioStr = document.getElementById('dashDataInicio').value;
   const dtFimStr = document.getElementById('dashDataFim').value;
+  // período maior que o já carregado: busca o histórico e redesenha sozinho quando chegar
+  if (typeof App !== 'undefined' && App.precisaHistorico && App.precisaHistorico(dtInicioStr)) App.pedirHistorico(dtInicioStr, true);
   
   let limiteInicio = dtInicioStr ? new Date(dtInicioStr + 'T00:00:00') : new Date('2000-01-01T00:00:00');
   let limiteFim = dtFimStr ? new Date(dtFimStr + 'T23:59:59') : new Date('2100-01-01T23:59:59');
