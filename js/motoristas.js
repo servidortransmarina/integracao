@@ -29,6 +29,10 @@ const Motoristas = {
     };
     busca.oninput = () => { this.busca = busca.value; desenhar(); };
     raiz.append(h('div', { class: 'card mot-topo' }, h('div', { class: 'field', style: 'flex:1;margin:0;min-width:220px' }, busca),
+      h('button', { class: 'btn secondary', type: 'button', text: '🔄 Puxar do Ponto/Escalas', title: 'Traz os motoristas do Ponto (MobPonto) e do Escalas que ainda não estão aqui', onclick: async e => {
+        const b = e.currentTarget; b.disabled = true; b.textContent = 'Buscando…';
+        try { const r = await API.chamar('sincronizarCadastros', {}); toast(r.hub.novos ? r.hub.novos + ' motorista(s) novo(s) no Fleet.' : 'Nenhum motorista novo.' + (r.erroMob ? ' (MobPonto indisponível agora)' : '')); await App.recarregar(true); App.abrirAba('motoristas'); }
+        catch (er) { toast(er.message, true); b.disabled = false; b.textContent = '🔄 Puxar do Ponto/Escalas'; } } }),
       h('button', { class: 'btn', type: 'button', text: '＋ Cadastrar motorista', onclick: () => this.formulario() })), grade);
     desenhar(); return raiz;
   },

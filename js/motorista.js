@@ -231,10 +231,15 @@ const Motorista = {
     const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
     g.append(lista); return g;
   },
-  linhaOc(o) {
+  linhaOc(o, acao, comPlaca = true) {
     const ST = { ABERTA: ['pendente', 'amber'], AGUARDANDO: ['aguardando aprovação', 'gray'], DESCARTADA: ['descartada', 'gray'], RESOLVIDA: ['resolvida', 'green'] }, s = ST[String(o.status).toUpperCase()] || [o.status, 'gray'];
-    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: '⚠️ ' + o.item + ' · ' + o.placa }), h('small', { text: this.dia(o.dataAbertura) + ' · ' + o.descricao + (o.resolucao ? ' → ' + o.resolucao : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }), o.resolver && String(o.status).toUpperCase() === 'ABERTA' ? h('button', { class: 'btn mini', type: 'button', text: 'Resolvido', onclick: () => o.resolver(o) }) : null);
+    const grave = o.prioridade === 'ALTA' || /sim/i.test(o.restringeCirculacao || '');
+    return h('div', { class: 'oc-linha' + (grave && o.status === 'ABERTA' ? ' grave' : '') },
+      h('div', { class: 'oc-tx' }, h('b', { text: (grave ? '🚨 ' : '⚠️ ') + o.item + (comPlaca ? ' · ' + o.placa : '') }), h('p', { text: o.descricao || '' }),
+        h('small', { text: [this.dia(o.dataAbertura), o.origem === 'relato' ? 'defeito relatado' : 'checklist', /sim/i.test(o.restringeCirculacao || '') ? 'caminhão parado' : '', o.resolucao || ''].filter(Boolean).join(' · ') })),
+      h('div', { class: 'oc-lado' }, h('span', { class: 'badge ' + s[1], text: s[0] }), acao || null));
   },
+
 
   /* ---------- ESCALAS (só leitura) ---------- */
   /** Escala: a mais recente lançada em destaque (com a equipe do dia) e, abaixo, o histórico do motorista. */
@@ -298,13 +303,30 @@ const Motorista = {
       corpo.append(mot, msg, h('div', { class: 'modal-actions' }, no, ok));
     }
   },
+  /** Ocorrências: lista geral ou por caminhão, filtro por situação; Resolvido e Reabrir. */
+  filtroOc: { placa: '', st: 'pendentes' },
   gestaoOcorrencias() {
-    const l = (this.d().ocorrencias || []).slice().sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura))).slice(0, 100);
-    const cx = h('div', { class: 'card' }, h('h2', { text: 'Ocorrências dos checklists' }));
-    if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhuma ocorrência registrada.' }));
-    const pode = ['master', 'admin', 'mecanico'].indexOf(this.d().perfil) >= 0, n = l.filter(o => o.status === 'AGUARDANDO').length;
-    if (n) cx.append(h('small', { class: 'hint', text: n + ' aguardando aprovação do checklist.' }));
-    l.forEach(o => { if (pode) o.resolver = async x => { try { await API.chamar('resolverOcorrencia', { id: x.id }); App.recarregar(true); } catch (e) { toast(e.message, true); } }; cx.append(this.linhaOc(o)); }); return cx;
+    const todas = (this.d().ocorrencias || []).slice().sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
+    const f = this.filtroOc, ST = { pendentes: o => o.status === 'ABERTA', aguardando: o => o.status === 'AGUARDANDO', resolvidas: o => o.status === 'RESOLVIDA' || o.status === 'DESCARTADA', todas: () => true };
+    const pode = ['master', 'admin', 'mecanico'].indexOf(this.d().perfil) >= 0, raiz = h('div');
+    const refaz = () => App.abrirAba('ocorrencias');
+    // caminhões: geral + um chip por placa (com quantas pendentes)
+    const placas = Array.from(new Set(todas.map(o => o.placa))).sort(), pend = p => todas.filter(o => o.placa === p && o.status === 'ABERTA').length;
+    const chip = (rot, ativo, n, clique) => h('button', { class: 'chip' + (ativo ? ' active' : ''), type: 'button', onclick: clique }, rot, n ? h('span', { class: 'n', text: String(n) }) : null);
+    const chipsPl = h('div', { class: 'chips oc-chips' }, chip('Geral', !f.placa, todas.filter(o => o.status === 'ABERTA').length, () => { f.placa = ''; refaz(); }), ...placas.map(p => chip(p, f.placa === p, pend(p), () => { f.placa = p; refaz(); })));
+    const nAg = todas.filter(o => o.status === 'AGUARDANDO').length;
+    const chipsSt = h('div', { class: 'oc-st' }, ...[['pendentes', 'Pendentes'], ['aguardando', 'Aguardando aprovação'], ['resolvidas', 'Resolvidas'], ['todas', 'Todas']].filter(([k]) => k !== 'aguardando' || nAg)
+      .map(([k, t]) => h('button', { type: 'button', class: 'oc-op' + (f.st === k ? ' on' : ''), text: t, onclick: () => { f.st = k; refaz(); } })));
+    const l = todas.filter(o => (!f.placa || o.placa === f.placa) && ST[f.st](o)).slice(0, 150);
+    const cx = h('div', { class: 'card' }, h('h2', { text: 'Ocorrências' + (f.placa ? ' · ' + f.placa : '') }), chipsPl, chipsSt);
+    if (!l.length) cx.append(h('div', { class: 'empty', text: f.st === 'pendentes' ? 'Nenhuma ocorrência pendente' + (f.placa ? ' neste caminhão' : '') + '. ✅' : 'Nada por aqui.' }));
+    const acao = async (nome, o, ok) => { try { await API.chamar(nome, { id: o.id }); toast(ok); App.recarregar(true); } catch (e) { toast(e.message, true); } };
+    l.forEach(o => {
+      const st = String(o.status).toUpperCase(), btn = !pode ? null : st === 'ABERTA' ? h('button', { class: 'btn small', type: 'button', text: 'Resolvido', onclick: () => acao('resolverOcorrencia', o, 'Marcada como resolvida.') })
+        : (st === 'RESOLVIDA' || st === 'DESCARTADA') ? h('button', { class: 'btn small secondary', type: 'button', text: 'Reabrir', onclick: () => acao('reabrirOcorrencia', o, 'Reaberta: voltou para pendente no GF.') }) : null;
+      cx.append(this.linhaOc(o, btn, !f.placa));
+    });
+    raiz.append(cx); return raiz;
   },
 
   /* ---------- PAINEL ---------- */

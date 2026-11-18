@@ -14,13 +14,13 @@ const Financeiro = {
   },
   /** Tela de escolha: a Rota mostra o crédito das escalas; a Loja, o faturamento do mês. */
   escolha() {
-    const saldo = h('div', { class: 'fo-saldo', text: '…' }), nota = h('div', { class: 'fo-nota', text: 'Saldo em aberto das escalas' }), stats = h('div', { class: 'fo-stats' }), pe = h('div', { class: 'fo-pe' });
+    const saldo = h('div', { class: 'fo-saldo', text: '…' }), nota = h('div', { class: 'fo-nota', text: 'Saldo disponível' }), stats = h('div', { class: 'fo-stats' }), pe = h('div', { class: 'fo-pe' });
     const stat = (rot, v) => h('div', {}, h('small', { text: rot }), h('b', { text: v }));
     this.resumo().then(r => {
       saldo.textContent = fmtMoeda(r.saldo); saldo.classList.toggle('neg', r.saldo < 0);
-      nota.textContent = r.saldo < 0 ? 'Gasto acima do crédito das escalas' : 'Crédito das escalas sobrando';
-      stats.append(stat('Crédito', fmtMoeda(r.credito)), stat('Gasto', fmtMoeda(r.gasto)), stat('Ticket médio', fmtMoeda(r.ticket)));
-      pe.textContent = r.escalas + (r.escalas === 1 ? ' escala salva' : ' escalas salvas') + ', ' + r.fechados + (r.fechados === 1 ? ' balanço fechado' : ' balanços fechados') + ', ' + r.tarifas + ' regiões com tarifa.';
+      nota.textContent = r.saldo < 0 ? 'Faturas acima do que foi depositado' : 'Saldo disponível (depositado − faturas)';
+      stats.append(stat('Depositado', fmtMoeda(r.depositado)), stat('Faturas lançadas', fmtMoeda(r.faturas)), stat('Saldo das escalas', fmtMoeda(r.saldoEscalas)));
+      pe.textContent = r.planilhas + (r.planilhas === 1 ? ' planilha lançada' : ' planilhas lançadas') + ', ' + r.escalas + (r.escalas === 1 ? ' escala salva' : ' escalas salvas') + ', ' + r.tarifas + ' regiões com tarifa.' + (r.ticket ? ' Ticket médio ' + fmtMoeda(r.ticket) + '.' : '');
     }).catch(() => { saldo.textContent = 'Indisponível'; nota.textContent = 'Não consegui ler os números agora. Você ainda pode abrir a Rota.'; });
     const rota = h('section', { class: 'fo-painel fo-rota' }, h('h2', { text: 'Rota' }), h('p', { class: 'fo-sub', text: 'Fretes, depósitos, tarifas por região, ticket médio e balanços da semana.' }),
       h('div', { class: 'fo-num' }, saldo, nota), stats, pe, h('button', { class: 'fo-abrir', type: 'button', text: 'Abrir Rota', onclick: () => this.entrar('rota') }));

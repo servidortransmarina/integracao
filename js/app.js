@@ -65,7 +65,7 @@ const Hub = {
     db.veiculos.forEach(v => garantirLimites(v.placa));
     try { sincronizarAlertas(true); } catch (e) { console.error(e); }
   },
-  contarAtencao() { try { return db.alertas.filter(a => a.status !== 'resolvido' && grupoAlerta(a) === 'atrasado').length; } catch (e) { return 0; } }
+  contarAtencao() { try { return db.alertas.filter(a => a.status !== 'resolvido' && grupoAlerta(a) === 'atrasado').length + ocorrenciasAbertas().length; } catch (e) { return 0; } }   // atrasados + ocorrências dos motoristas pendentes
 };
 
 const App = {
@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '3v',
+  VERSAO: '3w',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

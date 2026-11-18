@@ -273,7 +273,9 @@ async function excluirVeiculo(placa) {
 
 function statusVeiculo(placa) {
   const al = db.alertas.filter(a => a.placa === placa && a.status !== 'resolvido');
-  if (al.some(a => a.status === 'ativo')) return 'atrasado';
+  const oc = ocorrenciasAbertas().filter(o => o.placa === placa);
+  if (al.some(a => a.status === 'ativo') || oc.some(ocorrenciaGrave)) return 'atrasado';
+  if (oc.length) return 'analise';
   if (al.some(a => a.status === 'analise')) return 'analise';
   return 'ok';
 }
@@ -421,7 +423,7 @@ function renderDetalhe() {
         <div class="veiculo-header-info">
           <div class="placa-veiculo ${classePlaca}" style="cursor:default; margin:0;"><div class="placa-topo">${nomeTopo}</div><div class="placa-numero">${placa}</div></div>
           
-          <div class="veiculo-km-box" title="${dataHover}" style="cursor:help;">
+          <div class="veiculo-km-box" title="${dataHover}">
             <span class="veiculo-km-label">Km atual:</span> 
             <span class="veiculo-km-valor">${fmtKm(v.kmAtual)}</span>
             <div style="font-size:10px; color:var(--dim); margin-top:2px;">ℹ️ Passe o mouse para ver detalhes</div>
@@ -435,6 +437,7 @@ function renderDetalhe() {
       </div>
     </div>
     ${htmlPendencias}
+    ${isAdmin ? montarCardOcorrencias(placa, true) : ''}
     ${isAdmin ? `<div class="grid-cards"><div class="kpi"><div class="label">Total gasto</div><div class="value">${fmtMoeda(total)}</div></div><div class="kpi"><div class="label">Nº manutenções</div><div class="value">${msReais.length}</div></div>${cardsTipos}</div>` : ''}
     ${isAdmin ? `<div class="card"><h2>Configuração de alertas</h2><div class="alert-config-container">${TIPOS_RASTREADOS.map(tipo => `<div class="limitbox"><div style="font-weight:bold;margin-bottom:8px;">${TIPOS[tipo]}</div><div class="row"><div class="field"><label>Critério</label><select onchange="atualizarCfg('${placa}','${tipo}','modo',this.value)"><option value="km" ${cfg[tipo].modo === 'km' ? 'selected' : ''}>Somente km</option><option value="meses" ${cfg[tipo].modo === 'meses' ? 'selected' : ''}>Somente meses</option><option value="km_e_meses" ${cfg[tipo].modo === 'km_e_meses' ? 'selected' : ''}>O que vencer primeiro</option></select></div></div><div class="row" style="margin-top:8px;"><div class="field"><label>A cada (km)</label><input type="number" min="0" value="${cfg[tipo].km}" onchange="atualizarCfg('${placa}','${tipo}','km',this.value)"></div><div class="field"><label>A cada (meses)</label><input type="number" min="0" value="${cfg[tipo].meses}" onchange="atualizarCfg('${placa}','${tipo}','meses',this.value)"></div></div><div style="margin-top:8px;font-size:12px;color:var(--dim);">Próximo: <b style="color:var(--text)">${proximoLimiteTexto(tipo)}</b></div></div>`).join('')}</div></div>` : ''}
     
@@ -903,7 +906,7 @@ function iniciarAnaliseAgendamento(id) {
   else { const novoAlerta = { id: gerarId(), placa: ag.placa, tipo: tipoA, status: 'analise', dataAnalise: hojeISO(), dataResolucao: null, classificadoPor: quemEQuando() }; db.alertas.push(novoAlerta); salvarCache(); renderTelaAtual(); execBackground(async () => { await apiPost('addAlerta', novoAlerta); }, 'Erro andamento'); }
 }
 function irParaVeiculo(placa) { Hub.ir('frota'); selecionarVeiculo(placa); }
-const estadoAccordions = { atrasado: true, pendente: true, andamento: true, resolvido: false };
+const estadoAccordions = { ocorrencia: true, atrasado: true, pendente: true, andamento: true, resolvido: false };
 function toggleSecaoAlerta(header, secaoId) {
   const corpo = header.nextElementSibling; const seta = header.querySelector('.alert-secao-seta'); const estavaAberto = corpo.style.display !== 'none';
   corpo.style.display = estavaAberto ? 'none' : 'block'; seta.textContent = estavaAberto ? '▸' : '▾'; estadoAccordions[secaoId] = !estavaAberto; 
@@ -920,16 +923,20 @@ function dicaAlerta(a, grp) {
 }
 function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.nome || 'Não identificado'}`; }
 /** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
-function montarCardOcorrencias(placa) {
-  const d = (typeof App !== 'undefined' && App.dados) || {}, mot = {}; (d.motoristas || []).forEach(m => { mot[m.id] = m.nome; });
-  const lista = (d.ocorrencias || []).filter(o => o.placa === placa && String(o.status || '').toUpperCase() === 'ABERTA')
-    .sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
-  const cards = lista.map(o => {
-    const alta = /alta|grave|urgente/i.test(o.prioridade || '') || /sim/i.test(o.restringeCirculacao || '');
-    return `<div class="alert-card ${alta ? 'atrasado' : 'pendente'}"><div class="alert-info"><div class="alert-title">${escHtml(o.item || 'Ocorrência')}${/sim/i.test(o.restringeCirculacao || '') ? ' · 🚫 restringe circulação' : ''}</div>
-      <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(mot[o.motoristaId] || 'Motorista')}</div></div><div class="alert-actions"><button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button></div></div>`;
-  }).join('');
-  return `<div class="card"><h2>📣 Ocorrências dos motoristas</h2>${cards || '<p class="empty" style="padding:12px;">Nenhuma ocorrência aberta neste caminhão. ✅</p>'}</div>`;
+/* Ocorrências dos motoristas (checklist aprovado ou defeito relatado) que estão pendentes: entram no GF como pendência. */
+function ocorrenciasAbertas() { const d = (typeof App !== 'undefined' && App.dados) || {}; return (d.ocorrencias || []).filter(o => String(o.status || '').toUpperCase() === 'ABERTA'); }
+function ocorrenciaGrave(o) { return /alta|grave|urgente/i.test(o.prioridade || '') || /sim/i.test(o.restringeCirculacao || ''); }
+function montarCardOcorrencia(o, comPlaca) {
+  const d = (typeof App !== 'undefined' && App.dados) || {}, m = (d.motoristas || []).find(x => x.id === o.motoristaId);
+  const origem = o.origem === 'relato' ? 'defeito relatado' : 'checklist';
+  return `<div class="alert-card ${ocorrenciaGrave(o) ? 'atrasado' : 'pendente'} oc-gf"><div class="alert-info"><div class="alert-title">${comPlaca ? `<span class="oc-placa" title="Abrir o caminhão" onclick="irParaVeiculo('${escAttr(o.placa)}')">${escHtml(o.placa)}</span> ` : ''}${escHtml(o.item || 'Ocorrência')}${/sim/i.test(o.restringeCirculacao || '') ? ' · 🚫 caminhão parado' : ''}</div>
+    <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(m ? m.nome : 'Motorista')} · ${origem}</div></div>
+    <div class="alert-actions"><button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button></div></div>`;
+}
+function montarCardOcorrencias(placa, soSeTiver) {
+  const lista = ocorrenciasAbertas().filter(o => o.placa === placa).sort((a, b) => (ocorrenciaGrave(b) - ocorrenciaGrave(a)) || String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
+  if (!lista.length && soSeTiver) return '';
+  return `<div class="card"><h2>📣 Ocorrências dos motoristas</h2>${lista.map(o => montarCardOcorrencia(o, false)).join('') || '<p class="empty" style="padding:12px;">Nenhuma ocorrência aberta neste caminhão. ✅</p>'}</div>`;
 }
 
 function montarCardAlerta(a) {
@@ -938,15 +945,15 @@ function montarCardAlerta(a) {
   let btn = grp === 'resolvido' ? `<button class="btn small secondary" onclick="reativarResolvido('${a.id}')">Reabrir</button>${isAdmin ? `<button class="btn small danger" onclick="excluirManutencao('${a.id}')">Excluir</button>` : ''}` :
             grp === 'andamento' ? `<button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button><button class="btn small secondary" onclick="reabrirAlerta('${a.id}')">Voltar</button>` :
             `<button class="btn small secondary" onclick="marcarAnalise('${a.id}')">Em andamento</button><button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button>`;
-  return `<div class="alert-card ${grp}" style="cursor:help;" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${a.placa} — ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div></div><div class="alert-actions">${btn}</div></div>`;
+  return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${a.placa} — ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div></div><div class="alert-actions">${btn}</div></div>`;
 }
 
 function montarCardAgAtrasado(ag) { 
-    return `<div class="alert-card atrasado" style="cursor:help;" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function montarCardAgPendente(ag) { 
-    return `<div class="alert-card pendente" style="cursor:help;" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function renderAlertas() {
@@ -996,7 +1003,10 @@ function renderAlertas() {
       });
   }
 
-  if (baseAlertas.length === 0 && baseAgs.length === 0 && g.resolvido.length === 0) { c.innerHTML = '<p class="empty">Nenhum alerta encontrado. ✅</p>'; return; }
+  let ocs = ocorrenciasAbertas();
+  if (termoLimpo) ocs = ocs.filter(o => (o.placa + ' ' + o.item + ' ' + o.descricao).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termoLimpo));
+  ocs.sort((a, b) => (ocorrenciaGrave(b) - ocorrenciaGrave(a)) || String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
+  if (baseAlertas.length === 0 && baseAgs.length === 0 && g.resolvido.length === 0 && !ocs.length) { c.innerHTML = '<p class="empty">Nenhum alerta encontrado. ✅</p>'; return; }
 
   const hoje = hojeLocal(); const agsAtrasados = baseAgs.filter(ag => ag.dataPrevista && ag.dataPrevista < hoje); const agsPendentes = baseAgs.filter(ag => !(ag.dataPrevista && ag.dataPrevista < hoje));
   const listaAtrasados = [ ...g.atrasado.map(a => ({ html: montarCardAlerta(a), ts: dataCriacaoAlertaTs(a) })), ...agsAtrasados.map(ag => ({ html: montarCardAgAtrasado(ag), ts: new Date(ag.dataPrevista + 'T00:00:00').getTime() })) ];
@@ -1004,7 +1014,7 @@ function renderAlertas() {
   
   const sec = (grp, tit, html, num) => { if(num === 0) return ''; const exp = estadoAccordions[grp]; return `<div class="alert-secao ${grp}"><div class="alert-secao-header" onclick="toggleSecaoAlerta(this, '${grp}')"><span>${tit}</span><span class="alert-secao-count">${num}</span><span class="alert-secao-seta">${exp ? '▾' : '▸'}</span></div><div class="alert-secao-corpo" style="display:${exp ? 'block' : 'none'}">${html}</div></div>`; };
   const htmlAtrasados = listaAtrasados.map(item => item.html).join(''); const htmlPendentes = g.pendente.map(montarCardAlerta).join('') + agsPendentes.map(montarCardAgPendente).join('');
-  c.innerHTML = sec('atrasado', '🔴 Atrasado', htmlAtrasados, listaAtrasados.length) + sec('pendente', '🟡 Pendente', htmlPendentes, g.pendente.length + agsPendentes.length) + sec('andamento', '🟠 Em andamento', g.andamento.map(montarCardAlerta).join(''), g.andamento.length) + sec('resolvido', '🟢 Resolvido', g.resolvido.map(montarCardAlerta).join(''), g.resolvido.length);
+  c.innerHTML = sec('ocorrencia', '📣 Ocorrências dos motoristas', ocs.map(o => montarCardOcorrencia(o, true)).join(''), ocs.length) + sec('atrasado', '🔴 Atrasado', htmlAtrasados, listaAtrasados.length) + sec('pendente', '🟡 Pendente', htmlPendentes, g.pendente.length + agsPendentes.length) + sec('andamento', '🟠 Em andamento', g.andamento.map(montarCardAlerta).join(''), g.andamento.length) + sec('resolvido', '🟢 Resolvido', g.resolvido.map(montarCardAlerta).join(''), g.resolvido.length);
 }
 
 function filtrarHistorico() {
