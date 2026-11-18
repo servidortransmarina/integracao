@@ -71,3 +71,32 @@ function avatarNo(av) {
   if (/^img:[a-z0-9_]{1,24}$/.test(av || '')) return h('img', { src: 'icons/avatares/' + av.slice(4) + '.png', alt: '', class: 'av-logo' });   // logos de marcas/empresas: coloque o PNG em icons/avatares/ e acrescente 'img:nome' em AVATARES (perfil.js)
   return icone(av || '🔧');
 }
+
+/** Altura ocupada embaixo no celular: barra de sistemas + faixa de abas (quando ela fica fixa embaixo). Os iframes descontam isso. */
+function alturaRodape() {
+  const b = document.getElementById('bottombar'), a = document.getElementById('subTabs'); let t = 0;
+  if (b && getComputedStyle(b).display !== 'none') t += b.offsetHeight;
+  if (a && !a.hidden && getComputedStyle(a).position === 'fixed') t += a.offsetHeight;
+  return t;
+}
+
+/** Visor de fotos dentro do próprio site (tela cheia, setas, deslizar, Esc para fechar). */
+const Visor = {
+  abrir(fotos, i) {
+    if (!fotos || !fotos.length) return;
+    let at = i || 0, x0 = null;
+    const img = h('img', { class: 'vs-img', alt: '' }), leg = h('div', { class: 'vs-leg' }), cont = h('span', { class: 'vs-cont' }), carregando = h('div', { class: 'vs-carr', text: 'Carregando…' });
+    const ir = n => { at = (n + fotos.length) % fotos.length; carregando.hidden = false; img.classList.remove('ok'); img.src = fotos[at].src; img.alt = fotos[at].leg || ''; leg.textContent = fotos[at].leg || ''; cont.textContent = (at + 1) + ' / ' + fotos.length; };
+    img.onload = () => { carregando.hidden = true; img.classList.add('ok'); }; img.onerror = () => { carregando.textContent = 'Não consegui abrir esta foto.'; };
+    const fechar = () => { ov.remove(); window.removeEventListener('keydown', tecla, true); };
+    // captura antes do modal de baixo: Esc fecha só o visor, não a janela do checklist
+    const tecla = e => { if (!['Escape', 'ArrowRight', 'ArrowLeft'].includes(e.key)) return; e.stopImmediatePropagation(); e.preventDefault(); if (e.key === 'Escape') fechar(); else ir(at + (e.key === 'ArrowRight' ? 1 : -1)); };
+    const seta = (lado, n) => fotos.length > 1 ? h('button', { class: 'vs-seta ' + lado, type: 'button', 'aria-label': lado === 'esq' ? 'Foto anterior' : 'Próxima foto', text: lado === 'esq' ? '‹' : '›', onclick: e => { e.stopPropagation(); ir(at + n); } }) : null;
+    const ov = h('div', { class: 'visor', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Fotos', onclick: e => { if (e.target === ov || e.target.classList.contains('vs-palco')) fechar(); } },
+      h('div', { class: 'vs-topo' }, cont, leg, h('button', { class: 'vs-x', type: 'button', 'aria-label': 'Fechar', text: '✕', onclick: fechar })),
+      h('div', { class: 'vs-palco' }, carregando, img), seta('esq', -1), seta('dir', 1));
+    ov.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+    ov.addEventListener('touchend', e => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (Math.abs(dx) > 50) ir(at + (dx < 0 ? 1 : -1)); x0 = null; });
+    window.addEventListener('keydown', tecla, true); document.body.append(ov); ir(at);
+  }
+};

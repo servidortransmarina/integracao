@@ -13,7 +13,7 @@ const Ajuda = {
       'Use o botão "Relatar problema" no alto do Painel se algo não funcionar.');
     if (tem('checklists') && moto) add('checklist', '✅', 'Checklist do dia', [
       'Escolha o caminhão e informe o KM que está no painel.', 'Para cada item toque em um botão: ✓ Ok (funcionando bem), ! Atenção (funciona, mas tem algo estranho ou desgastado) ou ✕ Ruim (com defeito ou perigoso).',
-      'Se marcar ! ou ✕, descreva o que viu no campo que aparece. A gestão confere e manda para a oficina.', 'Tire as fotos pedidas com a câmera do celular: no mínimo 4 da carroceria (frente, trás e laterais), 1 de cada pneu (dianteiro esquerdo, dianteiro direito, traseiros e estepe) e 1 de dentro da cabine, mostrando a limpeza. Elas são enviadas enquanto você responde; espere o ✓ verde em cada foto.', 'Informe a quantidade de cordas e de cintas.', 'Toque em "Enviar checklist". Ele vai para aprovação da gestão; os pontos do checklist do dia entram quando for aprovado (uma vez por dia). Se for devolvido, o motivo aparece no Histórico.'],
+      'Se marcar ! ou ✕, descreva o que viu no campo que aparece. A gestão confere e manda para a oficina.', 'Viu algo que não está na lista? Use "Outro problema" no fim do checklist.', 'Tire as fotos pedidas com a câmera do celular: no mínimo 4 da carroceria (frente, trás e laterais), 1 de cada pneu (dianteiro esquerdo, dianteiro direito, traseiros e estepe) e 1 de dentro da cabine, mostrando a limpeza. Elas são enviadas enquanto você responde; espere o ✓ verde em cada foto.', 'Informe a quantidade de cordas e de cintas.', 'Toque em "Enviar checklist". Ele vai para aprovação da gestão; os pontos do checklist do dia entram quando for aprovado (uma vez por dia). Se for devolvido, o motivo aparece no Histórico.'],
       'Responda com atenção: o checklist bem feito evita quebra na estrada.');
     if (tem('abastecimento')) add('abastecimento', '⛽', 'Lançar abastecimento', [
       'Escolha o caminhão, a data (até 7 dias atrás), o produto, o KM, os litros e o valor total.', 'Toque em "Lançar abastecimento". Ele fica "aguardando fatura".', 'Quando a fatura do posto chega, o sistema confere sozinho. Se bater, vira "conferido" e você ganha pontos.'],
@@ -27,8 +27,9 @@ const Ajuda = {
       .concat(tem('alertas') ? ['Alertas: serviços vencidos, em andamento e agendados. Clique para ir ao caminhão.'] : [])
       .concat(tem('pneus') ? ['Controle de Pneus: movimentação, desgaste e posição de cada pneu.'] : [])
       .concat(['🖨️ Ordem de serviço: escolha o que entra e se é OS interna ou externa (prestador de fora, como a elétrica). 🔄 atualiza os dados.']));
-    if (tem('checklists') && !moto) add('checklistGestao', '✅', 'Checklists enviados', ['Lista os checklists dos motoristas, com o resultado de cada um (tudo certo, atenção ou itens ruins).'].concat(gestao ? ['Os que aguardam aprovação ficam no topo. Abra, confira fotos e itens, desmarque o que não deve ir para a oficina e aprove (libera os pontos) ou devolva com o motivo.'] : ['Só aparecem os checklists já aprovados pela gestão; os itens com problema viram ocorrências para a oficina.']));
+    if (tem('checklists') && !moto) add('checklistGestao', '✅', 'Checklists enviados', ['Lista os checklists dos motoristas, com o resultado de cada um (tudo certo, atenção ou itens ruins).'].concat(gestao ? ['Os que aguardam aprovação ficam no topo. Abra, confira as fotos (toque para ampliar) e marque cada ocorrência como Pendente (vai para a oficina no GF) ou Resolvido. Depois aprove (libera os pontos) ou devolva com o motivo.'] : ['Só aparecem os checklists já aprovados pela gestão; os itens com problema viram ocorrências para a oficina.']));
     if (tem('ocorrencias')) add('ocorrencias', '⚠️', 'Ocorrências', ['Mostra os problemas relatados nos checklists, com prioridade e situação. Viram pendência depois que a gestão aprova o checklist.', 'Quando consertar, toque em "Resolvido".']);
+    if (tem('defeito')) add('defeito', '🛠️', 'Relatar defeito', ['Algo errado no caminhão? Fleet → Defeito: escolha o caminhão, o tipo e descreva. Não precisa fazer checklist.', 'Diga se dá para rodar com cuidado ou se é grave (e se o caminhão está parado).', 'Vai direto para a oficina como pendência; a gestão também é avisada. Embaixo aparecem seus relatos e a situação de cada um.']);
     if (tem('podio')) add('podio', '🏆', 'Pódio', ['Ranking dos motoristas no mês, com setas comparando com a posição do mês anterior (▲ subiu, ▼ desceu, "novo" quem não pontuou antes).', 'Embaixo de cada nome aparece de onde vieram os pontos (checklists, abastecimentos…).', 'Use ‹ › para ver outros meses. Toque num motorista para lançar bônus ou desconto, sempre com motivo.']);
     if (tem('motoristas')) add('motoristas', '👥', 'Motoristas', ['Cadastre e edite motoristas (o CPF é guardado só em código, nunca aparece).', 'Dentro do motorista você vê os pontos do mês e pode lançar um ajuste (± Ajustar pontos) com motivo.', 'Pedidos de folga aparecem no Painel: abra, escolha o dia e aprove ou recuse.']);
     if (tem('ponto-horas', 'ponto-folgas', 'ponto-cartas', 'ponto-pendentes')) add('ponto', '🕒', 'Gestão de Ponto', ['Horas extras: saldo e acompanhamento por funcionário.', 'Controle de folgas: folgas planejadas e realizadas (folgas aprovadas aos motoristas entram aqui sozinhas).'].concat(tem('ponto-cartas') ? ['Gestão: Pontos e Horas: cartas de ponto, saldo de horas e fechamentos.'] : []).concat(['Cartas pendentes: o que ainda precisa de conferência.']));
@@ -80,8 +81,28 @@ const Ajuda = {
   problemas() {
     const l = ((App.dados && App.dados.problemas) || []).slice().reverse(), cx = h('div', {});
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum problema em aberto. 🎉' }));
-    l.forEach(p => { const lin = h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: nomeBonito(p.nome) + ' · ' + (p.tela || '-') }), h('small', { text: String(p.criadoEm).slice(0, 16) + ' · ' + (p.perfil || '') }), h('p', { class: 'aj-prob', text: p.descricao }), h('small', { text: p.aparelho || '' })),
-      h('button', { class: 'btn small', type: 'button', text: 'Resolvido', onclick: async e => { e.target.disabled = true; try { await API.chamar('resolverProblema', { id: p.id }); await App.recarregar(true); m.fechar(); this.problemas(); } catch (er) { toast(er.message, true); e.target.disabled = false; } } })); cx.append(lin); });
+    l.forEach(p => {
+      const andamento = String(p.status).toUpperCase() === 'EM ANDAMENTO';
+      const lin = h('div', { class: 'hist-lin pr-lin' }, h('div', {}, h('b', { text: nomeBonito(p.nome) + ' · ' + (p.tela || '-') }), h('small', { text: String(p.criadoEm).slice(0, 16) + ' · ' + (p.perfil || '') }), h('p', { class: 'aj-prob', text: p.descricao }),
+        p.resposta ? h('small', { class: 'pr-resp', text: '💬 ' + p.resposta }) : null, h('small', { text: p.aparelho || '' })),
+        h('div', { class: 'pr-acoes' }, h('span', { class: 'badge ' + (andamento ? 'amber' : 'red'), text: andamento ? 'em andamento' : 'aberto' }),
+          h('button', { class: 'btn small secondary', type: 'button', text: 'Em andamento', onclick: () => this.responderProblema(p, 'andamento', m) }),
+          h('button', { class: 'btn small', type: 'button', text: 'Resolvido', onclick: () => this.responderProblema(p, 'resolvido', m) })));
+      cx.append(lin);
+    });
     const m = abrirModal('Problemas relatados', cx, { largo: true });
+  },
+  /** Marcar exige uma mensagem: ela aparece no Painel de quem relatou. */
+  responderProblema(p, status, lista) {
+    const tx = h('textarea', { rows: 3, maxlength: 500, placeholder: status === 'resolvido' ? 'Ex.: Corrigido. Atualize a página e teste de novo.' : 'Ex.: Já estou vendo, até amanhã fica pronto.' });
+    const msg = h('div', { class: 'msg' }), ok = h('button', { class: 'btn', type: 'button', text: status === 'resolvido' ? 'Marcar como resolvido' : 'Marcar em andamento' });
+    ok.onclick = async () => {
+      if (tx.value.trim().length < 3) return mensagem(msg, 'Escreva uma mensagem para quem relatou.');
+      ok.disabled = true;
+      try { await API.chamar('atualizarProblema', { id: p.id, status, mensagem: tx.value.trim() }); m.fechar(); if (lista) lista.fechar(); await App.recarregar(true); toast(status === 'resolvido' ? 'Marcado como resolvido. ' + nomeBonito(p.nome).split(' ')[0] + ' vai ver a mensagem no Painel.' : 'Marcado em andamento.'); this.problemas(); }
+      catch (e) { mensagem(msg, e.message); ok.disabled = false; }
+    };
+    const m = abrirModal(status === 'resolvido' ? 'Resolvido' : 'Em andamento', h('div', {}, h('p', { class: 'hint', text: 'Mensagem para ' + nomeBonito(p.nome) + ' (aparece no Painel dele):' }), tx, msg, h('div', { class: 'modal-actions' }, ok)));
+    setTimeout(() => tx.focus(), 50);
   }
 };

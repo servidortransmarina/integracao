@@ -17,6 +17,7 @@ const ABAS = [
   { id: 'pneus', sis: 'frota', nome: 'Controle de Pneus', curto: 'Pneus', ic: '🛞', perfis: GESTAO_P, gf: 'pneus' },
   { id: 'checklists', sis: 'fleet', nome: 'Checklist', curto: 'Checklist', ic: '✅', perfis: TODOS_P, hub: () => App.sessao.perfil === 'motorista' ? Motorista.checklist() : Motorista.gestaoChecklists() },
   { id: 'abastecimento', sis: 'fleet', nome: 'Abastecimento', curto: 'Abastecer', ic: '⛽', perfis: ['motorista'], hub: () => Motorista.abastecer() },
+  { id: 'defeito', sis: 'fleet', nome: 'Relatar defeito', curto: 'Defeito', ic: '🛠️', perfis: ['motorista'], hub: () => Motorista.defeito() },
   { id: 'historico', sis: 'fleet', nome: 'Histórico', curto: 'Histórico', ic: '🗂️', perfis: ['motorista'], hub: () => Motorista.historico() },
   { id: 'escala', sis: 'fleet', nome: 'Escalas', curto: 'Escalas', ic: '📅', perfis: ['motorista'], hub: () => Motorista.escala() },
   { id: 'ocorrencias', sis: 'fleet', nome: 'Ocorrências', curto: 'Ocorrências', ic: '⚠️', perfis: GESTAO_P, hub: () => Motorista.gestaoOcorrencias() },
@@ -139,7 +140,7 @@ const App = {
     const item = (id, ic, nome, ativo, futuro, n, clique) => h('button', { class: 'side-item' + (futuro ? ' futuro' : '') + (ativo ? ' active' : ''), dataset: { aba: id }, title: nome, onclick: futuro ? null : clique },
       h('span', { class: 'ic', text: ic }), nome, n ? h('span', { class: 'n', text: String(n) }) : null, futuro ? h('span', { class: 'tag', text: 'em breve' }) : null);
     lado.append(item('inicio', '🏠', 'Painel Transmarina', sisAtual === 'painel', false, 0, () => this.abrirAba('inicio')));
-    const sis = this.sistemasDoPerfil(), ativos = sis.filter(x => !x.futuro), breve = sis.filter(x => x.futuro);
+    const abasP = this.abasDoPerfil(), sis = this.sistemasDoPerfil(), ativos = sis.filter(x => !x.futuro && abasP.some(a => a.sis === x.id)), breve = sis.filter(x => x.futuro);
     if (ativos.length) lado.append(h('div', { class: 'side-sec', text: 'Sistemas' }), ...ativos.map(x => item(x.id, x.ic, x.nome, sisAtual === x.id, false, this.badge(x), () => this.abrirSistema(x.id))));
     if (breve.length) lado.append(h('div', { class: 'side-sec', text: 'Em breve' }), ...breve.map(x => item(x.id, x.ic, x.nome, false, true, 0)));
 
@@ -196,7 +197,8 @@ const App = {
   abrirMais() {
     const S = this.sessao, caixa = h('div'), m = abrirModal('Menu', caixa), item = (ic, texto, fn, extra) => h('button', { class: 'mais-item', type: 'button', disabled: fn ? null : true, onclick: fn ? () => { m.fechar(); fn(); } : null }, h('span', { class: 'ic', text: ic }), h('span', { class: 'tx', text: texto }), extra || null);
     caixa.append(h('div', { class: 'side-sec', text: 'Sistemas' }));
-    this.sistemasDoPerfil().forEach(x => caixa.append(item(x.ic, x.nome, x.futuro ? null : () => this.abrirSistema(x.id), x.futuro ? h('small', { text: 'em breve' }) : null)));
+    const abas = this.abasDoPerfil();                                     // sistema sem nenhuma tela para esta pessoa não aparece (ex.: Escalas para o motorista, que vê a escala dentro do Fleet)
+    this.sistemasDoPerfil().filter(x => x.futuro || abas.some(a => a.sis === x.id)).forEach(x => caixa.append(item(x.ic, x.nome, x.futuro ? null : () => this.abrirSistema(x.id), x.futuro ? h('small', { text: 'em breve' }) : null)));
     caixa.append(h('div', { class: 'side-sec', text: 'Minha conta' }), item('✏️', 'Editar perfil', () => Perfil.abrir()));
     if (S.perfil === 'master') {
       const np = (this.dados && this.dados.pendenciasPlaca) || 0;
@@ -271,7 +273,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Dica de rolagem: marca a faixa de abas que ainda tem conteúdo escondido (borda esmaecida) e dá um empurrãozinho na primeira vez. */
 (function () {
-  let agendado = false, nudged = false;
+  let agendado = false, nudged = false, ultH = -1;
+  // altura da faixa de abas fixa embaixo (celular): o conteúdo e os iframes descontam
+  function abasH() { const a = document.getElementById('subTabs'), v = a && !a.hidden && window.innerWidth <= 820 ? a.offsetHeight : 0;
+    if (v !== ultH) { ultH = v; document.documentElement.style.setProperty('--abas-h', v + 'px'); window.dispatchEvent(new Event('resize')); } }
   try { nudged = localStorage.getItem('trm-dica-abas') === '1'; } catch (e) { /* sem armazenamento */ }
   function marca(el) {
     const max = el.scrollWidth - el.clientWidth, x = el.scrollLeft;
@@ -281,7 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => { try { el.scrollTo({ left: 56, behavior: 'smooth' }); setTimeout(() => el.scrollTo({ left: 0, behavior: 'smooth' }), 650); } catch (e) { /* ok */ } }, 500);
     }
   }
-  function varre() { agendado = false; document.querySelectorAll('.sub-tabs, .chips').forEach(marca); if (typeof Online !== 'undefined' && Online._dados.online) Online.montar(); }
+  function varre() { agendado = false; document.querySelectorAll('.sub-tabs, .chips').forEach(marca); abasH(); if (typeof Online !== 'undefined' && Online._dados.online) Online.montar(); }
   function pede() { if (!agendado) { agendado = true; requestAnimationFrame(varre); } }
   document.addEventListener('scroll', e => { if (e.target && e.target.classList && (e.target.classList.contains('sub-tabs') || e.target.classList.contains('chips'))) pede(); }, true);
   window.addEventListener('resize', pede);
@@ -291,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '3s',
+  VERSAO: '3v',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

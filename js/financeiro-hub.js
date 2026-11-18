@@ -61,7 +61,7 @@ const FinHub = {
   enviar(area, aba) { try { this.frames[area].contentWindow.postMessage({ tipo: 'fin-aba', aba }, location.origin); } catch (e) {} },
   ajustar() {
     const f = this.frame; if (!f || $('#finRoot').hidden) return;
-    const barra = $('#bottombar'), alturaBarra = barra && getComputedStyle(barra).display !== 'none' ? barra.offsetHeight : 0;
+    const alturaBarra = alturaRodape();
     const topo = f.getBoundingClientRect().top + window.scrollY;
     f.style.height = Math.max(360, window.innerHeight - topo - alturaBarra - 8) + 'px';
   },

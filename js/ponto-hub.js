@@ -19,7 +19,7 @@ const PontoHub = {
   /** O iframe ocupa a tela abaixo do cabeçalho do Hub (e acima da barra inferior no celular); a rolagem fica dentro dele. */
   ajustar() {
     if (!this.frame || $('#pontoRoot').hidden) return;
-    const barra = $('#bottombar'), alturaBarra = barra && getComputedStyle(barra).display !== 'none' ? barra.offsetHeight : 0;
+    const alturaBarra = alturaRodape();
     const topo = this.frame.getBoundingClientRect().top + window.scrollY;
     this.frame.style.height = Math.max(360, window.innerHeight - topo - alturaBarra - 8) + 'px';
   },

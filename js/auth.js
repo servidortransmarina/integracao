@@ -49,7 +49,21 @@ Auth.telas.cadastro = () => {
     catch (err) { mensagem(m, err.message); }
     bEnviar.disabled = false;
   };
-  passo2.append(campo('Código recebido', cod), campo('Nome completo', nome), campo('CPF', cpf, 'Usado só para confirmar sua identidade; guardamos apenas um código irreversível.'),
+  // CPF primeiro: se ele está no cadastro da empresa, o nome vem preenchido (e confere sozinho)
+  const dicaNome = h('small', { class: 'hint' });
+  let ultimoCpf = '';
+  const buscarNome = async () => {
+    const dig = cpf.value.replace(/\D/g, ''); if (dig.length !== 11 || dig === ultimoCpf || cod.value.trim().length !== 6) return;
+    ultimoCpf = dig; dicaNome.textContent = 'Procurando seu nome no cadastro da empresa…';
+    try {
+      const r = await API.chamar('consultarCpfCadastro', { email: email.value.trim(), codigo: cod.value.trim(), cpf: cpf.value }, { semExpirar: true });
+      if (r.encontrado) { nome.value = nomeBonito(r.nome); nome.readOnly = true; dicaNome.textContent = '✅ Nome encontrado no cadastro da empresa.'; s1.focus(); }
+      else { nome.readOnly = false; dicaNome.textContent = 'CPF não encontrado no cadastro: digite seu nome completo.'; nome.focus(); }
+    } catch (err) { nome.readOnly = false; ultimoCpf = ''; dicaNome.textContent = err.message; }
+  };
+  cpf.addEventListener('input', () => { let d = cpf.value.replace(/\D/g, '').slice(0, 11); cpf.value = d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2'); if (d.length < 11) { ultimoCpf = ''; if (nome.readOnly) { nome.readOnly = false; nome.value = ''; dicaNome.textContent = ''; } } else buscarNome(); });
+  cod.addEventListener('input', () => { if (cod.value.trim().length === 6) buscarNome(); });
+  passo2.append(campo('Código recebido', cod), campo('CPF', cpf, 'Usado só para confirmar sua identidade; guardamos apenas um código irreversível.'), campo('Nome completo', nome), dicaNome,
     campo('Senha', s1), h('div', { class: 'regras', text: REGRA_SENHA }), campo('Repita a senha', s2), bFim);
   const f = h('form', { onsubmit: async e => {
     e.preventDefault(); mensagem(m, '');

@@ -792,7 +792,7 @@ function renderDashboard() {
           gastoGeral += gastoTotalV; 
           manutGeral += qtdeV; 
           kmGeralMatematica += distanciaReal; 
-          { const c = consumoPares(msV_All, dtInicioStr || '', dtFimStr || ''); kmConsumo += c.km; litConsumo += c.lit; }
+          if (typeof consumoPares === 'function') { const c = consumoPares(msV_All, dtInicioStr || '', dtFimStr || ''); kmConsumo += c.km; litConsumo += c.lit; }
           
           if (gastoTotalV > 0 || kmRodadoGrafico > 0 || msV_Per.length > 0 || (!dtInicioStr && !dtFimStr)) {
               chartData.push({ placa: v.placa, gastoTotal: gastoTotalV, gastoComb: gastoComb, gastoOfic: gastoOfic, km: kmRodadoGrafico });

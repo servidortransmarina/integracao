@@ -110,6 +110,10 @@ const Motorista = {
       });
       raiz.append(cx);
     });
+    // campo aberto: algo que não está na lista
+    const outroTx = h('textarea', { rows: 2, maxlength: 300, placeholder: 'Ex.: retrovisor solto, barulho na suspensão… (deixe em branco se não tiver)' }), outroSt = { v: 'warn' };
+    const outroSeg = h('div', { class: 'oc-seg' }); [['warn', '! Atenção'], ['bad', '✕ Ruim']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + (v === 'warn' ? 'pendente on' : 'ruim'), text: t }); b.onclick = () => { outroSt.v = v; outroSeg.querySelectorAll('.oc-op').forEach(x => x.classList.toggle('on', x === b)); }; outroSeg.append(b); });
+    const outroCx = h('div', { class: 'card ck-cat ck-outro' }, h('h3', { text: 'OUTRO PROBLEMA (OPCIONAL)' }), h('p', { class: 'hint', text: 'Viu algo que não está na lista? Escreva aqui.' }), outroTx, outroSeg);
     const fotosCx = this.cartaoFotos(mod, () => placa.value);
     const eq = h('div', { class: 'card ck-cat' }, h('h3', { text: 'QUANTIDADES' }));
     mod.quantidades.forEach(n => { const i = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 999, placeholder: '0', oninput: e => { qtd[n] = e.target.value; } }); eq.append(h('div', { class: 'ck-lin' }, h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: 'Quantidade de ' + n.toLowerCase().replace(/s$/, '') + 's' }), h('span', { class: 'ck-qtd' }, i)))); });
@@ -126,14 +130,14 @@ const Motorista = {
       env.disabled = true; env.textContent = 'Enviando fotos…';
       try {
         await fotosCx.esperar(); env.textContent = 'Enviando…';
-        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos: fotosCx.valor() });
+        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos: fotosCx.valor(), outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
         App.recarregar(true);
         const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
           h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver no histórico', onclick: () => { m.fechar(); App.abrirAba('historico'); } }))), { aoFechar: () => App.abrirAba('inicio') });
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar checklist'; }
     };
     atualizarProg();
-    raiz.append(fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
+    raiz.append(outroCx, fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
     return raiz;
   },
 
@@ -158,6 +162,28 @@ const Motorista = {
       h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Produto' }), prod), h('div', { class: 'field' }, h('label', { text: 'KM' }), km), h('div', { class: 'field' }, h('label', { text: 'Litros' }), lit), h('div', { class: 'field' }, h('label', { text: 'Valor total' }), val)),
       unit, msg, h('div', { class: 'modal-actions' }, env), h('small', { class: 'hint', text: 'Quando a fatura do posto chegar, o sistema confere e você ganha pontos.' })),
       ult.length ? h('div', { class: 'card' }, h('h2', { text: 'Últimos lançamentos' }), ...ult.map(a => this.linhaAbast(a))) : null);
+  },
+  /** Algo errado no caminhão fora do checklist: vai direto para a oficina como pendência (sem pontos). */
+  defeito() {
+    const d = this.d(), esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : '');
+    const ITENS = ['Freio', 'Pneu', 'Motor', 'Elétrica / luzes', 'Suspensão', 'Câmbio / embreagem', 'Ar-condicionado', 'Vazamento', 'Baú / carroceria', 'Tacógrafo', 'Outro'];
+    const item = h('select', {}, ...ITENS.map(x => h('option', { value: x, text: x }))), km = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: 'KM atual (opcional)' });
+    const desc = h('textarea', { rows: 4, maxlength: 600, placeholder: 'O que está acontecendo? Quando começou? Faz algum barulho?' });
+    const grav = { v: 'warn' }, parado = h('input', { type: 'checkbox' }), linhaParado = h('label', { class: 'df-parado', hidden: true }, parado, ' O caminhão não tem condição de rodar');
+    const seg = h('div', { class: 'oc-seg df-seg' }); [['warn', '! Dá para rodar com cuidado'], ['bad', '✕ Grave']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + (v === 'warn' ? 'pendente on' : 'ruim'), text: t }); b.onclick = () => { grav.v = v; linhaParado.hidden = v !== 'bad'; seg.querySelectorAll('.oc-op').forEach(x => x.classList.toggle('on', x === b)); }; seg.append(b); });
+    const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar para a oficina' });
+    env.onclick = async () => {
+      mensagem(msg, ''); if (!placa.value) return mensagem(msg, 'Escolha o caminhão.'); if (desc.value.trim().length < 5) return mensagem(msg, 'Conte o que está errado.');
+      env.disabled = true; env.textContent = 'Enviando…';
+      try { await API.chamar('relatarDefeito', { placa: placa.value, item: item.value, descricao: desc.value.trim(), gravidade: grav.v, parado: grav.v === 'bad' && parado.checked ? 'SIM' : 'NAO', km: this.numero(km.value) || '' });
+        toast('Enviado! A oficina e a gestão já foram avisadas.'); App.recarregar(true); App.abrirAba('defeito'); }
+      catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar para a oficina'; }
+    };
+    const meus = (d.ocorrencias || []).filter(o => o.origem === 'relato').sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura))).slice(0, 10);
+    return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Relatar defeito' }), h('p', { class: 'hint', text: 'Para algo errado no caminhão sem precisar fazer o checklist. Vai direto para a oficina.' }),
+      h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'O que é' }), item), h('div', { class: 'field' }, h('label', { text: 'KM' }), km)),
+      h('div', { class: 'field' }, h('label', { text: 'Descreva' }), desc), h('div', { class: 'field' }, h('label', { text: 'Gravidade' }), seg), linhaParado, msg, h('div', { class: 'modal-actions' }, env)),
+      meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus relatos' }), ...meus.map(o => this.linhaOc(o))) : null);
   },
   linhaAbast(a) {
     const ST = { provisorio: ['⏳ aguardando fatura', 'amber'], conferido: ['✅ conferido', 'green'], expirado: ['sem fatura', 'gray'] }, s = ST[a.status] || [a.status, 'gray'];
@@ -199,10 +225,10 @@ const Motorista = {
     let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; }
     if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos (foi enviado antes da exigência).' });
     const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam;
-    const foto = (id, leg) => h('a', { class: 'ckf-gal', href: 'https://drive.google.com/file/d/' + encodeURIComponent(id) + '/view', target: '_blank', rel: 'noopener', title: leg }, h('img', { src: th(id, 320), alt: leg, loading: 'lazy' }), h('small', { text: leg }));
+    const itens = []; (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' });
+    const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg }));
     const g = h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos' }));
-    const lista = h('div', { class: 'ckf-grid' }); (f.c || []).forEach((id, i) => lista.append(foto(id, 'Carroceria ' + (i + 1))));
-    Object.keys(f.p || {}).forEach(n => lista.append(foto(f.p[n], n))); if (f.k) lista.append(foto(f.k, 'Cabine'));
+    const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
     g.append(lista); return g;
   },
   linhaOc(o) {
@@ -211,13 +237,28 @@ const Motorista = {
   },
 
   /* ---------- ESCALAS (só leitura) ---------- */
+  /** Escala: a mais recente lançada em destaque (com a equipe do dia) e, abaixo, o histórico do motorista. */
   escala() {
-    const l = (this.d().escalas || []).slice().sort((a, b) => a.data.localeCompare(b.data) || a.placa.localeCompare(b.placa)), hoje = Motorista.hoje(), dias = {};
-    l.forEach(e => { (dias[e.data] = dias[e.data] || []).push(e); });
-    const cx = h('div', { class: 'card' }, h('h2', { text: 'Escala dos próximos dias' }), h('small', { class: 'hint', text: 'Somente consulta. Quem altera a escala é a gestão.' }));
-    const ds = Object.keys(dias).filter(x => x >= hoje); if (!ds.length) cx.append(h('div', { class: 'empty', text: 'Nenhuma escala lançada ainda.' }));
-    ds.forEach(dt => { cx.append(h('div', { class: 'sec-t', text: (dt === hoje ? 'Hoje · ' : '') + this.dia(dt) }), ...dias[dt].map(e => h('div', { class: 'hist-lin' + (e.meu ? ' meu' : '') }, h('div', {}, h('b', { text: nomeBonito(e.nome) || '-' }), h('small', { text: e.turno || '' })), placaHtmlEl(e.placa)))); });
+    const me = this.d().minhaEscala, hoje = Motorista.hoje(), cx = h('div');
+    if (!me || !me.atual) { cx.append(h('div', { class: 'card' }, h('h2', { text: 'Escala' }), h('div', { class: 'empty', text: 'Nenhuma escala lançada ainda.' }))); return cx; }
+    const a = me.atual, rot = dt => (dt === hoje ? 'Hoje, ' : dt > hoje ? (dt === this.somaDia(hoje, 1) ? 'Amanhã, ' : '') : '') + this.dia(dt);
+    const atual = h('div', { class: 'card esc-atual' }, h('div', { class: 'esc-cab' }, h('div', {}, h('small', { text: 'Escala atual' }), h('h2', { text: rot(a.data) })), h('span', { class: 'badge ' + (a.definitiva ? 'green' : 'amber'), text: a.definitiva ? 'confirmada' : 'prévia' })));
+    if (a.minhas.length) a.minhas.forEach(x => atual.append(this.blocoEscala(x)));
+    else atual.append(h('div', { class: 'esc-folga' }, h('b', { text: 'Você não está nesta escala.' }), h('small', { text: a.definitiva ? 'Folga ou reserva neste dia. Dúvidas, fale com a gestão.' : 'A escala ainda é uma prévia e pode mudar.' })));
+    const eq = h('details', { class: 'esc-equipe' }, h('summary', { text: 'Equipe do dia (' + a.equipe.length + ')' }));
+    a.equipe.slice().sort((x, y) => (y.meu - x.meu) || x.nome.localeCompare(y.nome)).forEach(e => eq.append(h('div', { class: 'hist-lin' + (e.meu ? ' meu' : '') }, h('div', {}, h('b', { text: nomeBonito(e.nome) }), h('small', { text: [e.regiao, e.saida ? 'saída ' + e.saida : ''].filter(Boolean).join(' · ') })), h('span', { class: 'esc-placa', text: e.placa || '—' }))));
+    atual.append(eq); cx.append(atual);
+    const hist = h('div', { class: 'card' }, h('h2', { text: 'Histórico de escalas' }));
+    if (!me.historico.length) hist.append(h('div', { class: 'empty', text: 'Ainda sem escalas anteriores.' }));
+    me.historico.forEach(x => hist.append(h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: this.dia(x.data) + ' · ' + (x.placa || '—') }), h('small', { text: [x.carga ? 'carga ' + x.carga : '', x.regiao || x.rota, x.saida ? 'saída ' + x.saida : ''].filter(Boolean).join(' · ') })))));
+    cx.append(hist);
     return cx;
+  },
+  somaDia(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); },
+  blocoEscala(x) {
+    const campo = (rot, v) => v ? h('div', { class: 'esc-campo' }, h('small', { text: rot }), h('b', { text: v })) : null;
+    return h('div', { class: 'esc-bloco' }, h('div', { class: 'esc-topo' }, placaHtmlEl(x.placa || '—'), h('div', {}, h('b', { text: x.regiao || x.rota || 'Rota a definir' }), h('small', { text: x.carga ? 'Carga ' + x.carga : '' }))),
+      h('div', { class: 'esc-grade' }, campo('Saída', x.saida), campo('Coleta', x.coleta), campo('Box', x.box), campo('Paradas', x.paradas), campo('Período', x.periodo), campo('Ajudante' + (x.ajudantes.length > 1 ? 's' : ''), x.ajudantes.map(nomeBonito).join(' e '))));
   },
 
   /* ---------- GESTÃO: listas ---------- */
@@ -236,19 +277,23 @@ const Motorista = {
     const m = abrirModal('Checklist · ' + c.placa, cx), corpo = h('div', {}, h('div', { class: 'hint', text: 'Carregando…' })); cx.append(corpo);
     let det; try { det = await API.chamar('checklistDetalhe', { id: c.id }, { mudo: true }); } catch (e) { corpo.textContent = e.message; return; }
     corpo.textContent = '';
-    const desc = {}, ocs = det.ocorrencias || [];
+    // cada ocorrência: Pendente (vai para a oficina no GF) ou Resolvido (já foi resolvido, não vira pendência)
+    const escolha = {}, ocs = det.ocorrencias || [], decide = c.aprovacao === 'PENDENTE' && gestor;
     ocs.forEach(o => {
-      const ck = h('input', { type: 'checkbox', checked: true }); desc[o.id] = ck;
-      corpo.append(h('label', { class: 'hist-lin' + (c.aprovacao === 'PENDENTE' && gestor ? '' : ' sem-ck') }, c.aprovacao === 'PENDENTE' && gestor ? ck : null, h('div', {}, h('b', { text: '⚠️ ' + o.item }), h('small', { text: o.descricao })), h('span', { class: 'badge ' + (o.prioridade === 'ALTA' ? 'red' : 'amber'), text: o.prioridade === 'ALTA' ? 'ruim' : 'atenção' })));
+      escolha[o.id] = 'pendente';
+      const seg = h('div', { class: 'oc-seg', role: 'radiogroup', 'aria-label': 'Situação de ' + o.item });
+      [['pendente', 'Pendente'], ['resolvido', 'Resolvido']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + v + (v === 'pendente' ? ' on' : ''), role: 'radio', 'aria-checked': v === 'pendente' ? 'true' : 'false', text: t });
+        b.onclick = () => { escolha[o.id] = v; seg.querySelectorAll('.oc-op').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); }); }; seg.append(b); });
+      corpo.append(h('div', { class: 'hist-lin oc-lin' }, h('div', {}, h('b', { text: '⚠️ ' + o.item }), h('small', { text: o.descricao })), decide ? seg : h('span', { class: 'badge ' + (o.prioridade === 'ALTA' ? 'red' : 'amber'), text: o.prioridade === 'ALTA' ? 'ruim' : 'atenção' })));
     });
-    if (ocs.length && c.aprovacao === 'PENDENTE' && gestor) corpo.append(h('small', { class: 'hint', text: 'Desmarque o que não deve virar pendência para a oficina.' }));
+    if (ocs.length && decide) corpo.append(h('small', { class: 'hint', text: 'Pendente vai para a oficina (GF). Marque Resolvido no que já foi resolvido.' }));
     if (!ocs.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
     corpo.append(this.galeria(c));
     if (c.aprovacao === 'APROVADO' || c.aprovacao === 'REJEITADO') corpo.append(h('p', { class: 'hint', text: (c.aprovacao === 'APROVADO' ? 'Aprovado' : 'Devolvido') + ' por ' + c.aprovadoPor + (c.obsAprov ? ' · ' + c.obsAprov : '') }));
     if (c.aprovacao === 'PENDENTE' && gestor) {
       const msg = h('div', { class: 'msg' }), mot = h('input', { type: 'text', placeholder: 'Motivo (só para devolver)', maxlength: 200 });
       const ok = h('button', { class: 'btn', type: 'button', text: 'Aprovar e liberar pontos' }), no = h('button', { class: 'btn sec', type: 'button', text: 'Devolver' });
-      const enviar = async (decisao) => { ok.disabled = no.disabled = true; try { const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, descartar: ocs.filter(o => !desc[o.id].checked).map(o => o.id) }); m.fechar(); App.recarregar(true); } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
+      const enviar = async (decisao) => { ok.disabled = no.disabled = true; try { const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, resolvidas: ocs.filter(o => escolha[o.id] === 'resolvido').map(o => o.id) }); m.fechar(); App.recarregar(true); } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
       ok.onclick = () => enviar('aprovar'); no.onclick = () => enviar('devolver');
       corpo.append(mot, msg, h('div', { class: 'modal-actions' }, no, ok));
     }

@@ -17,7 +17,7 @@ const EscHub = {
   enviar(aba) { try { this.frame.contentWindow.postMessage({ tipo: 'esc-aba', aba }, location.origin); } catch (e) {} },
   ajustar() {
     if (!this.frame || $('#escRoot').hidden) return;
-    const barra = $('#bottombar'), alturaBarra = barra && getComputedStyle(barra).display !== 'none' ? barra.offsetHeight : 0;
+    const alturaBarra = alturaRodape();
     const topo = this.frame.getBoundingClientRect().top + window.scrollY;
     this.frame.style.height = Math.max(360, window.innerHeight - topo - alturaBarra - 8) + 'px';
   },

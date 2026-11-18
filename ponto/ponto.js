@@ -309,7 +309,7 @@ async function comBotaoCarregando(botao, executar, texto='Carregando…', sucess
   botao.dataset.tmLoading='1';botao.disabled=true;
   botao.classList.add('tm-carregando');botao.setAttribute('aria-busy','true');
   botao.setAttribute('aria-label',texto);
-  botao.innerHTML=`<span class="tm-carregando-texto">${esc(texto)}</span><span class="tm-logo-pista" aria-hidden="true"><span class="tm-logo-viagem"><img src="logotrm.png" alt="" onerror="this.parentElement.classList.add('tm-logo-indisponivel')"></span></span>`;
+  botao.innerHTML=`<span class="tm-carregando-texto">${esc(texto)}</span><span class="tm-logo-pista" aria-hidden="true"><span class="tm-logo-viagem"><img src="../logotrm.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.parentElement.classList.add('tm-logo-indisponivel')}"></span></span>`;
   try{
     const resultado=await executar();
     if(sucesso){
@@ -879,7 +879,7 @@ function animarBotaoSincronizacao(botao,texto) {
     botao.dataset.tmSyncTexto=texto;
     botao.classList.add('tm-carregando');
     botao.setAttribute('aria-busy','true');botao.setAttribute('aria-label',texto);
-    botao.innerHTML=`<span class="tm-carregando-texto">${esc(texto)}</span><span class="tm-logo-pista" aria-hidden="true"><span class="tm-logo-viagem"><img src="logotrm.png" alt="" onerror="this.parentElement.classList.add('tm-logo-indisponivel')"></span></span>`;
+    botao.innerHTML=`<span class="tm-carregando-texto">${esc(texto)}</span><span class="tm-logo-pista" aria-hidden="true"><span class="tm-logo-viagem"><img src="../logotrm.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.parentElement.classList.add('tm-logo-indisponivel')}"></span></span>`;
   } else if(botao.dataset.tmSyncTexto!==undefined||botao.textContent!==TEXTO_BOTAO_SINCRONIZAR) {
     delete botao.dataset.tmSyncTexto;
     botao.classList.remove('tm-carregando');
@@ -1230,14 +1230,18 @@ async function carregarAssinaturasResponsaveis() {
     return false; // A falha de sugestões não pode impedir o cadastro de cartas.
   }
 }
-/** Quem recebeu a maioria das últimas cartas lançadas (as 20 mais recentes): vira o responsável já preenchido ao registrar uma nova. */
-function responsavelMaisFrequenteRecente(qtd=20) {
-  const recentes=ordenarCartasPorLancamento([...(APP.cartas||[])]).filter(c=>String(c.responsavel||'').trim()).slice(0,qtd);
+/** Responsável mais frequente nas últimas cartas DESTE funcionário (até 10). Sem cartas dele com responsável, não sugere ninguém. */
+function responsavelDasCartasDoFuncionario(nome,empresa='',qtd=10) {
+  const base=norm(separarNomeCarta(nome).nomeBase).replace(/\s+/g,' ');
+  if(!base)return null;
+  const doFunc=ordenarCartasPorLancamento([...(APP.cartas||[])]).filter(c=>String(c.responsavel||'').trim()&&
+    norm(separarNomeCarta(c.funcionario||'').nomeBase).replace(/\s+/g,' ')===base&&(!empresa||!c.empresa||norm(c.empresa)===norm(empresa))).slice(0,qtd);
+  if(!doFunc.length)return null;
   const cont=new Map();
-  for(const c of recentes){const k=norm(c.responsavel);const o=cont.get(k)||{nome:String(c.responsavel).trim(),n:0,ultima:dataOrdemCarta(c)};o.n++;cont.set(k,o);}
+  for(const c of doFunc){const k=norm(c.responsavel);const o=cont.get(k)||{nome:String(c.responsavel).trim(),n:0,ultima:dataOrdemCarta(c)};o.n++;cont.set(k,o);}
   let melhor=null;
   for(const o of cont.values())if(!melhor||o.n>melhor.n||(o.n===melhor.n&&o.ultima>melhor.ultima))melhor=o;
-  return melhor?melhor.nome:'';
+  return {nome:melhor.nome,n:melhor.n,total:doFunc.length};
 }
 function aplicarAprendizadoResponsavelCarta() {
   const funcionario=$('carta-funcionario'),responsavel=$('carta-responsavel');
@@ -1245,22 +1249,23 @@ function aplicarAprendizadoResponsavelCarta() {
   if(!funcionario||!responsavel||!aviso)return;
   const ident=identificarFuncionarioCarta(funcionario.value);
   const nome=ident.nome?chaveAprendizadoCarta(ident.nome,ident.empresa):'';
+  const automatico=()=>!estadoSugestaoCarta.editadoManualmente&&!APP.cartaEditando&&(!responsavel.value.trim()||(estadoSugestaoCarta.automatico&&responsavel.value===estadoSugestaoCarta.automatico));
   if(nome!==estadoSugestaoCarta.colaborador) {
-    if(!estadoSugestaoCarta.editadoManualmente&&estadoSugestaoCarta.automatico&&
-       responsavel.value===estadoSugestaoCarta.automatico&&!APP.cartaEditando){const pad=responsavelMaisFrequenteRecente();responsavel.value=pad;estadoSugestaoCarta.automatico=pad;}
+    // trocou o funcionário: a sugestão anterior era de outra pessoa, então sai
+    if(automatico()&&estadoSugestaoCarta.automatico)responsavel.value='';
     estadoSugestaoCarta.colaborador=nome;
     estadoSugestaoCarta.automatico='';
   }
   if(APP.cartaEditando||!nome) {aviso.hidden=true;aviso.textContent='';return;}
-  const padrao=sugestaoResponsavelAprendida(ident.nome,ident.empresa);
   aviso.hidden=false;aviso.classList.remove('carta-aprendizado-confiavel');
-  if(!padrao){aviso.textContent='Sem confirmação anterior de assinatura pelo encarregado para sugerir um responsável.';return;}
-  const ultimo=padrao.ultimo;
-  if(!estadoSugestaoCarta.editadoManualmente&&(!responsavel.value.trim()||(estadoSugestaoCarta.automatico&&responsavel.value===estadoSugestaoCarta.automatico))) {
-    responsavel.value=ultimo.nome;estadoSugestaoCarta.automatico=ultimo.nome;
-  }
+  // 1º quem confirmou a última assinatura dele; 2º quem mais recebeu as cartas dele; senão, ninguém
+  const padrao=sugestaoResponsavelAprendida(ident.nome,ident.empresa), dasCartas=padrao?null:responsavelDasCartasDoFuncionario(ident.nome,ident.empresa);
+  const sugerido=padrao?padrao.ultimo.nome:dasCartas?dasCartas.nome:'';
+  if(!sugerido){aviso.textContent='Sem cartas anteriores deste funcionário com responsável: preencha quem vai entregar.';return;}
+  if(automatico()){responsavel.value=sugerido;estadoSugestaoCarta.automatico=sugerido;}
   aviso.classList.add('carta-aprendizado-confiavel');
-  aviso.textContent=`Última assinatura recebida por: ${ultimo.nome}. Pode alterar o responsável manualmente.`;
+  aviso.textContent=padrao?`Última assinatura recebida por: ${sugerido}. Pode alterar o responsável manualmente.`
+    :`Sugerido pelas últimas cartas deste funcionário (${dasCartas.n} de ${dasCartas.total} com ${sugerido}). Pode alterar.`;
 }
 
 function atualizarResponsaveis() {
@@ -1349,7 +1354,6 @@ function definirModoCarta(c=null) {
   $('carta-ocorrencia').value=dataISOParaCampo(c?.dataOcorrencia||ontem());
   $('carta-correcao').value=dataISOParaCampo(c?c.dataCorrecao||'':today());
   $('carta-responsavel').value=c?.responsavel||'';
-  if(!c){const padrao=responsavelMaisFrequenteRecente();if(padrao){$('carta-responsavel').value=padrao;estadoSugestaoCarta.automatico=padrao;}}
   $('carta-assinado').value=c?.status||'NÃO';
   $('carta-obs').value=c?textoComplementarCarta(c):'';
   atualizarEmpresaCarta();

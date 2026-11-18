@@ -28,13 +28,13 @@ const Inicio = {
     const add = (o) => lista.push(o);
     if (S.perfil === 'master' && Usuarios.pendentes) add({ nivel: 'bad', sis: 'portal', ic: '👤', t: Usuarios.pendentes + (Usuarios.pendentes > 1 ? ' usuários aguardando acesso' : ' usuário aguardando acesso'), k: 'pt:usuarios', p: 'Cadastros novos esperam a sua aprovação.', origem: 'Portal', acao: () => Usuarios.abrir(), ordem: 0, k: 'usuarios' });
     if (S.perfil === 'master' && d.pendenciasPlaca) add({ nivel: 'bad', sis: 'frota', ic: '🧾', t: d.pendenciasPlaca + (d.pendenciasPlaca > 1 ? ' cupons com placa não identificada' : ' cupom com placa não identificada'), k: 'pt:cupons', p: 'O posto leu uma placa que não existe na frota. Escolha a certa.', origem: 'Manutenção', acao: () => Pendencias.abrir(), ordem: 0, k: 'pendplaca' });
-    if (S.perfil === 'master' && (d.problemas || []).length) { const ps = d.problemas, u = ps[ps.length - 1]; add({ nivel: 'warn', sis: 'portal', ic: '🐞', t: ps.length + (ps.length > 1 ? ' problemas relatados' : ' problema relatado'), p: nomeBonito(u.nome) + ': ' + String(u.descricao).slice(0, 100), origem: 'Relatos', quando: u.criadoEm, acao: () => Ajuda.problemas(), k: 'pr:problemas', ordem: 3 }); }
+    if (S.perfil === 'master' && (d.problemas || []).length) { const ps = d.problemas, u = ps[ps.length - 1]; const na = ps.filter(x => String(x.status).toUpperCase() !== 'EM ANDAMENTO').length; add({ nivel: na ? 'warn' : 'info', sis: 'portal', ic: '🐞', t: ps.length + (ps.length > 1 ? ' problemas relatados' : ' problema relatado') + (ps.length - na ? ' (' + (ps.length - na) + ' em andamento)' : ''), p: nomeBonito(u.nome) + ': ' + String(u.descricao).slice(0, 100), origem: 'Relatos', quando: u.criadoEm, acao: () => Ajuda.problemas(), k: 'pr:problemas', ordem: 3 }); }
     if (['master', 'admin'].indexOf(S.perfil) >= 0 && (S.sistemas || []).indexOf('fleet') >= 0) (d.resgates || []).filter(r => String(r.status).toUpperCase() === 'PENDENTE').forEach(r => { const m = (d.motoristas || []).find(x => String(x.id) === String(r.motoristaId)); add({ nivel: 'warn', sis: 'fleet', ic: '🎁', origem: 'Fleet', ordem: 2, k: 'rg:' + r.id, t: nomeBonito(m ? m.nome : 'Motorista') + ' quer resgatar uma folga', p: r.pontos + ' pontos — aguardando a sua decisão.', quando: r.dataHora, acao: () => Pontos.decidir(r) }); });
     if (['master', 'admin'].indexOf(S.perfil) >= 0 && (S.sistemas || []).indexOf('fleet') >= 0) { const np = (d.checklists || []).filter(c => c.aprovacao === 'PENDENTE'); if (np.length) add({ nivel: 'warn', sis: 'frota', ic: '✅', t: np.length + (np.length > 1 ? ' checklists aguardando aprovação' : ' checklist aguardando aprovação'), p: 'Os pontos do motorista só entram quando você aprova.', origem: 'Checklist', quando: Date.now(), ordem: 2, k: 'ck:pendentes', acao: () => App.abrirAba('checklists') }); }
     if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('manutencao') >= 0) { const g = {}; (d.ocorrencias || []).filter(o => String(o.status).toUpperCase() === 'ABERTA').forEach(o => { (g[o.placa] = g[o.placa] || []).push(o); });
       Object.keys(g).forEach(pl => { const n = g[pl].length; add({ nivel: g[pl].some(o => o.prioridade === 'ALTA') ? 'bad' : 'warn', sis: 'frota', ic: '📣', t: pl + ': ' + n + (n > 1 ? ' ocorrências do motorista' : ' ocorrência do motorista'), p: g[pl].slice(0, 3).map(o => o.item).join(', ') + (n > 3 ? ' e mais ' + (n - 3) : '') + '.', origem: 'Ocorrência', quando: Date.now(), ordem: 3, k: 'oc:' + pl + ':' + n, acao: () => irParaVeiculo(pl) }); }); }
     if (S.pontoPerfil) { PontoPainel.garantir(); if (PontoPainel.item) add(Object.assign({}, PontoPainel.item)); }
-    (d.notificacoes || []).forEach(n => add({ nivel: 'info', sis: 'portal', ic: '🔔', t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm, ordem: 5, k: 'nt:' + (n.id || n.titulo) }));
+    (d.notificacoes || []).forEach(n => add({ nivel: 'info', sis: 'portal', ic: this.icAviso(n), t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm, ordem: 5, k: 'nt:' + (n.id || n.titulo), acao: () => this.abrirAviso(n) }));
     if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('manutencao') >= 0) {      // só quem tem o sistema Manutenção vê os alertas dele
       const hoje = hojeLocal();
       // Alertas agrupados por caminhão e situação (um caminhão com 6 serviços vencidos vira uma linha só)
@@ -63,6 +63,15 @@ const Inicio = {
   quando(ts) { if (!ts) return ''; const t = typeof ts === 'number' ? ts : Date.parse(ts); if (!t || t < 1.5e12 || t > Date.now() + 864e5) return ''; const m = Math.floor((Date.now() - t) / 60000);
     return m < 2 ? 'agora' : m < 60 ? 'há ' + m + ' min' : m < 1440 ? 'há ' + Math.floor(m / 60) + ' h' : 'há ' + Math.floor(m / 1440) + ' d'; },
 
+  icAviso(n) { return { escala: '📅', podio: '🏆', checklist: '✅', resgate: '🗓️' }[n.tipo] || '🔔'; },
+  /** Abre o aviso inteiro; depois de visto ele some do Painel (no servidor também). */
+  abrirAviso(n) {
+    const corpo = h('div', { class: 'aviso-ab' }, h('p', { text: n.texto || '' }));
+    if (n.tipo === 'escala' && App.sessao.perfil === 'motorista') corpo.append(h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver minha escala', onclick: () => { m.fechar(); App.abrirAba('escala'); } })));
+    const m = abrirModal(this.icAviso(n) + ' ' + n.titulo, corpo, { aoFechar: () => { if (App.aba === 'inicio') App.abrirAba('inicio'); } });
+    App.dados.notificacoes = (App.dados.notificacoes || []).filter(x => x !== n);
+    if (n.id) API.chamar('lerAviso', { id: n.id }, { mudo: true }).catch(() => {});
+  },
   linha(it) {
     const el = h('div', { class: 'item' + (it.acao ? ' click' : ''), role: it.acao ? 'button' : null, tabindex: it.acao ? '0' : null },
       h('div', { class: 'ico ' + it.nivel, text: it.ic }),
@@ -126,7 +135,7 @@ const Inicio = {
   renderMotorista(raiz, saud) {
     const S = App.sessao, d = App.dados;
     raiz.append(h('div', { class: 'saudacao' }, h('h2', { text: saud + ', ' + primeiroNome(S.nome) }), h('p', { text: 'Seu caminhão e seus avisos.' })), h('button', { class: 'pt-card', type: 'button', onclick: () => Pontos.abrirMotorista() }, h('span', { text: '⭐' }), h('b', { text: Pontos.saldo() + ' pontos' }), h('small', { text: Pontos.saldo() >= Pontos.custo() ? 'Você já pode resgatar uma folga!' : 'Toque para ver o histórico e resgatar folgas' })));
-    (d.notificacoes || []).forEach(n => raiz.append(this.linha({ nivel: 'info', ic: '🔔', t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm })));
+    (d.notificacoes || []).forEach(n => raiz.append(this.linha({ nivel: n.tipo === 'escala' ? 'warn' : 'info', ic: this.icAviso(n), t: n.titulo, p: n.texto, origem: 'Aviso · toque para abrir', quando: n.criadoEm, acao: () => this.abrirAviso(n) })));
     raiz.append(Motorista.cartaoHoje());
     return raiz;
   }
