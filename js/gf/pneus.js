@@ -474,6 +474,7 @@ function abrirModalPneu(codigo) {
   document.getElementById('pnTitulo').textContent = p ? 'Editar pneu ' + p.codigo : 'Cadastrar pneu';
   const set = (id, v) => { document.getElementById(id).value = v; };
   set('pnCodigo', p ? p.codigo : ''); document.getElementById('pnCodigo').disabled = !!p;
+  set('pnQtd', 1); document.getElementById('pnQtdWrap').style.display = p ? 'none' : ''; document.getElementById('pnCodDica').style.display = p ? 'none' : '';
   set('pnMarca', p ? p.marca : ''); set('pnModelo', p ? p.modelo : ''); set('pnMedida', p ? p.medida : '');
   set('pnRecap', p ? p.recapagens : 0); set('pnKmRodado', ''); set('pnObs', p ? p.obs : '');
   document.getElementById('pnNovoWrap').style.display = p ? 'none' : 'block';
@@ -484,6 +485,7 @@ function abrirModalPneu(codigo) {
 function pnMontadoChange() {
   const placa = document.getElementById('pnMontado').value;
   document.getElementById('pnMontadoWrap').style.display = placa ? 'flex' : 'none';
+  const q = document.getElementById('pnQtd'); q.disabled = !!placa; if (placa) q.value = 1;   // montado direto: 1 por vez
   if (!placa) return;
   const livres = posicoesDoVeiculo(placa).filter(pos => !pneuNaPosicao(placa, pos.cod));
   document.getElementById('pnPosicao').innerHTML = livres.length ? livres.map(pos => `<option value="${pos.cod}">${pos.nome}</option>`).join('') : '<option value="">Sem posição livre</option>';
@@ -493,7 +495,8 @@ function pnMontadoChange() {
 async function salvarPneuModal() {
   const g = id => document.getElementById(id).value.trim();
   const dados = { codigo: g('pnCodigo'), marca: g('pnMarca'), modelo: g('pnModelo'), medida: g('pnMedida'), recapagens: parseInt(g('pnRecap'), 10) || 0, obs: g('pnObs') };
-  if (!dados.codigo) return toast('Informe o código do pneu.', true);
+  if (pneuEditCodigo && !dados.codigo) return toast('Informe o código do pneu.', true);
+  if (!pneuEditCodigo) { const q = parseInt(g('pnQtd'), 10); if (!(q >= 1 && q <= 50)) return toast('Quantidade deve ser de 1 a 50.', true); dados.quantidade = q; }
   let ok;
   if (pneuEditCodigo) { dados.codigo = pneuEditCodigo; ok = await pneusApi('updatePneu', dados, 'Pneu atualizado.'); }
   else {
@@ -505,7 +508,7 @@ async function salvarPneuModal() {
       if (isNaN(km) || km < 0) return toast('Informe o KM do caminhão na montagem.', true);
       Object.assign(dados, { placa, posicao: pos, kmMontagem: km });
     }
-    ok = await pneusApi('addPneu', dados, 'Pneu cadastrado.');
+    ok = await pneusApi('addPneu', dados, dados.quantidade > 1 ? dados.quantidade + ' pneus lançados no estoque.' : 'Pneu cadastrado.');
     if (ok && placa) { pneusPlaca = placa; pneusPosSel = dados.posicao; renderPneus(); }
   }
   if (ok) closeModal('modalPneu');

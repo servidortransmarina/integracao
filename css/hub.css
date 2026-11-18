@@ -632,3 +632,6 @@ button.ckf-gal{border:0;padding:0;background:none;cursor:zoom-in;font:inherit;co
 .oc-lado .badge{white-space:nowrap}
 @media (max-width:640px){.oc-linha{grid-template-columns:1fr}.oc-lado{flex-direction:row;justify-content:space-between;align-items:center}}
 .oc-placa{display:inline-block;background:#111;color:#fff;border-radius:5px;padding:1px 6px;font-size:12px;letter-spacing:.04em;margin-right:4px;cursor:pointer}
+/* cadastro de pneu: campos sempre lado a lado, em duas colunas */
+#modalPneu .row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:end}
+#modalPneu .row .field{min-width:0}
