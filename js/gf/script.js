@@ -546,7 +546,7 @@ function montarCardManutMotorista(x) {
   return `<div class="alert-card pendente mm-card"><div class="alert-info"><div class="alert-title">${placaClicavel(x.placa)} 🔧 ${escHtml(x.servico)}</div>
     <div class="alert-sub">${fmtData(String(x.data).slice(0, 10))}${km}${val}${x.local ? ' · ' + escHtml(x.local) : ''}</div>
     <div class="alert-sub">Lançado por ${escHtml(x.motoristaNome || 'motorista')}${x.nota ? ' · 🧾 com nota' : ' · sem nota'}${x.obs ? ' — ' + escHtml(x.obs) : ''}</div></div>
-    <div class="alert-actions">${x.nota ? `<button class="btn small secondary" onclick="verNota('${escAttr(x.nota)}','${escAttr(x.servico)}')">🧾 Nota</button>` : ''}<button class="btn small" onclick="abrirAprovarManut('${escAttr(x.id)}')">Conferir</button></div></div>`;
+    <div class="alert-actions">${x.nota ? `<button class="btn small secondary ver" onclick="verNota('${escAttr(x.nota)}','${escAttr(x.servico)}')">🧾 Nota</button>` : ''}<button class="btn small" onclick="abrirAprovarManut('${escAttr(x.id)}')">Conferir</button></div></div>`;
 }
 function abrirAprovarManut(id) {
   const x = manutMotoristaPendentes().find(m => m.id === id); if (!x) return toast('Esse lançamento já foi decidido.');

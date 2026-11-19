@@ -65,7 +65,7 @@ function cartaoOS(o) {
   else if (o.status === 'EM_ATENDIMENTO') acoes = b('🛒 Aguardando peça', 'osPeca', 'secondary') + b('✅ Concluir', 'osConcluir');
   else if (o.status === 'AGUARDANDO_PECA') acoes = b('📦 Peça chegou', 'osPecaChegou', 'secondary') + b('✅ Concluir', 'osConcluir');
   if (aberta && o.status !== 'ABERTA') acoes = b('Classificar', 'osClassificar', 'secondary') + acoes;
-  acoes += b('🖨️', 'osImprimirUma', 'secondary') + (aberta && gest ? b('Cancelar', 'osCancelar', 'secondary os-canc') : '');
+  acoes += b('🖨️', 'osImprimirUma', 'secondary os-imp') + (aberta && gest ? b('Cancelar', 'osCancelar', 'secondary os-canc') : '');
   return `<div class="os-card ${cr.cls}${aberta ? '' : ' fechada'}">
     <div class="os-card-top"><span class="os-num">${escHtml(o.numero || '')}</span>${placaClicavel(o.placa)}<span class="crit-chip ${cr.cls}">${cr.ic} ${c}</span>${tagClasse(normClasse(o.tipo) || 'CORR-PL')}${o.status !== 'CONCLUIDA' && o.status !== 'CANCELADA' ? '' : ''}</div>
     <ul class="os-itens">${itens.map(i => `<li>${escHtml(i.nome)}${i.crit && i.crit !== c ? ` <small>(${escHtml(i.crit)})</small>` : ''}</li>`).join('')}</ul>

@@ -345,7 +345,7 @@ const Motorista = {
 
   /* ---------- GESTÃO: listas ---------- */
   gestaoChecklists() {
-    const pend = c => c.aprovacao === 'PENDENTE', gestor = ['master', 'admin'].indexOf(this.d().perfil) >= 0;
+    const pend = c => c.aprovacao === 'PENDENTE', gestor = ['master', 'admin'].indexOf(this.d().perfil) >= 0 && !App.sessao.chefe;
     const l = (this.d().checklists || []).slice().sort((a, b) => (pend(b) - pend(a)) || (String(b.data).slice(0, 10) + b.hora).localeCompare(String(a.data).slice(0, 10) + a.hora)).slice(0, 100);
     const np = l.filter(pend).length, cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }), np && gestor ? h('div', { class: 'aviso-aprov', text: np + (np > 1 ? ' checklists aguardam' : ' checklist aguarda') + ' sua aprovação' }) : null);
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum checklist enviado ainda.' }));

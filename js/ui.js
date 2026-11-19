@@ -41,7 +41,8 @@ function comOlho(input) {
 function campo(rotulo, input, dica) { return h('div', { class: 'field' }, h('label', { text: rotulo }), input.type === 'password' ? comOlho(input) : input, dica ? h('div', { class: 'hint', text: dica }) : null); }
 const REGRA_SENHA = 'Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.';
 
-const NOME_PERFIL = { master: 'Master', admin: 'Administrador', mecanico: 'Mecânico', motorista: 'Motorista' };
+const NOME_PERFIL = { master: 'Master', chefe: 'Chefe (só visualiza)', admin: 'Administrador', mecanico: 'Mecânico', motorista: 'Motorista' };
+const rotuloPerfil = S => S && S.chefe ? NOME_PERFIL.chefe : NOME_PERFIL[S && S.perfil] || '';
 const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
 
 

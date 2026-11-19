@@ -20,7 +20,22 @@ const API = {
    * opc.fundo: tarefa de segundo plano (histórico, atualização automática, "online"): sem barrinha, uma por vez
    * e só quando a pessoa não está esperando nada — lançamentos e telas abertas por ela sempre passam na frente.
    */
+  /* Perfil CHEFE (só visualiza): o servidor já recusa qualquer gravação; aqui a gente nem envia e avisa na hora. Mesma lista do Api.gs. */
+  CHEFE_LEITURA: ['ping', 'logout', 'me', 'alterarSenha', 'solicitarTrocaEmail', 'confirmarTrocaEmail', 'atualizarDados', 'getBootstrap', 'getHistorico', 'lerAviso', 'presenca', 'relatarProblema',
+    'checklistDetalhe', 'rankingPontos', 'listarUsuarios', 'listarPendenciasPlaca', 'getPrevisao', 'escCarregar', 'escHistorico', 'escDadosCarregar', 'escDadosVersoes', 'escVerificarLimpeza',
+    'financeiroRotaCarregar', 'financeiroRotaResumo', 'financeiroRotaVersoes', 'financeiroLojaCarregar', 'financeiroLojaResumo'],
+  CHEFE_PONTO: ['getDadosADM', 'getPendentesADM', 'getAcoesCartasADM', 'getAssinaturasResponsaveisADM', 'getDadosEncarregado', 'getSaldoHoras', 'getBancoHorasHistorico', 'getBancoCompleto',
+    'getOpcoesExtratoBanco', 'getExtratosBanco', 'estadoCapturaBancoCompleto', 'relatorioBancoHoras', 'getFuncionarios', 'getFolgas', 'estadoSincronizacaoMob'],
+  soLeitura(action, data) {
+    if (!(window.App && App.sessao && App.sessao.chefe)) return false;
+    return action === 'ponto' ? this.CHEFE_PONTO.indexOf(data && data.acao) < 0 : this.CHEFE_LEITURA.indexOf(action) < 0;
+  },
   chamar(action, data, opc) {
+    if (this.soLeitura(action, data)) {
+      // o que a tela já tinha mudado sozinha (antes de gravar) volta ao que está no servidor
+      clearTimeout(this._desfaz); this._desfaz = setTimeout(() => { try { App.recarregar(true); } catch (e) {} }, 400);
+      return Promise.reject(new Error('Seu acesso é só de visualização: você pode ver tudo, mas não alterar.'));
+    }
     if (opc && opc.fundo) {
       const p = this._filaFundo.then(() => this.ocioso()).then(() => this._enviar(action, data, opc, true));
       this._filaFundo = p.catch(() => {}); return p;

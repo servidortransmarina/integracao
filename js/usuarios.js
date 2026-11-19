@@ -15,7 +15,7 @@ const Usuarios = {
       if (pend.length) {
         caixa.append(h('h2', { style: 'font-size:15px', text: 'Aguardando aprovação (' + pend.length + ')' }));
         pend.forEach(u => {
-          const sel = h('select', {}, ['motorista', 'mecanico', 'admin'].map(p => h('option', { value: p, selected: p === (u.perfilSugerido || 'motorista') ? true : null }, NOME_PERFIL[p])));
+          const sel = h('select', {}, ['motorista', 'mecanico', 'admin', 'chefe'].map(p => h('option', { value: p, selected: p === (u.perfilSugerido || 'motorista') ? true : null }, NOME_PERFIL[p])));
           caixa.append(h('div', { class: 'card', style: 'padding:14px' }, h('b', { text: nomeBonito(u.nome) }), h('div', { class: 'hint', text: u.usuario + ' · ' + u.email + ' · CPF ' + (u.cpf || '—') }),
             h('div', {}, u.identidade === 'VERIFICADA' ? h('span', { class: 'badge green', text: 'CPF confere com cadastro' }) : u.identidade === 'DIVERGENTE' ? h('span', { class: 'badge red', text: 'CPF diverge do cadastro' }) : h('span', { class: 'badge gray', text: 'Sem cadastro para conferir' })),
             h('div', { class: 'row', style: 'margin-top:10px' }, h('div', { class: 'field', style: 'margin:0' }, sel),
@@ -26,7 +26,7 @@ const Usuarios = {
       caixa.append(h('h2', { style: 'font-size:15px;margin-top:8px', text: 'Todos os usuários' }));
       caixa.append(h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Usuário', 'Nome', 'Status', 'Perfil', ''].map(t => h('th', { text: t })))),
         h('tbody', {}, outros.map(u => {
-          const ehMaster = u.perfil === 'master', sel = h('select', { disabled: ehMaster || u.usuario === App.sessao.usuario ? true : null }, ehMaster ? [h('option', {}, 'Master')] : ['motorista', 'mecanico', 'admin'].map(p => h('option', { value: p, selected: p === u.perfil ? true : null }, NOME_PERFIL[p])));
+          const ehMaster = u.perfil === 'master', sel = h('select', { disabled: ehMaster || App.sessao.chefe || u.usuario === App.sessao.usuario ? true : null }, ehMaster ? [h('option', {}, 'Master')] : ['motorista', 'mecanico', 'admin', 'chefe'].map(p => h('option', { value: p, selected: p === u.perfil ? true : null }, NOME_PERFIL[p])));
           if (!ehMaster) sel.onchange = () => { const antes = u.perfil, novo = sel.value; this.agir(() => API.chamar('alterarPerfil', { usuario: u.usuario, perfil: novo }), () => { u.perfil = novo; }, () => { u.perfil = antes; }); };
           const cor = u.status === 'ATIVO' ? 'green' : u.status === 'INATIVO' || u.status === 'RECUSADO' ? 'red' : 'gray';
           const acao = ehMaster || u.usuario === App.sessao.usuario || ['ATIVO', 'INATIVO'].indexOf(u.status) < 0 ? '' :

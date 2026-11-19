@@ -78,6 +78,7 @@ const App = {
     const me = (login.token && login.usuario && login.acessos) ? login : await API.chamar('me');     // o login já traz tudo: poupa uma ida ao servidor (~4 s)
     this.sessao = { usuario: me.usuario, nome: me.nome, email: me.email, avatar: me.avatar || '🔧', perfil: (me.acessos && me.acessos.frota) || '', acessos: me.acessos, pontoPerfil: me.pontoPerfil || '', sistemas: me.sistemas || sistemasPadrao((me.acessos && me.acessos.frota) || '') };
     if (!this.sessao.perfil) { API.guardar(''); throw new Error('Sua conta ainda não tem acesso a nenhum sistema.'); }
+    this.sessao.chefe = !!me.chefe; document.body.classList.toggle('so-leitura', this.sessao.chefe);
     $('#auth').hidden = true; $('#app').hidden = false; corBarra('#f3f4f6');
     this.montarUsuario(); this.montarNavegacao();
     if (login.trocarSenha) { exigirTrocaSenha(() => this.recarregar()); return; }
@@ -129,14 +130,14 @@ const App = {
   montarUsuario() {
     const S = this.sessao, pend = S.perfil === 'master' ? (Usuarios.pendentes || 0) + ((this.dados && this.dados.pendenciasPlaca) || 0) : 0;
     const av = () => { const e = h('span', { class: 'avatar' }, avatarNo(S.avatar)); if (pend) e.append(h('span', { class: 'dot', text: String(pend) })); return e; };
-    const su = limpar($('#sideUser')); su.append(av(), h('div', {}, h('div', { class: 'nm', text: nomeBonito(S.nome) }), h('small', { text: NOME_PERFIL[S.perfil] || '' })));
+    const su = limpar($('#sideUser')); su.append(av(), h('div', {}, h('div', { class: 'nm', text: nomeBonito(S.nome) }), h('small', { text: rotuloPerfil(S) })));
     su.onclick = e => { e.stopPropagation(); this.menuPerfil(su, true); };
     const tu = limpar($('#topUser')); tu.append(avatarNo(S.avatar)); if (pend) tu.append(h('span', { class: 'dot', text: String(pend) }));
     tu.onclick = e => { e.stopPropagation(); this.menuPerfil(tu, false); };
   },
   menuPerfil(ancora, paraCima) {
     const antigo = $('#perfilPop'); if (antigo) { antigo.remove(); return; }
-    const S = this.sessao, pop = h('div', { class: 'pop', id: 'perfilPop' }, h('div', { class: 'nome' }, nomeBonito(S.nome), h('small', { text: NOME_PERFIL[S.perfil] })), h('hr'),
+    const S = this.sessao, pop = h('div', { class: 'pop', id: 'perfilPop' }, h('div', { class: 'nome' }, nomeBonito(S.nome), h('small', { text: rotuloPerfil(S) })), h('hr'),
       h('button', { onclick: () => { pop.remove(); Perfil.abrir(); } }, '✏️ Editar perfil'));
     if (S.perfil === 'master') {
       const np = (this.dados && this.dados.pendenciasPlaca) || 0;
@@ -270,7 +271,7 @@ const App = {
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
-    API.guardar(''); Online.parar(); this.sessao = null; this.dados = null; this.hist = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
+    API.guardar(''); Online.parar(); document.body.classList.remove('so-leitura'); this.sessao = null; this.dados = null; this.hist = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
     $('#app').hidden = true; $('#auth').hidden = false; corBarra('#140405'); Auth.mostrar('entrar');
@@ -355,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4c',
+  VERSAO: '4d',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */
