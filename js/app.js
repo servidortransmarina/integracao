@@ -38,6 +38,10 @@ const ABAS = [
   { id: 'fin-loja-op', sis: 'financeiro', nome: 'Operacional', curto: 'Operacional', ic: '🏬', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:operacional' },
   { id: 'fin-loja-fin', sis: 'financeiro', nome: 'Financeiro', curto: 'Financeiro', ic: '💵', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:financeiro' },
   { id: 'fin-loja-cb', sis: 'financeiro', nome: 'Relatório CB', curto: 'CB', ic: '📄', perfis: GESTAO_P, visivel: () => Financeiro.area === 'loja', fin: 'loja:cb' },
+  { id: 'fin-comb-lanc', sis: 'financeiro', nome: 'Lançar faturas', curto: 'Lançar', ic: '⛽', perfis: GESTAO_P, visivel: () => Financeiro.area === 'comb', hub: () => Comb.tela('lanc') },
+  { id: 'fin-comb-rel', sis: 'financeiro', nome: 'Relatório do pagamento', curto: 'Relatório', ic: '📄', perfis: GESTAO_P, visivel: () => Financeiro.area === 'comb', hub: () => Comb.tela('rel') },
+  { id: 'fin-comb-etq', sis: 'financeiro', nome: 'Etiquetas', curto: 'Etiquetas', ic: '🏷️', perfis: GESTAO_P, visivel: () => Financeiro.area === 'comb', hub: () => Comb.tela('etq') },
+  { id: 'fin-comb-cad', sis: 'financeiro', nome: 'Cadastro', curto: 'Cadastro', ic: '👥', perfis: GESTAO_P, visivel: () => Financeiro.area === 'comb', hub: () => Comb.tela('cad') },
   { id: 'esc-escala', sis: 'escalas', nome: 'Escala do dia', curto: 'Escala', ic: '📅', perfis: GESTAO_P, esc: 'scale' },
   { id: 'esc-cad', sis: 'escalas', nome: 'Cadastros', curto: 'Cadastros', ic: '👥', perfis: GESTAO_P, esc: 'catalog' },
   { id: 'esc-fin', sis: 'escalas', nome: 'Financeiro da escala', curto: 'Financeiro', ic: '💰', perfis: GESTAO_P, esc: 'finance', visivel: () => (App.sessao.sistemas || []).indexOf('financeiro') >= 0 },
@@ -356,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4d',
+  VERSAO: '4e',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

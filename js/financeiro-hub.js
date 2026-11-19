@@ -1,8 +1,13 @@
 /* Financeiro dentro do Hub. Primeiro a pessoa escolhe Rota ou Loja; a Rota (fechamento de fretes e ticket médio) roda num iframe da mesma origem (site/financeiro/).
    Sessão e chamadas ao servidor vêm do Hub (window.HubFin). */
 const Financeiro = {
-  area: null,                 // null = tela de escolha | 'rota' | 'loja'
+  area: null,                 // null = tela de escolha | 'rota' | 'loja' | 'comb'
   resumoCache: null,
+  resumoCombCache: null,
+  resumoComb() {
+    if (this.resumoCombCache && Date.now() - this.resumoCombCache.t < 60000) return Promise.resolve(this.resumoCombCache.r);
+    return API.chamar('combResumo', {}, { mudo: true }).then(r => { this.resumoCombCache = { t: Date.now(), r }; return r; });
+  },
   resumoLojaCache: null,
   resumoLoja() {
     if (this.resumoLojaCache && Date.now() - this.resumoLojaCache.t < 60000) return Promise.resolve(this.resumoLojaCache.r);
@@ -33,9 +38,19 @@ const Financeiro = {
     }).catch(() => { lv.textContent = 'Indisponível'; ln.textContent = 'Não consegui ler os números agora. Você ainda pode abrir a Loja.'; });
     const loja = h('section', { class: 'fo-painel fo-loja' }, h('h2', { text: 'Loja' }), h('p', { class: 'fo-sub', text: 'Faturamento de frete da Casas Bahia: viagens, depósitos, saldo e relatório da semana.' }),
       h('div', { class: 'fo-num' }, lv, ln), ls, lp, h('button', { class: 'fo-abrir', type: 'button', text: 'Abrir Loja', onclick: () => this.entrar('loja') }));
-    return h('div', { class: 'fo' }, h('div', { class: 'fo-grade' }, rota, loja));
+    const cv = h('div', { class: 'fo-saldo', text: '…' }), cn = h('div', { class: 'fo-nota', text: 'Pagamento em aberto' }), cs = h('div', { class: 'fo-stats' }), cp = h('div', { class: 'fo-pe' });
+    this.resumoComb().then(r => {
+      const a = r.aberto;
+      if (!a) { cv.textContent = '—'; cn.textContent = 'Nenhum pagamento em aberto'; cp.textContent = 'Abra o pagamento e lance as faturas de segunda-feira.'; return; }
+      cv.textContent = fmtMoeda(a.total); cn.textContent = 'Pagamento de ' + a.data.split('-').reverse().join('/');
+      cs.append(stat('Descontar dos agregados', fmtMoeda(a.agregados)), stat('Frota própria', fmtMoeda(a.frota)));
+      cp.textContent = a.faturas + (a.faturas === 1 ? ' fatura lançada' : ' faturas lançadas') + ' neste pagamento.';
+    }).catch(() => { cv.textContent = 'Indisponível'; cn.textContent = 'Não consegui ler os números agora. Você ainda pode abrir o Combustível.'; });
+    const comb = h('section', { class: 'fo-painel fo-comb' }, h('h2', { text: 'Combustível' }), h('p', { class: 'fo-sub', text: 'Faturas do posto com desconto: agregados a descontar, frota própria comparada com o robô e etiquetas.' }),
+      h('div', { class: 'fo-num' }, cv, cn), cs, cp, h('button', { class: 'fo-abrir', type: 'button', text: 'Abrir Combustível', onclick: () => this.entrar('comb') }));
+    return h('div', { class: 'fo' }, h('div', { class: 'fo-grade tres' }, rota, loja, comb));
   },
-  entrar(area) { this.area = area; App.abrirAba(area === 'rota' ? 'fin-rota-lanc' : 'fin-loja-op'); },
+  entrar(area) { this.area = area; App.abrirAba(area === 'rota' ? 'fin-rota-lanc' : area === 'comb' ? 'fin-comb-lanc' : 'fin-loja-op'); },
   voltar() { this.area = null; App.abrirAba('fin-escolha'); }
 };
 const FinHub = {
@@ -70,7 +85,7 @@ const FinHub = {
     Object.keys(this.frames).forEach(k => this.frames[k].remove());
     if (this._aj) window.removeEventListener('resize', this._aj);
     this._aj = null; this.frames = {}; this.pronto = {}; this.pendente = {}; this.aba = null; this.area = null;
-    Financeiro.area = null; Financeiro.resumoCache = null; Financeiro.resumoLojaCache = null; this.esconder();
+    Financeiro.area = null; Financeiro.resumoCache = null; Financeiro.resumoLojaCache = null; Financeiro.resumoCombCache = null; if (typeof Comb !== 'undefined') Comb.reiniciar(); this.esconder();
   }
 };
 window.addEventListener('message', e => {
