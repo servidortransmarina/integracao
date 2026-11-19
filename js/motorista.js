@@ -87,7 +87,19 @@ const Motorista = {
   checklist() {
     const d = this.d(), mod = d.checklistModelo; if (!mod) return h('div', { class: 'card soon' }, 'Checklist indisponível. Atualize a página.');
     const esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : ''), km = h('input', { type: 'number', inputmode: 'numeric', min: 1, placeholder: 'KM atual do painel' });
-    const resp = {}, qtd = {}, obs = {}, linhas = {};
+    const resp = {}, qtd = {}, obs = {}, linhas = {}, fotoItem = {};
+    // foto de cada item (opcional): itens que já têm foto no cartão de fotos (pneus e cabine) não pedem de novo
+    const jaTemFoto = (mod.fotos && mod.fotos.pneus || []).concat(mod.fotos && mod.fotos.cabineItem ? [mod.fotos.cabineItem] : []);
+    const comFotoPropria = mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
+    const pintaCont = () => { const n = comFotoPropria.filter(n => fotoItem[n]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + comFotoPropria.length + (n === comFotoPropria.length ? ' ✓ (+ pontos extras)' : ' · foto de todos = pontos extras'); };
+    const botaoFoto = nome => {
+      const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true }), bt = h('button', { type: 'button', class: 'ck-foto', 'aria-label': 'Foto de ' + nome, title: 'Foto (opcional)' });
+      const pinta = () => { const f = fotoItem[nome]; limpar(bt); bt.className = 'ck-foto' + (f ? ' tem ' + f.estado : ''); if (f) bt.append(h('img', { src: f.dados, alt: '' }), h('i', { text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' })); else bt.append('📷'); pintaCont(); };
+      inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
+        try { const f = { tipo: 'item', slot: nome.slice(0, 12), dados: await this.reduzirFoto(arq), estado: 'enviando' }; f.aviso = pinta; fotoItem[nome] = f; this.enviarFoto(f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
+      bt.onclick = () => { const f = fotoItem[nome]; if (f && f.estado === 'erro') { this.enviarFoto(f, () => placa.value); return; } inp.click(); };
+      pinta(); return h('span', { class: 'ck-foto-cx' }, bt, inp);
+    };
     const feitoHoje = (d.checklists || []).some(c => String(c.data).slice(0, 10) === Motorista.hoje());
     const total = mod.categorias.reduce((n, c) => n + c.itens.length, 0), prog = h('span', { class: 'ck-prog' });
     const atualizarProg = () => { const n = Object.keys(resp).length; prog.textContent = n + ' de ' + total + ' itens'; };
@@ -98,14 +110,17 @@ const Motorista = {
       h('div', { class: 'card' }, h('h2', { text: 'Checklist do dia' }), feitoHoje ? h('div', { class: 'ck-aviso', text: '✅ Você já enviou um checklist hoje. Só envie outro se trocou de caminhão.' }) : null,
         h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'KM atual' }), km)),
         h('div', { class: 'ck-leg' }, h('span', { class: 'ok' }, h('i', { text: '✓' }), 'Ok: funcionando bem'), h('span', { class: 'warn' }, h('i', { text: '!' }), 'Atenção: algo estranho ou gasto'), h('span', { class: 'bad' }, h('i', { text: '✕' }), 'Ruim: defeito (a oficina é avisada)'),
-          h('button', { class: 'btn small secondary', type: 'button', text: '? Como fazer', onclick: () => Ajuda.abrir('checklist') }))));
+          h('button', { class: 'btn small secondary', type: 'button', text: '? Como fazer', onclick: () => Ajuda.abrir('checklist') })), h('small', { class: 'ck-imp-leg', text: '⛔ item impeditivo: marcado como Ruim, o caminhão fica bloqueado na hora e a oficina é avisada.' }), contFotos));
     mod.categorias.forEach(c => {
       const cx = h('div', { class: 'card ck-cat' }, h('h3', { text: c.cat }));
       cx.append(h('div', { class: 'ck-cols' }, h('span', { text: 'Ok' }), h('span', { text: 'Atenção' }), h('span', { text: 'Ruim' })));
       c.itens.forEach(nome => {
         const area = h('div', { class: 'ck-obs', hidden: true }, h('input', { type: 'text', maxlength: 300, placeholder: 'Descreva o problema', oninput: e => { obs[nome] = e.target.value; } }));
         const linha = h('div', { class: 'ck-lin' }); linhas[nome] = linha;
-        linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: nome }), h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), area);
+        const imp = (mod.impeditivos || []).indexOf(nome) >= 0;
+        linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome' }, nome, imp ? h('span', { class: 'ck-imp', title: 'Item impeditivo: Ruim aqui bloqueia o caminhão na hora', 'aria-label': 'item impeditivo', text: '⛔' }) : null),
+          jaTemFoto.indexOf(nome) < 0 ? botaoFoto(nome) : h('span', { class: 'ck-foto-cx vazio' }),
+          h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), area);
         cx.append(linha);
       });
       raiz.append(cx);
@@ -129,14 +144,19 @@ const Motorista = {
       const itens = Object.keys(resp).map(n => ({ item: n, status: resp[n], descricao: obs[n] || '' })).concat(mod.quantidades.map(n => ({ item: n, quantidade: qtd[n] })));
       env.disabled = true; env.textContent = 'Enviando fotos…';
       try {
-        await fotosCx.esperar(); env.textContent = 'Enviando…';
-        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos: fotosCx.valor(), outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
+        await fotosCx.esperar();
+        const fi = Object.keys(fotoItem).map(n => fotoItem[n]); await Promise.all(fi.map(f => f.estado === 'enviando' ? f.pronta : null));
+        const fotos = fotosCx.valor(); fotos.itens = {}; Object.keys(fotoItem).forEach(n => { if (fotoItem[n].estado === 'ok' && fotoItem[n].id) fotos.itens[n] = fotoItem[n].id; });
+        env.textContent = 'Enviando…';
+        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos, outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
         App.recarregar(true);
-        const m = abrirModal('Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })), h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
+        const m = abrirModal(r.bloqueado ? 'Caminhão BLOQUEADO 🔴' : 'Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })),
+          r.bloqueado ? h('div', { class: 'ck-bloq' }, h('b', { text: 'Não saia com este caminhão.' }), h('span', { text: ' Você marcou como ruim: ' + (r.impeditivos || []).join(', ') + '. A oficina e a gestão já foram avisadas.' })) : null,
+          h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
           h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver no histórico', onclick: () => { m.fechar(); App.abrirAba('historico'); } }))), { aoFechar: () => App.abrirAba('inicio') });
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar checklist'; }
     };
-    atualizarProg();
+    atualizarProg(); pintaCont();
     raiz.append(outroCx, fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
     return raiz;
   },
@@ -276,7 +296,7 @@ const Motorista = {
     let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; }
     if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos (foi enviado antes da exigência).' });
     const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam;
-    const itens = []; (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' });
+    const itens = []; (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' }); Object.keys(f.i || {}).forEach(n => itens.push({ id: f.i[n], leg: n }));
     const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg }));
     const g = h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos' }));
     const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
@@ -340,7 +360,17 @@ const Motorista = {
     let det; try { det = await API.chamar('checklistDetalhe', { id: c.id }, { mudo: true }); } catch (e) { corpo.textContent = e.message; return; }
     corpo.textContent = '';
     // cada ocorrência: Pendente (vai para a oficina no GF) ou Resolvido (já foi resolvido, não vira pendência)
-    const escolha = {}, ocs = det.ocorrencias || [], decide = c.aprovacao === 'PENDENTE' && gestor;
+    const escolha = {}, todas = det.ocorrencias || [], decide = c.aprovacao === 'PENDENTE' && gestor;
+    // ✕ em item impeditivo: já virou OS P1 e bloqueou o caminhão. A gestão confere e pode revogar.
+    const imp = todas.filter(o => String(o.criticidade).toUpperCase() === 'P1' && o.status === 'ABERTA'), ocs = todas.filter(o => imp.indexOf(o) < 0);
+    if (imp.length) {
+      const v = ((typeof db !== 'undefined' && db.veiculos) || []).find(x => x.placa === c.placa), bloq = !!(v && v.paradoDesde);
+      const rev = gestor && bloq ? h('button', { class: 'btn small', type: 'button', text: '✅ Revogar bloqueio', onclick: async () => {
+        const mt = await pedirTextoCustom('Revogar bloqueio de ' + c.placa, 'Por que o caminhão pode rodar? Fica registrado.'); if (mt === null) return; if (String(mt).trim().length < 3) return toast('Escreva o motivo.', true);
+        try { await API.chamar('revogarBloqueio', { placa: c.placa, motivo: String(mt).trim() }); toast(c.placa + ' liberado.'); m.fechar(); App.recarregar(true); } catch (e) { toast(e.message, true); } } }) : null;
+      corpo.append(h('div', { class: 'ck-bloq gestao' }, h('div', {}, h('b', { text: bloq ? '🔴 Caminhão bloqueado automaticamente' : 'Bloqueio automático (já liberado)' }),
+        h('span', { text: ' Item impeditivo marcado como ruim: ' + imp.map(o => o.item + (o.descricao ? ' (' + o.descricao + ')' : '')).join(', ') + '. Já está na oficina como OS P1.' })), rev));
+    }
     ocs.forEach(o => {
       escolha[o.id] = 'pendente';
       const seg = h('div', { class: 'oc-seg', role: 'radiogroup', 'aria-label': 'Situação de ' + o.item });
@@ -349,7 +379,7 @@ const Motorista = {
       corpo.append(h('div', { class: 'hist-lin oc-lin' }, h('div', {}, h('b', { text: '⚠️ ' + o.item }), h('small', { text: o.descricao })), decide ? seg : h('span', { class: 'badge ' + (o.prioridade === 'ALTA' ? 'red' : 'amber'), text: o.prioridade === 'ALTA' ? 'ruim' : 'atenção' })));
     });
     if (ocs.length && decide) corpo.append(h('small', { class: 'hint', text: 'Pendente vai para a oficina (GF). Marque Resolvido no que já foi resolvido.' }));
-    if (!ocs.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
+    if (!ocs.length && !imp.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
     corpo.append(this.galeria(c));
     if (c.aprovacao === 'APROVADO' || c.aprovacao === 'REJEITADO') corpo.append(h('p', { class: 'hint', text: (c.aprovacao === 'APROVADO' ? 'Aprovado' : 'Devolvido') + ' por ' + c.aprovadoPor + (c.obsAprov ? ' · ' + c.obsAprov : '') }));
     if (c.aprovacao === 'PENDENTE' && gestor) {

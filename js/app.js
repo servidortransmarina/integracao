@@ -12,9 +12,10 @@ const SISTEMAS = [
 const ABAS = [
   { id: 'inicio', sis: 'painel', nome: 'Painel Transmarina', curto: 'Painel', ic: '🏠', perfis: TODOS_P },
   { id: 'frota', sis: 'frota', nome: 'Frota & Manutenções', curto: 'Frota', ic: '🚛', perfis: OFICINA_P, gf: 'manutencao' },
-  { id: 'dashboard', sis: 'frota', nome: 'Dashboard Analítico', curto: 'Dashboard', ic: '📊', perfis: OFICINA_P, gf: 'dashboard' },
+  { id: 'dashboard', sis: 'frota', nome: 'Dashboard', curto: 'Dashboard', ic: '📊', perfis: OFICINA_P, gf: 'dashboard' },
   { id: 'alertas', sis: 'frota', nome: 'Alertas', curto: 'Alertas', ic: '🔔', perfis: OFICINA_P, gf: 'alertas', contador: () => Hub.contarAtencao() },
-  { id: 'pneus', sis: 'frota', nome: 'Controle de Pneus', curto: 'Pneus', ic: '🛞', perfis: GESTAO_P, gf: 'pneus' },
+  { id: 'ordens', sis: 'frota', nome: 'Ordens de serviço', curto: 'OS', ic: '🧾', perfis: OFICINA_P, gf: 'ordens', contador: () => (typeof contarOSAtencao === 'function' ? contarOSAtencao() : 0) },
+  { id: 'pneus', sis: 'frota', nome: 'Pneus', curto: 'Pneus', ic: '🛞', perfis: GESTAO_P, gf: 'pneus' },
   { id: 'checklists', sis: 'fleet', nome: 'Checklist', curto: 'Checklist', ic: '✅', perfis: TODOS_P, hub: () => App.sessao.perfil === 'motorista' ? Motorista.checklist() : Motorista.gestaoChecklists() },
   { id: 'abastecimento', sis: 'fleet', nome: 'Abastecimento', curto: 'Abastecer', ic: '⛽', perfis: ['motorista'], hub: () => Motorista.abastecer() },
   { id: 'defeito', sis: 'fleet', nome: 'Relatar defeito', curto: 'Defeito', ic: '🛠️', perfis: ['motorista'], hub: () => Motorista.defeito() },
@@ -354,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4a',
+  VERSAO: '4c',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

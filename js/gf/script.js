@@ -6,7 +6,9 @@ let carregando = false;
 
 const TIPOS = { oleo: 'Troca de óleo do motor', alinhamento: 'Alinhamento', oleo_caixa: 'Troca de óleo da caixa', oleo_diferencial: 'Troca de óleo do diferencial', engraxamento: 'Engraxamento' };
 const TIPOS_RASTREADOS = ['oleo', 'alinhamento', 'oleo_caixa', 'oleo_diferencial', 'engraxamento'];
-const LIMITES_PADRAO = { oleo: { modo: 'km_e_meses', km: 15000, meses: 12 }, alinhamento: { modo: 'km_e_meses', km: 20000, meses: 6 }, oleo_caixa: { modo: 'km_e_meses', km: 100000, meses: 24 }, oleo_diferencial: { modo: 'km_e_meses', km: 100000, meses: 24 }, engraxamento: { modo: 'km_e_meses', km: 10000, meses: 1 } };
+const LIMITES_PADRAO = { oleo: { modo: 'km_e_meses', km: 15000, meses: 12 }, alinhamento: { modo: 'km_e_meses', km: 20000, meses: 6 }, oleo_caixa: { modo: 'km_e_meses', km: 100000, meses: 24 }, oleo_diferencial: { modo: 'km_e_meses', km: 100000, meses: 24 }, engraxamento: { modo: 'km_e_meses', km: 10000, meses: 15 } };   // engraxamento: o campo "meses" guarda DIAS (ver TEMPO_EM_DIAS)
+const TEMPO_EM_DIAS = ['engraxamento'];      // serviços cujo prazo é contado em dias, não em meses
+const unTempo = tipo => TEMPO_EM_DIAS.includes(tipo) ? 'dias' : 'meses';
 const LABEL_ULTIMA = { oleo: 'Último óleo do motor', alinhamento: 'Último alinhamento', oleo_caixa: 'Último óleo da caixa', oleo_diferencial: 'Último óleo do diferencial', engraxamento: 'Último engraxamento' };
 const CACHE_KEY = 'frotaCacheV13';
 
@@ -37,6 +39,17 @@ function alertarCustom(titulo, msg) {
   });
 }
 
+/** Pergunta um texto (motivo, peça…). Devolve o texto ou null se cancelar. */
+function pedirTextoCustom(titulo, msg, padrao, placeholder) {
+  return new Promise(ok => {
+    const inp = h('input', { type: 'text', maxlength: 200, value: padrao || '', placeholder: placeholder || '' }); let feito = false;
+    const fim = v => { if (feito) return; feito = true; m.fechar(); ok(v); };
+    const conf = h('button', { class: 'btn', type: 'button', text: 'Confirmar', onclick: () => fim(inp.value) });
+    inp.onkeydown = e => { if (e.key === 'Enter') fim(inp.value); };
+    const m = abrirModal(titulo, h('div', {}, h('p', { class: 'hint', text: msg }), inp, h('div', { class: 'modal-actions' }, h('button', { class: 'btn secondary', type: 'button', text: 'Cancelar', onclick: () => fim(null) }), conf)), { aoFechar: () => { if (!feito) { feito = true; ok(null); } } });
+    setTimeout(() => inp.focus(), 50);
+  });
+}
 function pedirKmCustom(titulo, msg, valorPadrao) {
   return new Promise(resolve => {
     const modal = document.getElementById('modalPrompt');
@@ -74,7 +87,7 @@ function normalizarDadosDaPlanilha(raw) {
   const veiculos = (raw.veiculos || []).map(v => ({ placa: String(v.placa).trim().toUpperCase(), kmAtual: Number(v.kmAtual) || 0,
     modelo: v.modelo || '', ano: v.ano || '', tipoDiesel: v.tipoDiesel || '', utilizaArla: v.utilizaArla || '', tipoTacografo: v.tipoTacografo || '',
     statusVeiculo: v.statusVeiculo || '', capacidadeDiesel: Number(v.capacidadeDiesel) || 0, capacidadeArla: Number(v.capacidadeArla) || 0,
-    paradoDesde: v.paradoDesde ? String(v.paradoDesde) : '', paradoPor: v.paradoPor || '' }));
+    paradoDesde: v.paradoDesde ? String(v.paradoDesde) : '', paradoPor: v.paradoPor || '', paradoOrigem: v.paradoOrigem || '' }));
   // Abastecimentos de fatura/lançamento da gestão entram como "manutenção" do tipo abastecimento (é o formato que o Dashboard e o histórico do GF leem).
   const abast = (raw.abastecimentos || []).filter(a => a.origem !== 'motorista' && a.status !== 'expirado' && a.placa).map(a => {
     const l = Number(a.litros) || 0, vu = Number(a.valorUnit) || 0;
@@ -184,6 +197,7 @@ function atualizarDatalistServicos() {
 
 function escAttr(s) { return String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function toast(msg, isErr) { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : ''); setTimeout(() => { t.className = 'toast'; }, isErr ? 6000 : 3500); }
+function addDias(iso, dias) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + dias); return d.toISOString().split('T')[0]; }
 function addMeses(iso, meses) { const d = new Date(iso + 'T00:00:00'); d.setMonth(d.getMonth() + meses); return d.toISOString().split('T')[0]; }
 function normalizarPlaca(p) { return p.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function placaValida(p) { return /^[A-Z]{3}[0-9]{4}$/.test(p) || /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(p); }
@@ -239,6 +253,7 @@ function renderTelaAtual() {
   if (tabAtiva === 'manutencao') { if (veiculoSel) renderDetalhe(); else renderManutTab(); }
   else if (tabAtiva === 'dashboard') renderDashboard();
   else if (tabAtiva === 'alertas') renderAlertas();
+  else if (tabAtiva === 'ordens') renderOS();
   else if (tabAtiva === 'pneus') { try { renderPneus(); } catch (e) { console.error(e); const p = document.getElementById('pneusPainel'); if (p) p.textContent = 'Erro na aba de pneus: ' + e.message; } }
 }
 
@@ -293,7 +308,8 @@ function renderManutTab() {
   let htmlVeiculos = db.veiculos.map(v => {
     const st = statusVeiculo(v.placa); const cor = st === 'atrasado' ? 'var(--danger)' : (st === 'analise' ? 'var(--warning)' : 'var(--success)');
     const isMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(v.placa); const classePlaca = isMercosul ? 'mercosul' : 'antiga'; const nomeTopo = isMercosul ? 'BRASIL' : 'TRANSMARINA';
-    return `<div class="placa-veiculo ${classePlaca}${v.paradoDesde ? ' parado' : ''}" onclick="selecionarVeiculo('${v.placa}')"${v.paradoDesde ? ' title="Caminhão parado"' : ''}><div class="placa-status-dot" style="background:${cor}"></div><div class="placa-topo">${nomeTopo}</div><div class="placa-numero">${v.placa}</div>${v.paradoDesde ? '<div class="placa-parado">PARADO</div>' : ''}</div>`;
+    const so = statusVeiculoOp(v.placa), bl = so.st === 'BLOQUEADO', rs = so.st === 'RESTRITA';
+    return `<div class="placa-veiculo ${classePlaca}${bl ? ' parado' : rs ? ' restrita' : ''}" onclick="selecionarVeiculo('${v.placa}')"${bl || rs ? ` title="${escAttr(so.motivo)}"` : ''}><div class="placa-status-dot" style="background:${cor}"></div><div class="placa-topo">${nomeTopo}</div><div class="placa-numero">${v.placa}</div>${bl ? '<div class="placa-parado">BLOQUEADO</div>' : rs ? '<div class="placa-parado restrita">RESTRITA</div>' : ''}</div>`;
   }).join('');
   
   wrap.innerHTML = htmlBotaoAdd + htmlVeiculos;
@@ -305,7 +321,7 @@ function ultimaManut(placa, tipo) { return db.manutencoes.filter(m => m.placa ==
 function calcularLimite(placa, tipo) {
   garantirLimites(placa); const cfg = db.limites[placa][tipo]; if (!cfg) return null;
   const ult = ultimaManut(placa, tipo); if (!ult) return { temUltima: false, cfg };
-  return { temUltima: true, ultima: ult, limiteKm: cfg.modo !== 'meses' ? ult.km + Number(cfg.km) : null, limiteData: cfg.modo !== 'km' ? addMeses(ult.data, Number(cfg.meses)) : null, cfg };
+  return { temUltima: true, ultima: ult, limiteKm: cfg.modo !== 'meses' ? ult.km + Number(cfg.km) : null, limiteData: cfg.modo !== 'km' ? (TEMPO_EM_DIAS.includes(tipo) ? addDias(ult.data, Number(cfg.meses)) : addMeses(ult.data, Number(cfg.meses))) : null, cfg };
 }
 function verificarAlerta(placa, tipo) {
   const info = calcularLimite(placa, tipo); if (!info) return null;
@@ -416,7 +432,7 @@ function renderDetalhe() {
   const linhasHistoricoHtml = msUi.map(m => {
     const colKm = '<div style="font-size: 10px; color: var(--dim); text-transform: uppercase;">Apurado com</div><div style="font-weight: 600;">' + fmtKm(m.km) + '</div>';
     const btnExcluir = isAdmin ? `<button class="btn danger small" onclick="excluirManutencao('${m.id}')">Excluir</button>` : '';
-    const cl = m.tipo === 'abastecimento' ? '' : `<span class="classe-tag ${classeDe(m)}">${CLASSES[classeDe(m)]}</span>`;
+    const cl = m.tipo === 'abastecimento' ? '' : tagClasse(classeDe(m));
     const nota = m.nota ? ` <button type="button" class="btn-nota" title="Ver a foto da nota" onclick="verNota('${escAttr(m.nota)}', '${escAttr(nomeManutencao(m))}')">🧾 Nota</button>` : '';
     return `<tr title="👤 Última alteração: ${m.nome || 'Não identificado'}"><td>${nomeManutencao(m)}<div class="hist-tags">${cl}${nota}</div></td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
   }).join('');
@@ -435,18 +451,18 @@ function renderDetalhe() {
           </div>
         </div>
         <div class="veiculo-acoes" style="display:flex; gap:8px; flex-wrap:wrap;">
-          ${v.paradoDesde ? `<button class="btn success" onclick="alternarParado('${placa}')">✅ Liberar caminhão</button>` : `<button class="btn secondary btn-parar" onclick="alternarParado('${placa}')">🚫 Marcar como parado</button>`}
+          ${v.paradoDesde ? (v.paradoOrigem === 'checklist' && GF.perfil() !== 'mecanico' ? `<button class="btn success" onclick="revogarBloqueioGF('${placa}')">✅ Revogar bloqueio</button>` : `<button class="btn success" onclick="alternarParado('${placa}')">✅ Liberar caminhão</button>`) : `<button class="btn secondary btn-parar" onclick="alternarParado('${placa}')">🚫 Marcar como parado</button>`}
           ${isAdmin ? `<button class="btn secondary" onclick="abrirModalKm('${placa}')">Atualizar KM</button>
                        <button class="btn danger" onclick="excluirVeiculo('${placa}')">Excluir Caminhão</button>` : ''}
           <button class="btn" onclick="abrirModalManut('${placa}')">Marcar manutenção</button>
         </div>
       </div>
-      ${v.paradoDesde ? `<div class="parado-faixa">🚫 Caminhão parado desde ${fmtQuando(v.paradoDesde)}${v.paradoPor ? ' · marcado por ' + escHtml(v.paradoPor) : ''}. Aparece em todos os alertas dele até ser liberado.</div>` : ''}
+      ${faixaSituacao(placa, v)}
     </div>
     ${htmlPendencias}
     ${isAdmin ? montarCardOcorrencias(placa, true) : ''}
     ${isAdmin ? `<div class="grid-cards"><div class="kpi"><div class="label">Total gasto</div><div class="value">${fmtMoeda(total)}</div></div><div class="kpi"><div class="label">Nº manutenções</div><div class="value">${msReais.length}</div></div>${cardsTipos}</div>` : ''}
-    ${isAdmin ? `<div class="card"><h2>Configuração de alertas</h2><div class="alert-config-container">${TIPOS_RASTREADOS.map(tipo => `<div class="limitbox"><div style="font-weight:bold;margin-bottom:8px;">${TIPOS[tipo]}</div><div class="row"><div class="field"><label>Critério</label><select onchange="atualizarCfg('${placa}','${tipo}','modo',this.value)"><option value="km" ${cfg[tipo].modo === 'km' ? 'selected' : ''}>Somente km</option><option value="meses" ${cfg[tipo].modo === 'meses' ? 'selected' : ''}>Somente meses</option><option value="km_e_meses" ${cfg[tipo].modo === 'km_e_meses' ? 'selected' : ''}>O que vencer primeiro</option></select></div></div><div class="row" style="margin-top:8px;"><div class="field"><label>A cada (km)</label><input type="number" min="0" value="${cfg[tipo].km}" onchange="atualizarCfg('${placa}','${tipo}','km',this.value)"></div><div class="field"><label>A cada (meses)</label><input type="number" min="0" value="${cfg[tipo].meses}" onchange="atualizarCfg('${placa}','${tipo}','meses',this.value)"></div></div><div style="margin-top:8px;font-size:12px;color:var(--dim);">Próximo: <b style="color:var(--text)">${proximoLimiteTexto(tipo)}</b></div></div>`).join('')}</div></div>` : ''}
+    ${isAdmin ? `<div class="card"><h2>Configuração de alertas</h2><div class="alert-config-container">${TIPOS_RASTREADOS.map(tipo => `<div class="limitbox"><div style="font-weight:bold;margin-bottom:8px;">${TIPOS[tipo]}</div><div class="row"><div class="field"><label>Critério</label><select onchange="atualizarCfg('${placa}','${tipo}','modo',this.value)"><option value="km" ${cfg[tipo].modo === 'km' ? 'selected' : ''}>Somente km</option><option value="meses" ${cfg[tipo].modo === 'meses' ? 'selected' : ''}>Somente ${unTempo(tipo)}</option><option value="km_e_meses" ${cfg[tipo].modo === 'km_e_meses' ? 'selected' : ''}>O que vencer primeiro</option></select></div></div><div class="row" style="margin-top:8px;"><div class="field"><label>A cada (km)</label><input type="number" min="0" value="${cfg[tipo].km}" onchange="atualizarCfg('${placa}','${tipo}','km',this.value)"></div><div class="field"><label>A cada (${unTempo(tipo)})</label><input type="number" min="0" value="${cfg[tipo].meses}" onchange="atualizarCfg('${placa}','${tipo}','meses',this.value)"></div></div><div style="margin-top:8px;font-size:12px;color:var(--dim);">Próximo: <b style="color:var(--text)">${proximoLimiteTexto(tipo)}</b></div></div>`).join('')}</div></div>` : ''}
     
     <div class="card">
       <div class="header-tabela"><h2>Histórico</h2><input type="text" id="filtroHistorico" placeholder="🔎 Pesquisar manutenção..." onkeyup="filtrarHistorico()"></div>
@@ -489,16 +505,40 @@ async function salvarKmAtual() {
 }
 
 /* ---------- Classificação (preventiva, corretiva…) e criticidade (parar, cautela, normal) ---------- */
-const CLASSES = { preventiva: 'Preventiva', corretiva: 'Corretiva', preditiva: 'Preditiva', emergencial: 'Emergencial' };
-const CRITS = { parar: { n: 0, t: 'Obrigatório parar', ic: '🔴', cls: 'parar' }, cautela: { n: 1, t: 'Rodar com cautela', ic: '🟠', cls: 'cautela' }, normal: { n: 2, t: 'Pode rodar normal', ic: '🟢', cls: 'normal' } };
-function classeDe(m) { const c = String(m && m.classe || '').toLowerCase(); return CLASSES[c] ? c : (TIPOS_RASTREADOS.includes(m && m.tipo) ? 'preventiva' : 'corretiva'); }
-/** Criticidade de um item pendente: a escolhida; se ninguém escolheu, uma sugestão pelo que se sabe dele. */
+const CLASSES = { PREV: 'PREV · Preventiva', 'CORR-NP': 'CORR-NP · Corretiva não planejada', 'CORR-PL': 'CORR-PL · Corretiva planejada', PRED: 'PRED · Preditiva', DET: 'DET · Detectiva', SIN: 'SIN · Sinistro / avaria' };
+const CLASSE_CURTA = { PREV: 'Preventiva', 'CORR-NP': 'Corretiva não planejada', 'CORR-PL': 'Corretiva planejada', PRED: 'Preditiva', DET: 'Detectiva', SIN: 'Sinistro' };
+const CLASSE_ANTIGA = { preventiva: 'PREV', corretiva: 'CORR-PL', emergencial: 'CORR-NP', preditiva: 'PRED' };
+const CRITS = { P1: { n: 0, t: 'P1 · Parada imediata', c: 'Crítica', ic: '🔴', cls: 'p1' }, P2: { n: 1, t: 'P2 · Urgente (até 24h)', c: 'Alta', ic: '🟠', cls: 'p2' },
+  P3: { n: 2, t: 'P3 · Programada (até 7 dias)', c: 'Média', ic: '🟡', cls: 'p3' }, P4: { n: 3, t: 'P4 · Pode esperar (até 30 dias)', c: 'Baixa', ic: '🟢', cls: 'p4' } };
+const CRIT_ANTIGA = { parar: 'P1', cautela: 'P2', normal: 'P3' };
+function normClasse(x) { const c = String(x || ''); return CLASSE_ANTIGA[c.toLowerCase()] || (CLASSES[c.toUpperCase()] ? c.toUpperCase() : ''); }
+function normCrit(x) { const c = String(x || ''); return CRIT_ANTIGA[c.toLowerCase()] || (CRITS[c.toUpperCase()] ? c.toUpperCase() : ''); }
+function classeDe(m) { return normClasse(m && m.classe) || (TIPOS_RASTREADOS.includes(m && m.tipo) ? 'PREV' : 'CORR-PL'); }
+function tagClasse(c) { return `<span class="classe-tag ${String(c).toLowerCase()}" title="${escAttr(CLASSES[c] || c)}">${escHtml(c)}</span>`; }
+/** Criticidade de um item pendente: a escolhida; se ninguém escolheu, uma sugestão (que não bloqueia o caminhão). */
 function critDe(kind, x) {
-  const c = String(x && x.criticidade || '').toLowerCase(); if (CRITS[c]) return c;
-  if (kind === 'ocorrencia') return /sim/i.test(x.restringeCirculacao || '') ? 'parar' : String(x.prioridade || '').toUpperCase() === 'ALTA' ? 'cautela' : 'normal';
-  if (kind === 'alerta') return x.status !== 'resolvido' && grupoAlerta(x) === 'atrasado' ? 'cautela' : 'normal';
-  return 'normal';
+  const c = normCrit(x && x.criticidade); if (c) return c;
+  if (kind === 'ocorrencia') return /sim/i.test(x.restringeCirculacao || '') || String(x.prioridade || '').toUpperCase() === 'ALTA' ? 'P2' : 'P3';
+  if (kind === 'alerta') return x.status !== 'resolvido' && grupoAlerta(x) === 'atrasado' ? 'P3' : 'P4';
+  return 'P3';
 }
+/* ---------- Situação do caminhão: BLOQUEADO (P1 ou parado) · RESTRITA (P2) · DISPONÍVEL ---------- */
+function osAbertas() { return (((typeof App !== 'undefined' && App.dados) || {}).os || []).filter(o => ['ABERTA', 'EM_ATENDIMENTO', 'AGUARDANDO_PECA'].includes(o.status)); }
+function statusVeiculoOp(placa) {
+  const v = db.veiculos.find(x => x.placa === placa); let st = 'DISPONIVEL', motivo = '';
+  const sobe = (s2, m) => { if (st === 'BLOQUEADO' || (st === 'RESTRITA' && s2 === 'RESTRITA')) return; st = s2; motivo = m; };
+  if (v && v.paradoDesde) sobe('BLOQUEADO', 'Parado desde ' + fmtQuando(v.paradoDesde) + (v.paradoPor ? ' · ' + v.paradoPor : ''));
+  osAbertas().filter(o => o.placa === placa).forEach(o => { const c = normCrit(o.criticidade); if (c === 'P1') sobe('BLOQUEADO', o.numero + ' (P1)'); else if (c === 'P2') sobe('RESTRITA', o.numero + ' (P2)'); });
+  const exp = (lista, nome) => lista.forEach(x => { const c = normCrit(x.criticidade); if (c === 'P1') sobe('BLOQUEADO', nome(x) + ' (P1)'); else if (c === 'P2') sobe('RESTRITA', nome(x) + ' (P2)'); });
+  exp(ocorrenciasAbertas().filter(o => o.placa === placa), o => o.item);
+  exp(db.agendamentos.filter(a => a.placa === placa), a => a.tipo === 'outro' ? a.descricao : nomeTipo(a.tipo));
+  exp(db.alertas.filter(a => a.placa === placa && a.status !== 'resolvido'), a => nomeTipo(a.tipo));
+  return { st, motivo };
+}
+/** Item (alerta/agendamento/ocorrência) que já está numa OS aberta. */
+function osDoItem(ref, id) { return osAbertas().find(o => (Array.isArray(o.itens) ? o.itens : parseJsonSeguro(o.itens, [])).some(i => i.ref === ref && String(i.id) === String(id))) || null; }
+function parseJsonSeguro(t, padrao) { try { const v = typeof t === 'string' ? JSON.parse(t || 'null') : t; return v == null ? padrao : v; } catch (e) { return padrao; } }
+function tagOsItem(ref, id) { const o = osDoItem(ref, id); return o ? `<span class="tag-os" title="Já está na ordem de serviço ${escAttr(o.numero)}">🧾 ${escHtml(o.numero)}</span>` : ''; }
 /* ---------- Manutenção lançada pelo motorista: admin/master confere (com a foto da nota) e aprova ou recusa ---------- */
 function manutMotoristaPendentes() { return (((typeof App !== 'undefined' && App.dados) || {}).manutMotorista || []).filter(x => x.status === 'PENDENTE').sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))); }
 function montarCardManutMotorista(x) {
@@ -513,7 +553,7 @@ function abrirAprovarManut(id) {
   const serv = h('input', { type: 'text', value: x.servico, list: 'listaServicos', maxlength: 80 }), km = h('input', { type: 'text', inputmode: 'numeric', value: Number(x.km) > 0 ? Number(x.km).toLocaleString('pt-BR') : '' });
   const valor = h('input', { type: 'text', inputmode: 'decimal', value: Number(x.valor) > 0 ? Number(x.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' });
   const classe = h('select', {}, ...Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
-  const ajusta = () => { const t = tipoDoTexto(serv.value.trim() || 'x', null); classe.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'preventiva' : 'corretiva'; }; ajusta(); serv.oninput = ajusta;
+  const ajusta = () => { const t = tipoDoTexto(serv.value.trim() || 'x', null); classe.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL'; }; ajusta(); serv.oninput = ajusta;
   const motivo = h('input', { type: 'text', maxlength: 200, placeholder: 'Obrigatório para recusar (o motorista vai ver)' });
   const fotoEl = x.nota ? h('button', { type: 'button', class: 'mm-nota', title: 'Ampliar a nota', onclick: () => verNota(x.nota, x.servico) }, h('img', { src: urlFotoDrive(x.nota, 640), alt: 'Foto da nota' })) : h('p', { class: 'hint', text: 'O motorista não mandou foto da nota.' });
   const ok = h('button', { class: 'btn', type: 'button', text: '✅ Aprovar e pôr no histórico' }), nao = h('button', { class: 'btn danger secondary', type: 'button', text: 'Recusar' });
@@ -544,7 +584,7 @@ function urlFotoDrive(id, tam) { return 'https://drive.google.com/thumbnail?id='
 function verNota(id, leg) { Visor.abrir([{ src: urlFotoDrive(id, 1600), leg: 'Nota · ' + leg }], 0); }
 function sugerirClasse() {
   const t = tipoDoTexto(document.getElementById('mTipoInput').value.trim() || 'x', null), sel = document.getElementById('mClasse');
-  if (sel && !sel.dataset.mexeu) sel.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'preventiva' : 'corretiva';
+  if (sel && !sel.dataset.mexeu) sel.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL';
 }
 function chipCrit(kind, x, ref) {
   const c = CRITS[critDe(kind, x)], escolhida = !!String(x && x.criticidade || '');
@@ -591,8 +631,8 @@ function abrirModalManut(placa, manut, modo) {
   document.getElementById('mValor').value = (manut && manut.valor > 0) ? Number(manut.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''; 
   document.getElementById('mObs').value = manut ? (manut.observacao || '') : '';
   { const sel = document.getElementById('mClasse'); delete sel.dataset.mexeu; sel.onchange = () => { sel.dataset.mexeu = '1'; };
-    sel.value = manut ? classeDe(manut) : 'corretiva'; if (manut && manut.classe) sel.dataset.mexeu = '1'; if (!manut) sugerirClasse();
-    document.getElementById('mCrit').value = manut && CRITS[manut.criticidade] ? manut.criticidade : 'normal'; }
+    sel.value = manut ? classeDe(manut) : 'CORR-PL'; if (manut && manut.classe) sel.dataset.mexeu = '1'; if (!manut) sugerirClasse();
+    document.getElementById('mCrit').value = (manut && normCrit(manut.criticidade)) || 'P3'; }
   onModoChange(); const infoEdicao = document.getElementById('infoEdicao'); infoEdicao.textContent = manut ? ("👤 Última alteração: " + (manut.nome || "Não identificado")) : ("👤 Lançando como: " + (GF.nome())); openModal('modalManut');
 }
 
@@ -961,7 +1001,7 @@ function dadosRelatorioCusto(de, ate) {
   const dentro = m => m.data >= de && m.data <= ate, linhas = [], servicos = {};
   db.veiculos.forEach(v => {
     const todas = db.manutencoes.filter(m => m.placa === v.placa).sort((a, b) => String(a.data).localeCompare(String(b.data))), per = todas.filter(dentro);
-    let ofic = 0, comb = 0, litros = 0, nServ = 0; const porClasse = { preventiva: 0, corretiva: 0, preditiva: 0, emergencial: 0 };
+    let ofic = 0, comb = 0, litros = 0, nServ = 0; const porClasse = { PREV: 0, 'CORR-NP': 0, 'CORR-PL': 0, PRED: 0, DET: 0, SIN: 0 };
     per.forEach(m => {
       const val = Number(m.valor) || 0;
       if (m.tipo === 'abastecimento') { comb += val; const l = m._litros || ((String(m.observacao || '').match(/Qtd:\s*([\d.]+)\s*L/) || [])[1]); litros += Number(l) || 0; return; }
@@ -1036,7 +1076,7 @@ async function logoDataUrl() {     // a logo vai embutida no relatório: aparece
 function imprimirRelatorioCusto(r, janela) {
   const e = escHtml, brl = fmtMoeda, max = Math.max(1, ...r.linhas.map(l => l.total)), logo = _logoDataUrl || new URL('logotrm.png', location.href).href, emitido = new Date().toLocaleString('pt-BR').slice(0, 17);
   const destaque = (rot, l, valor, sub) => l ? `<div class="dest"><div class="dest-rot">${rot}</div><div class="dest-placa">${e(l.placa)}</div><div class="dest-val">${valor}</div><div class="dest-sub">${sub}</div></div>` : '';
-  const pctClasse = l => ['preventiva', 'corretiva', 'preditiva', 'emergencial'].filter(k => l.porClasse[k] > 0).map(k => `<span class="cl ${k}" style="width:${(l.porClasse[k] / Math.max(1, l.ofic) * 100).toFixed(1)}%" title="${CLASSES[k]}: ${brl(l.porClasse[k])}"></span>`).join('');
+  const pctClasse = l => Object.keys(CLASSES).filter(k => l.porClasse[k] > 0).map(k => `<span class="cl ${k.toLowerCase()}" style="width:${(l.porClasse[k] / Math.max(1, l.ofic) * 100).toFixed(1)}%" title="${CLASSES[k]}: ${brl(l.porClasse[k])}"></span>`).join('');
   const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:28px 32px;font-size:13px}
   header{display:flex;align-items:center;gap:18px;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:18px}header img{height:54px}header h1{font-size:22px;margin:0}header p{margin:3px 0 0;color:#444}
   .dests{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.dest{border:2px solid #111;border-radius:10px;padding:12px}.dest:first-child{background:#111;color:#fff}.dest-rot{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
@@ -1044,7 +1084,7 @@ function imprimirRelatorioCusto(r, janela) {
   .tot{display:flex;gap:26px;margin:0 0 14px;font-size:13px}.tot b{font-size:16px;display:block}
   table{width:100%;border-collapse:collapse;margin-bottom:18px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #111;padding:6px 6px}td{padding:7px 6px;border-bottom:1px solid #ddd;vertical-align:middle}
   td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.top td{font-weight:bold;background:#f3f3f3}.barra{height:10px;background:#eee;border-radius:5px;overflow:hidden;min-width:90px}.barra i{display:block;height:100%;background:#c8102e}
-  .mix{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#eee;min-width:70px}.cl{display:block;height:100%}.cl.preventiva{background:#1d4ed8}.cl.corretiva{background:#d97706}.cl.preditiva{background:#7c3aed}.cl.emergencial{background:#b91c1c}
+  .mix{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#eee;min-width:70px}.cl{display:block;height:100%}.cl.prev,.cl-prev{background:#1d4ed8}.cl.corr-pl,.cl-corr-pl{background:#d97706}.cl.corr-np,.cl-corr-np{background:#b91c1c}.cl.pred,.cl-pred{background:#7c3aed}.cl.det,.cl-det{background:#0f766e}.cl.sin,.cl-sin{background:#475569}
   .leg{font-size:11px;color:#444;margin:-10px 0 16px}.leg span{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
   h2{font-size:15px;margin:0 0 8px}.serv{columns:2;column-gap:26px;margin:0 0 16px;padding:0;list-style:none}.serv li{padding:4px 0;border-bottom:1px dotted #bbb;break-inside:avoid;display:flex;justify-content:space-between;gap:10px}
   footer{margin-top:10px;font-size:11px;color:#555;border-top:1px solid #ccc;padding-top:8px}@media print{@page{size:A4;margin:12mm}body{padding:0}}`;
@@ -1057,7 +1097,7 @@ function imprimirRelatorioCusto(r, janela) {
       ${destaque('🔧 Mais gasto com oficina', r.maisOficina && r.maisOficina.ofic > 0 ? r.maisOficina : null, r.maisOficina ? brl(r.maisOficina.ofic) : '', r.maisOficina ? r.maisOficina.nServ + ' serviço(s)' : '')}</div>
     <div class="tot"><div>Total da frota<b>${brl(r.total)}</b></div><div>Oficina<b>${brl(r.ofic)}</b></div><div>Combustível<b>${brl(r.comb)}</b></div><div>Rodagem estimada<b>${fmtKm(r.km)}</b></div><div>Custo médio<b>${r.km ? brl(r.total / r.km) + ' / km' : '-'}</b></div></div>
     <table><thead><tr><th></th><th>Caminhão</th><th></th><th class="n">Total</th><th class="n">Oficina</th><th class="n">Combustível</th><th class="n">Km</th><th class="n">R$/km</th><th class="n">Km/L</th><th>Oficina por tipo</th></tr></thead><tbody>${tabela}</tbody></table>
-    <div class="leg">Oficina por tipo:<span style="background:#1d4ed8"></span>Preventiva<span style="background:#d97706"></span>Corretiva<span style="background:#7c3aed"></span>Preditiva<span style="background:#b91c1c"></span>Emergencial</div>
+    <div class="leg">Oficina por tipo:${Object.keys(CLASSES).map(k => `<span class="cl-${k.toLowerCase()}"></span>${CLASSE_CURTA[k]}`).join('')}</div>
     ${r.servicos.length ? `<h2>Onde mais se gastou na oficina</h2><ul class="serv">${r.servicos.map(x => `<li><span>${e(x.nome)} <small>(${x.vezes}x)</small></span><b>${brl(x.valor)}</b></li>`).join('')}</ul>` : ''}
     <footer>Km rodado estimado pelo histórico de KM do caminhão. Custo por km considera só caminhões com pelo menos 500 km no período. Combustível pelas faturas do posto e lançamentos.</footer>`;
   const w = janela || window.open('', '_blank', 'width=960,height=700'); if (!w) { toast('O navegador bloqueou a janela do relatório. Libere pop-ups para este site.', true); return; }
@@ -1146,7 +1186,10 @@ function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.n
 /* ---------- Caminhão parado: marcado pela placa, aparece em todos os alertas daquele caminhão ---------- */
 function veiculoParado(placa) { const v = db.veiculos.find(x => x.placa === placa); return v && v.paradoDesde ? v : null; }
 function fmtQuando(dh) { const t = String(dh || ''); return t.length >= 10 ? fmtData(t.slice(0, 10)) + (t.length >= 16 ? ' ' + t.slice(11, 16) : '') : '-'; }
-function tagParado(placa) { const v = veiculoParado(placa); return v ? `<span class="tag-parado" title="Parado desde ${escAttr(fmtQuando(v.paradoDesde))} · ${escAttr(v.paradoPor || '')}">🚫 Parado</span>` : ''; }
+function tagParado(placa) {
+  const r = statusVeiculoOp(placa); if (r.st === 'DISPONIVEL') return '';
+  return r.st === 'BLOQUEADO' ? `<span class="tag-parado" title="${escAttr(r.motivo)}">🔴 Bloqueado</span>` : `<span class="tag-parado restrita" title="${escAttr(r.motivo)}">🟠 Restrita</span>`;
+}
 function placaClicavel(placa) { return `<span class="oc-placa" role="button" tabindex="0" title="Opções do caminhão" onclick="menuPlaca(event,'${escAttr(placa)}')" onkeydown="if(event.key==='Enter')menuPlaca(event,'${escAttr(placa)}')">${escHtml(placa)}</span>${tagParado(placa)}`; }
 function fecharMenuPlaca() { const m = document.getElementById('menuPlaca'); if (m) m.remove(); document.removeEventListener('pointerdown', fora_menuPlaca, true); document.removeEventListener('keydown', esc_menuPlaca, true); }
 function fora_menuPlaca(e) { const m = document.getElementById('menuPlaca'); if (m && !m.contains(e.target)) fecharMenuPlaca(); }
@@ -1163,6 +1206,26 @@ function menuPlaca(ev, placa) {
   const w = m.offsetWidth, hgt = m.offsetHeight, x = Math.max(8, Math.min(r.left, innerWidth - w - 8)), y = r.bottom + 6 + hgt > innerHeight - 8 ? Math.max(8, r.top - hgt - 6) : r.bottom + 6;
   m.style.left = x + 'px'; m.style.top = y + 'px'; m.querySelector('button').focus();
   setTimeout(() => { document.addEventListener('pointerdown', fora_menuPlaca, true); document.addEventListener('keydown', esc_menuPlaca, true); }, 0);
+}
+/** Faixa no topo do caminhão: situação (bloqueado/restrita) e, se tiver algo P1–P3, os itens P4 que dá para fazer na mesma parada. */
+function faixaSituacao(placa, v) {
+  const r = statusVeiculoOp(placa); let html = '';
+  if (r.st === 'BLOQUEADO') html += `<div class="parado-faixa">🔴 <b>BLOQUEADO / INDISPONÍVEL</b> — proibido escalar. ${escHtml(r.motivo)}.${v.paradoOrigem === 'checklist' ? ' Bloqueado automaticamente pelo checklist: a gestão confere e pode revogar.' : ''}</div>`;
+  else if (r.st === 'RESTRITA') html += `<div class="parado-faixa restrita">🟠 <b>OPERAÇÃO RESTRITA</b> — pode terminar a rota atual e entra na oficina ao voltar. ${escHtml(r.motivo)}.</div>`;
+  const op = backlogP4(placa); if (op.length) html += `<div class="oport-faixa">♻️ <b>Aproveite a parada:</b> ${op.length} item(ns) P4 deste caminhão podem ser feitos junto — ${op.slice(0, 3).map(x => escHtml(x.nome)).join(', ')}${op.length > 3 ? '…' : ''}.</div>`;
+  return html;
+}
+/** Regra do backlog: quando o caminhão tem algo P1, P2 ou P3 aberto, os itens P4 dele viram sugestão para a mesma parada. */
+function backlogP4(placa) {
+  const itens = osItens().filter(i => i.placa === placa);
+  const temUrg = itens.some(i => i.crit !== 'P4') || osAbertas().some(o => o.placa === placa && normCrit(o.criticidade) !== 'P4');
+  return temUrg ? itens.filter(i => i.crit === 'P4' && !osDoItem(i.ref, i.refId)) : [];
+}
+async function revogarBloqueioGF(placa) {
+  const motivo = await pedirTextoCustom('Revogar bloqueio de ' + placa, 'O checklist bloqueou o caminhão. Por que ele pode rodar? (fica registrado)');
+  if (motivo === null) return; if (String(motivo).trim().length < 3) return toast('Escreva o motivo.', true);
+  try { await apiPost('revogarBloqueio', { placa, motivo: String(motivo).trim() }); toast(placa + ' liberado.'); await App.recarregar(true); renderTelaAtual(); }
+  catch (e) { toast(e.message, true); }
 }
 function alternarParado(placa) {
   const v = db.veiculos.find(x => x.placa === placa); if (!v) return;
@@ -1185,7 +1248,7 @@ function montarCardOcorrencia(o, comPlaca) {
   const quando = resolvida ? 'resolvida ' + fmtQuando(o.resolvidoEm) + (o.resolvidoPor ? ' por ' + escHtml(o.resolvidoPor) : '') : (o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : '');
   const botao = resolvida ? `<button class="btn small secondary" onclick="reabrirOcorrenciaGF('${escAttr(o.id)}')">Reabrir</button>` : `<button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button>`;
   return `<div class="alert-card ${resolvida ? 'resolvido' : ocorrenciaGrave(o) ? 'atrasado' : 'pendente'} oc-gf"><div class="alert-info"><div class="alert-title">${comPlaca ? placaClicavel(o.placa) + ' ' : ''}${resolvida ? '📣 ' : ''}${escHtml(o.item || 'Ocorrência')}</div>
-    <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${quando} · ${escHtml(m ? m.nome : 'Motorista')} · ${origem}</div>${resolvida ? '' : `<div class="alert-crit">${chipCrit('ocorrencia', o, 'oc')}<span class="classe-tag">Corretiva</span></div>`}</div>
+    <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${quando} · ${escHtml(m ? m.nome : 'Motorista')} · ${origem}</div>${resolvida ? '' : `<div class="alert-crit">${chipCrit('ocorrencia', o, 'oc')}${tagClasse(critDe('ocorrencia', o) === 'P1' ? 'CORR-NP' : 'CORR-PL')}${tagOsItem('oc', o.id)}</div>`}</div>
     <div class="alert-actions">${botao}</div></div>`;
 }
 function montarCardOcorrencias(placa, soSeTiver) {
@@ -1200,15 +1263,15 @@ function montarCardAlerta(a) {
   let btn = grp === 'resolvido' ? `<button class="btn small secondary" onclick="reativarResolvido('${a.id}')">Reabrir</button>${isAdmin ? `<button class="btn small danger" onclick="excluirManutencao('${a.id}')">Excluir</button>` : ''}` :
             grp === 'andamento' ? `<button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button><button class="btn small secondary" onclick="reabrirAlerta('${a.id}')">Voltar</button>` :
             `<button class="btn small secondary" onclick="marcarAnalise('${a.id}')">Em andamento</button><button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button>`;
-  return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${placaClicavel(a.placa)} ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div>${grp === 'resolvido' ? '' : `<div class="alert-crit">${chipCrit('alerta', a, 'alerta')}<span class="classe-tag">Preventiva</span></div>`}</div><div class="alert-actions">${btn}</div></div>`;
+  return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${placaClicavel(a.placa)} ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div>${grp === 'resolvido' ? '' : `<div class="alert-crit">${chipCrit('alerta', a, 'alerta')}${tagClasse('PREV')}${tagOsItem('alerta', a.id)}</div>`}</div><div class="alert-actions">${btn}</div></div>`;
 }
 
 function montarCardAgAtrasado(ag) { 
-    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}<span class="classe-tag">${CLASSES[classeDe(ag)]}</span></div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function montarCardAgPendente(ag) { 
-    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}<span class="classe-tag">${CLASSES[classeDe(ag)]}</span></div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function renderAlertas() {
@@ -1394,15 +1457,15 @@ function osItens() {
       if (info.limiteData !== null) { const dd = Math.round((new Date(info.limiteData + 'T00:00:00') - new Date(hojeISO() + 'T00:00:00')) / 864e5); txtData = dd >= 0 ? `Faltam ${dd} dias` : `Excedido há ${-dd} dias`; }
       sit = info.cfg.modo === 'km' ? txtKm : info.cfg.modo === 'meses' ? txtData : `${txtKm} | ${txtData}`;
     }
-    itens.push({ id: 'al:' + a.id, kind: 'alerta', placa: a.placa, nome: nomeTipo(a.tipo), ultima, sit, detalhe: '', crit: critDe('alerta', a), classe: 'preventiva' });
+    itens.push({ id: 'al:' + a.id, kind: 'alerta', placa: a.placa, nome: nomeTipo(a.tipo), ultima, sit, detalhe: '', crit: critDe('alerta', a), classe: 'PREV', ref: 'alerta', refId: a.id });
   });
   db.agendamentos.forEach(ag => {
     if (db.alertas.some(a => a.placa === ag.placa && normPeca(a.tipo) === normPeca(ag.tipo === 'outro' ? ag.descricao : ag.tipo) && a.status !== 'resolvido')) return;
     const nome = (ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo), h0 = ultimaManut(ag.placa, ag.tipo === 'outro' ? ag.descricao : ag.tipo);
-    itens.push({ id: 'ag:' + (ag.id || ag.placa + nome), kind: 'agend', placa: ag.placa, nome: nome + ' (agendado)', ultima: h0 ? `${fmtData(h0.data)} (aos ${fmtKm(h0.km)})` : 'Serviço avulso (sem histórico)', sit: ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : 'Agendamento pendente', detalhe: ag.descricao || '' , crit: critDe('agend', ag), classe: classeDe(ag) });
+    itens.push({ id: 'ag:' + (ag.id || ag.placa + nome), kind: 'agend', placa: ag.placa, nome: nome + ' (agendado)', ultima: h0 ? `${fmtData(h0.data)} (aos ${fmtKm(h0.km)})` : 'Serviço avulso (sem histórico)', sit: ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : 'Agendamento pendente', detalhe: ag.descricao || '' , crit: critDe('agend', ag), classe: classeDe(ag), ref: 'agend', refId: ag.id });
   });
   (d.ocorrencias || []).filter(o => String(o.status || '').toUpperCase() === 'ABERTA').forEach(o => {
-    itens.push({ id: 'oc:' + o.id, kind: 'ocorrencia', placa: o.placa, nome: 'Ocorrência: ' + (o.item || ''), ultima: '-', sit: (o.dataAbertura ? 'Relatada em ' + fmtData(String(o.dataAbertura).slice(0, 10)) : 'Relatada pelo motorista') + (/sim/i.test(o.restringeCirculacao || '') ? ' · restringe circulação' : ''), detalhe: (o.descricao || '') + (mot[o.motoristaId] ? ' (relato de ' + mot[o.motoristaId] + ')' : ''), alta: /alta/i.test(o.prioridade || '') , crit: critDe('ocorrencia', o), classe: 'corretiva' });
+    itens.push({ id: 'oc:' + o.id, kind: 'ocorrencia', placa: o.placa, nome: 'Ocorrência: ' + (o.item || ''), ultima: '-', sit: (o.dataAbertura ? 'Relatada em ' + fmtData(String(o.dataAbertura).slice(0, 10)) : 'Relatada pelo motorista') + (/sim/i.test(o.restringeCirculacao || '') ? ' · restringe circulação' : ''), detalhe: (o.descricao || '') + (mot[o.motoristaId] ? ' (relato de ' + mot[o.motoristaId] + ')' : ''), alta: /alta/i.test(o.prioridade || '') , crit: critDe('ocorrencia', o), classe: critDe('ocorrencia', o) === 'P1' ? 'CORR-NP' : 'CORR-PL', ref: 'oc', refId: o.id });
   });
   // Ordem da OS: o caminhão com o item mais crítico primeiro; dentro dele, do mais crítico para o menos
   const pior = {}; itens.forEach(i => { const n = CRITS[i.crit].n; pior[i.placa] = Math.min(pior[i.placa] === undefined ? 9 : pior[i.placa], n); });
@@ -1420,28 +1483,38 @@ function imprimirRelatorioMecanico() {
   const opcao = (v, t, sub) => { const b = h('button', { type: 'button', class: 'os-seg-b' + (v === 'interna' ? ' on' : ''), role: 'radio', 'aria-checked': v === 'interna' ? 'true' : 'false' }, h('b', { text: t }), h('small', { text: sub }));
     b.onclick = () => { tipo.v = v; extra.hidden = v !== 'externa'; seg.querySelectorAll('.os-seg-b').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); }); }; return b; };
   seg.append(opcao('interna', 'OS interna', 'Nossa oficina'), opcao('externa', 'OS externa', 'Prestador de fora'));
-  const cont = h('span', { class: 'os-cont' }), lista = h('div', { class: 'os-lista' }), imp = h('button', { class: 'btn', type: 'button', text: 'Imprimir' });
+  const cont = h('span', { class: 'os-cont' }), lista = h('div', { class: 'os-lista' }), imp = h('button', { class: 'btn', type: 'button', text: 'Abrir OS e imprimir' });
   const tudoPl = {};
   const att = () => {
     const n = itens.filter(i => marcados[i.id]).length; cont.textContent = n ? n + ' de ' + itens.length + ' selecionado' + (n > 1 ? 's' : '') : 'Nada selecionado'; imp.disabled = !n;
     Object.keys(tudoPl).forEach(pl => { const d = itens.filter(i => i.placa === pl), k = d.filter(i => marcados[i.id]).length; tudoPl[pl].checked = k === d.length; tudoPl[pl].indeterminate = k > 0 && k < d.length; });
   };
   const marcar = (lst, v) => { lst.forEach(i => { marcados[i.id] = v; cks[i.id].checked = v; }); att(); };
+  const naOS = i => i.ref ? osDoItem(i.ref, i.refId) : null;
   Array.from(new Set(itens.map(i => i.placa))).forEach(pl => {
     const doVeic = itens.filter(i => i.placa === pl), tudo = h('input', { type: 'checkbox', 'aria-label': 'Marcar tudo de ' + pl }); tudoPl[pl] = tudo;
     tudo.onchange = () => marcar(doVeic, tudo.checked);
     const grupo = h('div', { class: 'os-grupo' }, h('label', { class: 'os-placa' }, tudo, h('b', { text: pl }), h('span', { text: doVeic.length + (doVeic.length > 1 ? ' itens' : ' item') })));
     doVeic.forEach(i => { const c = h('input', { type: 'checkbox' }); cks[i.id] = c; c.onchange = () => { marcados[i.id] = c.checked; att(); };
-      grupo.append(h('label', { class: 'os-item' }, c, h('span', { class: 'os-tx' }, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), h('span', { class: 'crit-chip ' + i.crit, text: CRITS[i.crit].ic + ' ' + CRITS[i.crit].t }))); });
+      grupo.append(h('label', { class: 'os-item' }, c, h('span', { class: 'os-tx' }, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), h('span', { class: 'crit-chip ' + CRITS[i.crit].cls, text: CRITS[i.crit].ic + ' ' + i.crit }), naOS(i) ? h('span', { class: 'tag-os', text: '🧾 ' + naOS(i).numero }) : null, i.crit === 'P4' && doVeic.some(x => x.crit !== 'P4') ? h('span', { class: 'tag-oport', text: '♻️ aproveitar' }) : null)); });
     lista.append(grupo);
   });
   const barra = h('div', { class: 'os-barra' }, h('button', { class: 'btn small secondary', type: 'button', text: 'Marcar tudo', onclick: () => marcar(itens, true) }), h('button', { class: 'btn small secondary', type: 'button', text: 'Limpar', onclick: () => marcar(itens, false) }));
-  imp.onclick = () => { const escolhidos = itens.filter(i => marcados[i.id]); if (!escolhidos.length) return; imprimirOS(escolhidos, tipo.v, prest.value.trim(), obs.value.trim()); m.fechar(); };
-  const cx = h('div', { class: 'os-sel' }, seg, extra, barra, lista, h('div', { class: 'os-rodape' }, cont, imp));
+  imp.onclick = async () => {
+    const escolhidos = itens.filter(i => marcados[i.id]); if (!escolhidos.length) return;
+    const w = window.open('', '_blank', 'width=800,height=600'); if (!w) return toast('O navegador bloqueou a janela de impressão. Libere pop-ups para este site.', true);
+    w.document.write('<p style="font-family:Arial;padding:30px">Abrindo as ordens de serviço…</p>'); imp.disabled = true;
+    let nums = {}; try { nums = await osGerarDosItens(escolhidos, tipo.v, prest.value.trim(), obs.value.trim()); } catch (e) { w.close(); imp.disabled = false; return toast(e.message, true); }
+    imprimirOS(escolhidos, tipo.v, prest.value.trim(), obs.value.trim(), nums, w); m.fechar();
+    const n = Object.keys(nums).length; toast(n ? n + ' ordem(ns) de serviço aberta(s). Acompanhe em Manutenção › OS.' : 'Impresso (os itens já estavam numa OS aberta).'); renderTelaAtual();
+  };
+  const soImp = h('button', { class: 'btn secondary', type: 'button', text: 'Só imprimir', title: 'Imprime sem abrir OS no sistema', onclick: () => { const escolhidos = itens.filter(i => marcados[i.id]); if (!escolhidos.length) return; imprimirOS(escolhidos, tipo.v, prest.value.trim(), obs.value.trim()); m.fechar(); } });
+  const cx = h('div', { class: 'os-sel' }, seg, extra, barra, lista, h('div', { class: 'os-rodape' }, cont, h('span', { class: 'os-rod-bt' }, soImp, imp)));
   const m = abrirModal('Ordem de serviço', cx, { largo: true }); att();
 }
 
-function imprimirOS(itens, tipo, prestador, obs) {
+function imprimirOS(itens, tipo, prestador, obs, nums, janela) {
+  nums = nums || {};
   const esc = escHtml, hoje = new Date().toLocaleDateString('pt-BR'), externa = tipo === 'externa';
   const css = `body{font-family:Arial,sans-serif;padding:20px;color:#000}h1{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;text-transform:uppercase;font-size:22px}
   .emissao{text-align:right;margin-bottom:16px;font-size:13px;color:#333}.item{border:2px solid #000;margin-bottom:16px;padding:14px;border-radius:8px;page-break-inside:avoid}
@@ -1452,18 +1525,18 @@ function imprimirOS(itens, tipo, prestador, obs) {
   .def{font-size:16px;line-height:1.5;margin:4px 0}.obs{border:1px solid #666;border-radius:6px;padding:8px;margin:10px 0;font-size:15px}
   .placa small{font-size:15px;font-weight:normal;color:#333}.serv{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px dashed #999}.serv:first-of-type{border-top:0}.serv .cb{margin-top:2px}
   .serv-tx{flex:1}.serv-nome{font-size:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.serv .info{margin-top:4px;border:0;padding:0;font-size:14px;line-height:1.5}
-  .crit{display:inline-block;font-size:12px;font-weight:bold;border:2px solid #000;border-radius:4px;padding:1px 6px;letter-spacing:.03em}.crit.parar{background:#000;color:#fff}.crit.cautela{border-style:solid}.crit.normal{border-style:dashed}
-  .cls{font-size:12px;color:#333;text-transform:uppercase;letter-spacing:.04em}
+  .crit{display:inline-block;font-size:12px;font-weight:bold;border:2px solid #000;border-radius:4px;padding:1px 6px;letter-spacing:.03em}.crit.p1{background:#000;color:#fff}.crit.p2{border-style:solid}.crit.p3{border-style:dashed}.crit.p4{border-style:dotted;color:#444}
+  .cls{font-size:12px;color:#333;text-transform:uppercase;letter-spacing:.04em}.osn{display:inline-block;border:2px solid #000;border-radius:4px;padding:0 6px;font-size:16px;margin-right:4px}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   @media print{@page{margin:1cm}}`;
   let corpo = '';
-  const critTxt = i => `<span class="crit ${i.crit}">${CRITS[i.crit].ic} ${CRITS[i.crit].t.toUpperCase()}</span> <span class="cls">${esc(CLASSES[i.classe] || '')}</span>`;
+  const critTxt = i => `<span class="crit ${CRITS[i.crit].cls}">${i.crit} · ${CRITS[i.crit].c.toUpperCase()}</span> <span class="cls">${esc(i.classe || '')}${i.classe ? ' · ' + esc(CLASSE_CURTA[i.classe] || '') : ''}</span>`;
   const placas = Array.from(new Set(itens.map(i => i.placa)));          // já vêm na ordem de criticidade (osItens)
   if (!externa) {
     // um bloco por caminhão, com todos os serviços dele juntos, do mais crítico para o menos
     corpo = `<h1>🔧 Ordem de Serviço - Oficina</h1><div class="emissao">Impresso em: ${hoje} · ${itens.length} serviço(s) em ${placas.length} caminhão(ões) · ordem: o mais crítico primeiro</div>` + placas.map(pl => {
-      const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl), parado = veiculoParado(pl);
-      return `<div class="item"><div class="placa">🚛 ${esc(pl)}${v.modelo ? ' <small>· ' + esc(v.modelo) + '</small>' : ''} <small>· Km ${fmtKm(v.kmAtual || 0)}</small>${parado ? ' <span class="crit parar">🚫 PARADO</span>' : ''}</div>
+      const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl), parado = statusVeiculoOp(pl).st === 'BLOQUEADO';
+      return `<div class="item"><div class="placa">${nums[pl] ? '<span class="osn">' + esc(nums[pl]) + '</span> ' : ''}🚛 ${esc(pl)}${v.modelo ? ' <small>· ' + esc(v.modelo) + '</small>' : ''} <small>· Km ${fmtKm(v.kmAtual || 0)}</small>${parado ? ' <span class="crit p1">🔴 BLOQUEADO</span>' : ''}</div>
         ${doVeic.map(i => `<div class="serv"><div class="cb"></div><div class="serv-tx"><div class="serv-nome"><strong>${esc(i.nome.toUpperCase())}</strong> ${critTxt(i)}</div>
           <div class="info">${i.detalhe ? `<span class="lb">Relato:</span> <span class="vl">${esc(i.detalhe)}</span><br>` : ''}${i.ultima && i.ultima !== '-' ? `<span class="lb">Última troca:</span> <span class="vl">${esc(i.ultima)}</span><br>` : ''}<span class="lb">Situação:</span> <span class="vl">${esc(i.sit)}</span></div></div></div>`).join('')}
         <div class="campos"><span>Mecânico: <span class="linha"></span></span><span>Concluído em: ___/___/______</span></div></div>`;
@@ -1471,7 +1544,7 @@ function imprimirOS(itens, tipo, prestador, obs) {
   } else {
     corpo = placas.map(pl => {
       const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl);
-      return `<div class="pagina"><h1>Ordem de Serviço Externa</h1><div class="emissao">Emitida em: ${hoje} · Transmarina</div>
+      return `<div class="pagina"><h1>Ordem de Serviço Externa${nums[pl] ? ' · ' + esc(nums[pl]) : ''}</h1><div class="emissao">Emitida em: ${hoje} · Transmarina</div>
         <div class="veiculo"><b>Veículo:</b> ${esc(pl)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(String(v.ano)) : ''}<br><b>Km atual:</b> ${fmtKm(v.kmAtual || 0)}<br><b>Prestador / local:</b> ${prestador ? esc(prestador) : '<span class="linha"></span>'}</div>
         <div style="font-size:18px;font-weight:bold;margin-bottom:6px">O que precisa ser feito</div>
         ${doVeic.map(i => `<div class="item"><div class="servico"><div class="cb"></div><strong>${esc(i.nome)}</strong> ${critTxt(i)}</div><div class="def">${i.detalhe ? `<b>Defeito / relato:</b> ${esc(i.detalhe)}<br>` : ''}<b>Situação:</b> ${esc(i.sit)}${i.ultima && i.ultima !== '-' ? `<br><b>Última vez feito:</b> ${esc(i.ultima)}` : ''}</div></div>`).join('')}
@@ -1482,8 +1555,8 @@ function imprimirOS(itens, tipo, prestador, obs) {
         <div class="ass"><div>Responsável Transmarina</div><div>Prestador</div></div></div>`;
     }).join('');
   }
-  const w = window.open('', '_blank', 'width=800,height=600'); if (!w) { toast('O navegador bloqueou a janela de impressão. Libere pop-ups para este site.', true); return; }
-  w.document.write(`<html><head><title>${externa ? 'OS Externa' : 'Ordem de Manutenção'}</title><style>${css}</style></head><body>${corpo}</body></html>`); w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
+  const w = janela || window.open('', '_blank', 'width=800,height=600'); if (!w) { toast('O navegador bloqueou a janela de impressão. Libere pop-ups para este site.', true); return; }
+  w.document.open(); w.document.write(`<html><head><title>${externa ? 'OS Externa' : 'Ordem de Manutenção'}</title><style>${css}</style></head><body>${corpo}</body></html>`); w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
 }
 
 function notificarNovosAlertas() {}  // o Hub mostra os alertas na tela Início (sem pop-up)

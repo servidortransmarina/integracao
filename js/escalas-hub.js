@@ -34,5 +34,7 @@ window.addEventListener('message', e => {
   EscHub.pronto = true; EscHub.financeiro = !!e.data.financeiro; const a = EscHub.pendente || EscHub.aba; EscHub.pendente = null; if (a) EscHub.enviar(a);
 });
 window.HubEsc = {
+  /** Caminhão bloqueado (P1) ou com operação restrita (P2): o Escalas só avisa, não impede. */
+  statusPlaca(placa) { const p = String(placa || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return ((App.dados && App.dados.statusFrota) || {})[p] || null; },
   chamar(acao, dados, opc) { const r = $('#escRoot'); return API.chamar(acao, dados || {}, opc || (!r || r.hidden ? { fundo: true } : undefined)); }
 };

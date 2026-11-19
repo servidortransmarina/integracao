@@ -716,3 +716,74 @@ button.ckf-gal{border:0;padding:0;background:none;cursor:zoom-in;font:inherit;co
 .mm-conferir .mm-nota{display:block;width:100%;border:1px solid var(--border);border-radius:12px;background:#f8fafc;padding:0;cursor:zoom-in;overflow:hidden;margin-bottom:10px}
 .mm-conferir .mm-nota img{display:block;width:100%;max-height:260px;object-fit:contain}
 .rel-seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0 4px}.rel-cfg .modal-actions{flex-wrap:wrap}
+
+/* P1–P4, tipos de manutenção, situação do caminhão e ordens de serviço */
+.crit-chip.p1{background:#fee2e2;color:#b91c1c;border-color:#fecaca}
+.crit-chip.p2{background:#ffedd5;color:#c2410c;border-color:#fed7aa}
+.crit-chip.p3{background:#fef9c3;color:#854d0e;border-color:#fde68a}
+.crit-chip.p4{background:#dcfce7;color:#15803d;border-color:#bbf7d0}
+.crit-chip.sugerida{background:#fff}
+.classe-tag.prev{color:#1d4ed8;background:#dbeafe}.classe-tag.corr-pl{color:#92400e;background:#fef3c7}.classe-tag.corr-np{color:#b91c1c;background:#fee2e2}
+.classe-tag.pred{color:#6d28d9;background:#ede9fe}.classe-tag.det{color:#0f766e;background:#ccfbf1}.classe-tag.sin{color:#334155;background:#e2e8f0}
+.tag-parado.restrita{background:#ffedd5;color:#c2410c}
+.placa-veiculo.restrita{border-color:#ea580c}
+.placa-veiculo .placa-parado.restrita{background:#ea580c}
+.parado-faixa.restrita{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+.oport-faixa{margin-top:10px;padding:9px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:13px}
+.oport-faixa.mini{margin:8px 0 0;padding:6px 9px;font-size:12px}
+.btn-link{border:0;background:none;color:var(--primary);font-weight:700;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;font-family:inherit}
+.tag-os{display:inline-block;font-size:11px;font-weight:700;color:#334155;background:#e2e8f0;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.tag-oport{display:inline-block;font-size:11px;font-weight:700;color:#166534;background:#dcfce7;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.os-rod-bt{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.os-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.os-topo h2{margin:0 0 4px}.os-topo .hint{margin:0;font-size:12px}
+.os-topo-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.os-fchip{border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text)}
+.os-fchip.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.os-fchip b{font-weight:800;margin-left:2px}
+.os-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.os-col{background:#f8fafc;border:1px solid var(--border);border-radius:14px;padding:10px}
+.os-col-tit{font-weight:700;font-size:14px;margin:2px 4px 10px;display:flex;justify-content:space-between}
+.os-col-tit span{background:#e2e8f0;border-radius:999px;padding:0 9px;font-size:12px;line-height:20px}
+.os-vazio{color:var(--dim);text-align:center;margin:8px 0}
+.os-fechadas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.os-card{background:#fff;border:1px solid var(--border);border-left:5px solid #94a3b8;border-radius:12px;padding:12px;margin-bottom:10px}
+.os-card.p1{border-left-color:#dc2626}.os-card.p2{border-left-color:#ea580c}.os-card.p3{border-left-color:#ca8a04}.os-card.p4{border-left-color:#16a34a}
+.os-card.fechada{opacity:.85}
+.os-card-top{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.os-num{font-weight:800;font-size:13px;color:#334155}
+.os-itens{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.5}
+.os-itens small{color:var(--dim)}
+.os-peca{margin-top:6px;font-size:12.5px;font-weight:600;color:#9a3412}
+.os-prazo{margin-top:8px;font-size:12px;color:#334155}
+.os-barra{height:6px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-bottom:4px}
+.os-barra i{display:block;height:100%;background:#16a34a}
+.os-prazo.perto .os-barra i{background:#f59e0b}.os-prazo.atrasada .os-barra i{background:#dc2626}
+.os-prazo.atrasada{color:#b91c1c;font-weight:700}.os-prazo.fim{color:var(--dim)}
+.os-tri{margin-top:6px;font-size:12px;font-weight:600;color:#854d0e;background:#fef9c3;border-radius:6px;padding:4px 8px}
+.os-tri.atrasada{color:#b91c1c;background:#fee2e2}
+.os-meta{margin-top:6px;font-size:11.5px;color:var(--dim)}
+.os-acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.os-acoes .os-canc{color:#b91c1c}
+.os-concluir .os-item{display:flex;align-items:center;gap:10px}
+.os-concluir .os-val{width:120px;flex:none}
+@media (max-width:900px){.os-board{grid-template-columns:1fr}}
+/* checklist: foto por item, item impeditivo, aviso de bloqueio */
+.ck-topo{gap:8px}
+.ck-foto-cx{flex:none;display:inline-flex}
+.ck-foto-cx.vazio{width:34px}
+.ck-foto{width:34px;height:34px;border-radius:9px;border:1px dashed #cbd5e1;background:#f8fafc;font-size:16px;cursor:pointer;padding:0;position:relative;overflow:hidden;display:grid;place-items:center}
+.ck-foto.tem{border-style:solid;border-color:#16a34a}
+.ck-foto.tem.erro{border-color:#dc2626}
+.ck-foto img{width:100%;height:100%;object-fit:cover}
+.ck-foto i{position:absolute;right:1px;bottom:1px;font-style:normal;font-size:10px;font-weight:800;background:#16a34a;color:#fff;border-radius:6px;padding:0 3px;line-height:14px}
+.ck-foto.erro i{background:#dc2626}.ck-foto.enviando i{background:#64748b}
+.ck-imp{margin-left:5px;font-size:12px;vertical-align:1px}
+.ck-imp-leg{display:block;width:100%;margin-top:8px;font-size:12px;color:#991b1b}
+.ck-fotos-cont{display:block;width:100%;margin-top:8px;font-size:12.5px;font-weight:600;color:#334155}
+.ck-bloq{margin:10px 0;padding:10px 12px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:13.5px;line-height:1.45}
+.ck-bloq.gestao{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ck-nome{flex:1;min-width:0}
+.os-concluir .os-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;margin:0;border-bottom:1px solid var(--border)}
+.os-concluir textarea{font-family:inherit;font-size:14px;width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:10px;padding:10px}
+@media (max-width:600px){.os-concluir .os-val{width:96px}}

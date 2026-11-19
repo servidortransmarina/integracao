@@ -269,3 +269,5 @@ body{background:var(--bg);color:var(--ink)}
 .top{justify-content:flex-end;padding:6px 20px;min-height:0;border:0;background:transparent;box-shadow:none}
 .heading,.mainnav{display:none!important}
 .app{padding-top:0}
+
+.aviso-placa{margin:6px 0 10px;padding:8px 10px;border-radius:8px;font-size:13px;font-weight:600;line-height:1.4}.aviso-placa.bloq{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}.aviso-placa.restr{background:#ffedd5;color:#9a3412;border:1px solid #fed7aa}
