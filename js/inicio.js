@@ -37,6 +37,8 @@ const Inicio = {
     (d.notificacoes || []).forEach(n => add({ nivel: 'info', sis: 'portal', ic: this.icAviso(n), t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm, ordem: 5, k: 'nt:' + (n.id || n.titulo), acao: () => this.abrirAviso(n) }));
     if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('manutencao') >= 0) {      // só quem tem o sistema Manutenção vê os alertas dele
       const hoje = hojeLocal();
+      db.veiculos.filter(v => v.paradoDesde).forEach(v => add({ nivel: 'bad', sis: 'frota', ic: '🚫', t: v.placa + ' parado', p: 'Desde ' + fmtQuando(v.paradoDesde) + (v.paradoPor ? ' · marcado por ' + v.paradoPor : '') + '.', origem: 'Manutenção', quando: String(v.paradoDesde).replace(' ', 'T'), ordem: 0, acao: () => irParaVeiculo(v.placa), k: 'parado:' + v.placa }));
+      { const mm = (d.manutMotorista || []).filter(x => x.status === 'PENDENTE'); if (mm.length) add({ nivel: 'warn', sis: 'frota', ic: '🧾', t: mm.length + (mm.length > 1 ? ' manutenções lançadas por motoristas' : ' manutenção lançada por motorista'), p: 'Confira a nota e aprove para entrar no histórico do caminhão.', origem: 'Manutenção', quando: Date.now(), ordem: 1, k: 'mm:pendentes', acao: () => App.abrirAba('alertas') }); }
       // Alertas agrupados por caminhão e situação (um caminhão com 6 serviços vencidos vira uma linha só)
       const grupos = {};
       db.alertas.filter(a => a.status !== 'resolvido' && a.tipo !== 'Registro de KM').forEach(a => {
@@ -63,14 +65,15 @@ const Inicio = {
   quando(ts) { if (!ts) return ''; const t = typeof ts === 'number' ? ts : Date.parse(ts); if (!t || t < 1.5e12 || t > Date.now() + 864e5) return ''; const m = Math.floor((Date.now() - t) / 60000);
     return m < 2 ? 'agora' : m < 60 ? 'há ' + m + ' min' : m < 1440 ? 'há ' + Math.floor(m / 60) + ' h' : 'há ' + Math.floor(m / 1440) + ' d'; },
 
-  icAviso(n) { return { escala: '📅', podio: '🏆', checklist: '✅', resgate: '🗓️' }[n.tipo] || '🔔'; },
+  icAviso(n) { return { escala: '📅', podio: '🏆', checklist: '✅', resgate: '🗓️', frota: '🚛', defeito: '🛠️' }[n.tipo] || '🔔'; },
   /** Abre o aviso inteiro; depois de visto ele some do Painel (no servidor também). */
   abrirAviso(n) {
     const corpo = h('div', { class: 'aviso-ab' }, h('p', { text: n.texto || '' }));
     if (n.tipo === 'escala' && App.sessao.perfil === 'motorista') corpo.append(h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Ver minha escala', onclick: () => { m.fechar(); App.abrirAba('escala'); } })));
+    if (n.refTipo === 'veiculo' && n.refId && typeof irParaVeiculo === 'function' && (App.sessao.sistemas || []).indexOf('manutencao') >= 0) corpo.append(h('div', { class: 'modal-actions' }, h('button', { class: 'btn', type: 'button', text: 'Abrir o caminhão', onclick: () => { m.fechar(); irParaVeiculo(n.refId); } })));
     const m = abrirModal(this.icAviso(n) + ' ' + n.titulo, corpo, { aoFechar: () => { if (App.aba === 'inicio') App.abrirAba('inicio'); } });
     App.dados.notificacoes = (App.dados.notificacoes || []).filter(x => x !== n);
-    if (n.id) API.chamar('lerAviso', { id: n.id }, { mudo: true }).catch(() => {});
+    if (n.id) API.chamar('lerAviso', { id: n.id }, { fundo: true }).catch(() => {});
   },
   linha(it) {
     const el = h('div', { class: 'item' + (it.acao ? ' click' : ''), role: it.acao ? 'button' : null, tabindex: it.acao ? '0' : null },

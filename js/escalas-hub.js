@@ -34,5 +34,5 @@ window.addEventListener('message', e => {
   EscHub.pronto = true; EscHub.financeiro = !!e.data.financeiro; const a = EscHub.pendente || EscHub.aba; EscHub.pendente = null; if (a) EscHub.enviar(a);
 });
 window.HubEsc = {
-  chamar(acao, dados) { return API.chamar(acao, dados || {}); }
+  chamar(acao, dados, opc) { const r = $('#escRoot'); return API.chamar(acao, dados || {}, opc || (!r || r.hidden ? { fundo: true } : undefined)); }
 };

@@ -79,5 +79,6 @@ window.addEventListener('message', e => {
   FinHub.pronto[area] = true; const a = FinHub.pendente[area] || (FinHub.area === area ? FinHub.aba : null); FinHub.pendente[area] = null; if (a) FinHub.enviar(area, a);
 });
 window.HubFin = {
-  chamar(acao, dados) { return API.chamar(acao, dados || {}); }
+  // a conferência automática de versão (a cada 45 s) e qualquer chamada com o Financeiro fora da tela vão para o segundo plano
+  chamar(acao, dados, opc) { const r = $('#finRoot'); return API.chamar(acao, dados || {}, opc || ((acao === 'financeiroRotaVersoes' || !r || r.hidden) ? { fundo: true } : undefined)); }
 };

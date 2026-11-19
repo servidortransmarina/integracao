@@ -4,10 +4,10 @@
 let db = { veiculos: [], manutencoes: [], limites: {}, alertas: [], agendamentos: [], pendentes: [], pneus: [], movPneus: [] };
 let carregando = false;
 
-const TIPOS = { oleo: 'Troca de óleo do motor', alinhamento: 'Alinhamento', oleo_caixa: 'Troca de óleo da caixa', oleo_diferencial: 'Troca de óleo do diferencial' };
-const TIPOS_RASTREADOS = ['oleo', 'alinhamento', 'oleo_caixa', 'oleo_diferencial'];
-const LIMITES_PADRAO = { oleo: { modo: 'km_e_meses', km: 15000, meses: 12 }, alinhamento: { modo: 'km_e_meses', km: 20000, meses: 6 }, oleo_caixa: { modo: 'km_e_meses', km: 100000, meses: 24 }, oleo_diferencial: { modo: 'km_e_meses', km: 100000, meses: 24 } };
-const LABEL_ULTIMA = { oleo: 'Último óleo do motor', alinhamento: 'Último alinhamento', oleo_caixa: 'Último óleo da caixa', oleo_diferencial: 'Último óleo do diferencial' };
+const TIPOS = { oleo: 'Troca de óleo do motor', alinhamento: 'Alinhamento', oleo_caixa: 'Troca de óleo da caixa', oleo_diferencial: 'Troca de óleo do diferencial', engraxamento: 'Engraxamento' };
+const TIPOS_RASTREADOS = ['oleo', 'alinhamento', 'oleo_caixa', 'oleo_diferencial', 'engraxamento'];
+const LIMITES_PADRAO = { oleo: { modo: 'km_e_meses', km: 15000, meses: 12 }, alinhamento: { modo: 'km_e_meses', km: 20000, meses: 6 }, oleo_caixa: { modo: 'km_e_meses', km: 100000, meses: 24 }, oleo_diferencial: { modo: 'km_e_meses', km: 100000, meses: 24 }, engraxamento: { modo: 'km_e_meses', km: 10000, meses: 1 } };
+const LABEL_ULTIMA = { oleo: 'Último óleo do motor', alinhamento: 'Último alinhamento', oleo_caixa: 'Último óleo da caixa', oleo_diferencial: 'Último óleo do diferencial', engraxamento: 'Último engraxamento' };
 const CACHE_KEY = 'frotaCacheV13';
 
 function salvarCache() {}
@@ -73,7 +73,8 @@ async function apiPost(action, data) {
 function normalizarDadosDaPlanilha(raw) {
   const veiculos = (raw.veiculos || []).map(v => ({ placa: String(v.placa).trim().toUpperCase(), kmAtual: Number(v.kmAtual) || 0,
     modelo: v.modelo || '', ano: v.ano || '', tipoDiesel: v.tipoDiesel || '', utilizaArla: v.utilizaArla || '', tipoTacografo: v.tipoTacografo || '',
-    statusVeiculo: v.statusVeiculo || '', capacidadeDiesel: Number(v.capacidadeDiesel) || 0, capacidadeArla: Number(v.capacidadeArla) || 0 }));
+    statusVeiculo: v.statusVeiculo || '', capacidadeDiesel: Number(v.capacidadeDiesel) || 0, capacidadeArla: Number(v.capacidadeArla) || 0,
+    paradoDesde: v.paradoDesde ? String(v.paradoDesde) : '', paradoPor: v.paradoPor || '' }));
   // Abastecimentos de fatura/lançamento da gestão entram como "manutenção" do tipo abastecimento (é o formato que o Dashboard e o histórico do GF leem).
   const abast = (raw.abastecimentos || []).filter(a => a.origem !== 'motorista' && a.status !== 'expirado' && a.placa).map(a => {
     const l = Number(a.litros) || 0, vu = Number(a.valorUnit) || 0;
@@ -81,9 +82,10 @@ function normalizarDadosDaPlanilha(raw) {
       observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L', nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
   });
   const manutencoes = (raw.manutencoes || []).concat(abast).map(m => ({ _abs: m._abs, _litros: m._litros, _hora: m._hora,
-    id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: String(m.tipo || '').trim().toLowerCase(),
+    id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: (t => t === 'outro' && /^\s*engrax/i.test(String(m.descricao || '')) ? 'engraxamento' : t)(String(m.tipo || '').trim().toLowerCase()),
     descricao: String(m.descricao || m['descrição'] || m['Descricao'] || m['Descrição'] || m['descriçao'] || m['Descriçao'] || '').trim(),
-    km: Number(m.km) || 0, data: formatarDataPlanilhaParaISO(m.data), valor: Number(m.valor) || 0, observacao: m.observacao || '', nome: m.nome || m['Nome'] || m.responsavel || '' 
+    km: Number(m.km) || 0, data: formatarDataPlanilhaParaISO(m.data), valor: Number(m.valor) || 0, observacao: m.observacao || '', nome: m.nome || m['Nome'] || m.responsavel || '',
+    classe: String(m.classe || '').toLowerCase(), nota: String(m.nota || '')
   }));
   const limites = {};
   (raw.limites || []).forEach(l => {
@@ -95,13 +97,14 @@ function normalizarDadosDaPlanilha(raw) {
     id: String(a.id), placa: String(a.placa).trim().toUpperCase(), tipo: String(a.tipo || '').trim(), status: a.status || 'ativo',
     dataAnalise: a.dataAnalise ? formatarDataPlanilhaParaISO(a.dataAnalise) : null, dataResolucao: a.dataResolucao ? formatarDataPlanilhaParaISO(a.dataResolucao) : null,
     classificadoPor: String(a.classificadoPor || a['Classificado por'] || '').trim(),
-    notificadosLista: String(a.notificado || a['Notificado'] || '').toLowerCase()
+    notificadosLista: String(a.notificado || a['Notificado'] || '').toLowerCase(), criticidade: String(a.criticidade || '').toLowerCase()
   }));
   
   const agendamentos = (raw.agendamentos || []).map(a => ({
     id: String(a.id), placa: String(a.placa).trim().toUpperCase(), tipo: String(a.tipo || '').trim(),
     descricao: a.descricao || a['descrição'] || a['Descricao'] || a['Descrição'] || a['descriçao'] || a['Descriçao'] || '',
-    dataPrevista: a.dataPrevista ? formatarDataPlanilhaParaISO(a.dataPrevista) : '', valor: Number(a.valor) || 0, observacao: a.observacao || '', criadoEm: a.criadoEm ? formatarDataPlanilhaParaISO(a.criadoEm) : '', nome: a.nome || a['Nome'] || a.responsavel || ''
+    dataPrevista: a.dataPrevista ? formatarDataPlanilhaParaISO(a.dataPrevista) : '', valor: Number(a.valor) || 0, observacao: a.observacao || '', criadoEm: a.criadoEm ? formatarDataPlanilhaParaISO(a.criadoEm) : '', nome: a.nome || a['Nome'] || a.responsavel || '',
+    classe: String(a.classe || '').toLowerCase(), criticidade: String(a.criticidade || '').toLowerCase()
   }));
   const pendentes = [];
 
@@ -290,7 +293,7 @@ function renderManutTab() {
   let htmlVeiculos = db.veiculos.map(v => {
     const st = statusVeiculo(v.placa); const cor = st === 'atrasado' ? 'var(--danger)' : (st === 'analise' ? 'var(--warning)' : 'var(--success)');
     const isMercosul = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(v.placa); const classePlaca = isMercosul ? 'mercosul' : 'antiga'; const nomeTopo = isMercosul ? 'BRASIL' : 'TRANSMARINA';
-    return `<div class="placa-veiculo ${classePlaca}" onclick="selecionarVeiculo('${v.placa}')"><div class="placa-status-dot" style="background:${cor}"></div><div class="placa-topo">${nomeTopo}</div><div class="placa-numero">${v.placa}</div></div>`;
+    return `<div class="placa-veiculo ${classePlaca}${v.paradoDesde ? ' parado' : ''}" onclick="selecionarVeiculo('${v.placa}')"${v.paradoDesde ? ' title="Caminhão parado"' : ''}><div class="placa-status-dot" style="background:${cor}"></div><div class="placa-topo">${nomeTopo}</div><div class="placa-numero">${v.placa}</div>${v.paradoDesde ? '<div class="placa-parado">PARADO</div>' : ''}</div>`;
   }).join('');
   
   wrap.innerHTML = htmlBotaoAdd + htmlVeiculos;
@@ -403,9 +406,9 @@ function renderDetalhe() {
     const hojeL = hojeLocal();
     const ordem = { atrasado: 0, andamento: 1, pendente: 2 };
     const itens = [
-      ...alsV.map(a => { const g = grupoAlerta(a); return { o: ordem[g], html: montarCardAlerta(a) }; }),
-      ...agsV.map(ag => { const atras = ag.dataPrevista && ag.dataPrevista < hojeL; return { o: atras ? 0 : 2, html: atras ? montarCardAgAtrasado(ag) : montarCardAgPendente(ag) }; })
-    ].sort((x, y) => x.o - y.o);
+      ...alsV.map(a => { const g = grupoAlerta(a); return { o: ordem[g], c: CRITS[critDe('alerta', a)].n, html: montarCardAlerta(a) }; }),
+      ...agsV.map(ag => { const atras = ag.dataPrevista && ag.dataPrevista < hojeL; return { o: atras ? 0 : 2, c: CRITS[critDe('agend', ag)].n, html: atras ? montarCardAgAtrasado(ag) : montarCardAgPendente(ag) }; })
+    ].sort((x, y) => (x.c - y.c) || (x.o - y.o));
     htmlPendencias = `<div class="pend-grid"><div class="card"><h2>⚠️ O que precisa ser feito neste caminhão</h2>${itens.length ? itens.map(i => i.html).join('') : '<p class="empty" style="padding:12px;">Nada pendente neste caminhão. ✅</p>'}</div>${montarCardOcorrencias(placa)}</div>`;
   }
 
@@ -413,7 +416,9 @@ function renderDetalhe() {
   const linhasHistoricoHtml = msUi.map(m => {
     const colKm = '<div style="font-size: 10px; color: var(--dim); text-transform: uppercase;">Apurado com</div><div style="font-weight: 600;">' + fmtKm(m.km) + '</div>';
     const btnExcluir = isAdmin ? `<button class="btn danger small" onclick="excluirManutencao('${m.id}')">Excluir</button>` : '';
-    return `<tr title="👤 Última alteração: ${m.nome || 'Não identificado'}"><td>${nomeManutencao(m)}</td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
+    const cl = m.tipo === 'abastecimento' ? '' : `<span class="classe-tag ${classeDe(m)}">${CLASSES[classeDe(m)]}</span>`;
+    const nota = m.nota ? ` <button type="button" class="btn-nota" title="Ver a foto da nota" onclick="verNota('${escAttr(m.nota)}', '${escAttr(nomeManutencao(m))}')">🧾 Nota</button>` : '';
+    return `<tr title="👤 Última alteração: ${m.nome || 'Não identificado'}"><td>${nomeManutencao(m)}<div class="hist-tags">${cl}${nota}</div></td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
   }).join('');
 
   document.getElementById('manutDetalheWrap').innerHTML = `
@@ -429,12 +434,14 @@ function renderDetalhe() {
             <div style="font-size:10px; color:var(--dim); margin-top:2px;">ℹ️ Passe o mouse para ver detalhes</div>
           </div>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div class="veiculo-acoes" style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${v.paradoDesde ? `<button class="btn success" onclick="alternarParado('${placa}')">✅ Liberar caminhão</button>` : `<button class="btn secondary btn-parar" onclick="alternarParado('${placa}')">🚫 Marcar como parado</button>`}
           ${isAdmin ? `<button class="btn secondary" onclick="abrirModalKm('${placa}')">Atualizar KM</button>
                        <button class="btn danger" onclick="excluirVeiculo('${placa}')">Excluir Caminhão</button>` : ''}
           <button class="btn" onclick="abrirModalManut('${placa}')">Marcar manutenção</button>
         </div>
       </div>
+      ${v.paradoDesde ? `<div class="parado-faixa">🚫 Caminhão parado desde ${fmtQuando(v.paradoDesde)}${v.paradoPor ? ' · marcado por ' + escHtml(v.paradoPor) : ''}. Aparece em todos os alertas dele até ser liberado.</div>` : ''}
     </div>
     ${htmlPendencias}
     ${isAdmin ? montarCardOcorrencias(placa, true) : ''}
@@ -481,7 +488,88 @@ async function salvarKmAtual() {
   execBackground(async () => { await apiPost('addManutencao', registro); await apiPost('updateKmVeiculo', { placa: veiculoSel, kmAtual: val }); }, 'Erro ao salvar KM');
 }
 
-function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
+/* ---------- Classificação (preventiva, corretiva…) e criticidade (parar, cautela, normal) ---------- */
+const CLASSES = { preventiva: 'Preventiva', corretiva: 'Corretiva', preditiva: 'Preditiva', emergencial: 'Emergencial' };
+const CRITS = { parar: { n: 0, t: 'Obrigatório parar', ic: '🔴', cls: 'parar' }, cautela: { n: 1, t: 'Rodar com cautela', ic: '🟠', cls: 'cautela' }, normal: { n: 2, t: 'Pode rodar normal', ic: '🟢', cls: 'normal' } };
+function classeDe(m) { const c = String(m && m.classe || '').toLowerCase(); return CLASSES[c] ? c : (TIPOS_RASTREADOS.includes(m && m.tipo) ? 'preventiva' : 'corretiva'); }
+/** Criticidade de um item pendente: a escolhida; se ninguém escolheu, uma sugestão pelo que se sabe dele. */
+function critDe(kind, x) {
+  const c = String(x && x.criticidade || '').toLowerCase(); if (CRITS[c]) return c;
+  if (kind === 'ocorrencia') return /sim/i.test(x.restringeCirculacao || '') ? 'parar' : String(x.prioridade || '').toUpperCase() === 'ALTA' ? 'cautela' : 'normal';
+  if (kind === 'alerta') return x.status !== 'resolvido' && grupoAlerta(x) === 'atrasado' ? 'cautela' : 'normal';
+  return 'normal';
+}
+/* ---------- Manutenção lançada pelo motorista: admin/master confere (com a foto da nota) e aprova ou recusa ---------- */
+function manutMotoristaPendentes() { return (((typeof App !== 'undefined' && App.dados) || {}).manutMotorista || []).filter(x => x.status === 'PENDENTE').sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))); }
+function montarCardManutMotorista(x) {
+  const val = Number(x.valor) > 0 ? ' · ' + fmtMoeda(Number(x.valor)) : '', km = Number(x.km) > 0 ? ' · ' + fmtKm(Number(x.km)) : '';
+  return `<div class="alert-card pendente mm-card"><div class="alert-info"><div class="alert-title">${placaClicavel(x.placa)} 🔧 ${escHtml(x.servico)}</div>
+    <div class="alert-sub">${fmtData(String(x.data).slice(0, 10))}${km}${val}${x.local ? ' · ' + escHtml(x.local) : ''}</div>
+    <div class="alert-sub">Lançado por ${escHtml(x.motoristaNome || 'motorista')}${x.nota ? ' · 🧾 com nota' : ' · sem nota'}${x.obs ? ' — ' + escHtml(x.obs) : ''}</div></div>
+    <div class="alert-actions">${x.nota ? `<button class="btn small secondary" onclick="verNota('${escAttr(x.nota)}','${escAttr(x.servico)}')">🧾 Nota</button>` : ''}<button class="btn small" onclick="abrirAprovarManut('${escAttr(x.id)}')">Conferir</button></div></div>`;
+}
+function abrirAprovarManut(id) {
+  const x = manutMotoristaPendentes().find(m => m.id === id); if (!x) return toast('Esse lançamento já foi decidido.');
+  const serv = h('input', { type: 'text', value: x.servico, list: 'listaServicos', maxlength: 80 }), km = h('input', { type: 'text', inputmode: 'numeric', value: Number(x.km) > 0 ? Number(x.km).toLocaleString('pt-BR') : '' });
+  const valor = h('input', { type: 'text', inputmode: 'decimal', value: Number(x.valor) > 0 ? Number(x.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' });
+  const classe = h('select', {}, ...Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
+  const ajusta = () => { const t = tipoDoTexto(serv.value.trim() || 'x', null); classe.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'preventiva' : 'corretiva'; }; ajusta(); serv.oninput = ajusta;
+  const motivo = h('input', { type: 'text', maxlength: 200, placeholder: 'Obrigatório para recusar (o motorista vai ver)' });
+  const fotoEl = x.nota ? h('button', { type: 'button', class: 'mm-nota', title: 'Ampliar a nota', onclick: () => verNota(x.nota, x.servico) }, h('img', { src: urlFotoDrive(x.nota, 640), alt: 'Foto da nota' })) : h('p', { class: 'hint', text: 'O motorista não mandou foto da nota.' });
+  const ok = h('button', { class: 'btn', type: 'button', text: '✅ Aprovar e pôr no histórico' }), nao = h('button', { class: 'btn danger secondary', type: 'button', text: 'Recusar' });
+  const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
+  const corpo = h('div', { class: 'mm-conferir' }, fotoEl,
+    h('p', { class: 'hint', text: x.placa + ' · lançado por ' + (x.motoristaNome || 'motorista') + ' em ' + fmtQuando(x.criadoEm) + (x.local ? ' · ' + x.local : '') + (x.obs ? ' — ' + x.obs : '') }),
+    campo('Serviço ou peça', serv), h('div', { class: 'row' }, campo('KM', km), campo('Valor (R$)', valor), campo('Classificação', classe)),
+    campo('Motivo (se for recusar)', motivo), h('div', { class: 'modal-actions' }, nao, ok));
+  const m = abrirModal('Conferir manutenção do motorista', corpo);
+  const decidir = async aprovar => {
+    const dados = { id, aprovar };
+    if (aprovar) {
+      const t = tipoDoTexto(serv.value.trim(), null); if (t.erro) return toast(t.erro, true); if (!serv.value.trim()) return toast('Diga qual foi o serviço.', true);
+      const k = km.value.trim() ? parseNumeroBR(km.value) : 0; if (km.value.trim() && (isNaN(k) || k < 0)) return toast('KM inválido.', true);
+      Object.assign(dados, { tipo: t.tipo === 'abastecimento' ? 'outro' : t.tipo, descricao: t.tipo === 'abastecimento' ? serv.value.trim() : t.descricao, km: k || 0, valor: parseNumeroBR(valor.value) || 0, classe: classe.value });
+    } else if (motivo.value.trim().length < 3) { motivo.focus(); return toast('Escreva o motivo da recusa.', true); }
+    else dados.motivo = motivo.value.trim();
+    ok.disabled = nao.disabled = true;
+    try {
+      await apiPost('decidirManutMotorista', dados); m.fechar();
+      x.status = aprovar ? 'APROVADA' : 'RECUSADA'; toast(aprovar ? 'Aprovada: já está no histórico do caminhão.' : 'Recusada. O motorista foi avisado.');
+      if (aprovar) App.recarregar(true); renderTelaAtual();
+    } catch (e) { ok.disabled = nao.disabled = false; toast(e.message, true); }
+  };
+  ok.onclick = () => decidir(true); nao.onclick = () => decidir(false);
+}
+function urlFotoDrive(id, tam) { return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + (tam || 1600); }
+function verNota(id, leg) { Visor.abrir([{ src: urlFotoDrive(id, 1600), leg: 'Nota · ' + leg }], 0); }
+function sugerirClasse() {
+  const t = tipoDoTexto(document.getElementById('mTipoInput').value.trim() || 'x', null), sel = document.getElementById('mClasse');
+  if (sel && !sel.dataset.mexeu) sel.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'preventiva' : 'corretiva';
+}
+function chipCrit(kind, x, ref) {
+  const c = CRITS[critDe(kind, x)], escolhida = !!String(x && x.criticidade || '');
+  return `<button type="button" class="crit-chip ${c.cls}${escolhida ? '' : ' sugerida'}" title="${escolhida ? 'Criticidade' : 'Sugestão automática'} — toque para mudar" onclick="menuCrit(event,'${ref}','${escAttr(String(x.id))}')">${c.ic} ${c.t}</button>`;
+}
+function menuCrit(ev, ref, id) {
+  ev.stopPropagation(); fecharMenuPlaca();
+  const r = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div'); m.id = 'menuPlaca'; m.className = 'menu-placa'; m.setAttribute('role', 'menu');
+  m.innerHTML = '<div class="menu-placa-tit">Criticidade</div>' + Object.keys(CRITS).map(k => `<button type="button" role="menuitem" data-c="${k}">${CRITS[k].ic} ${CRITS[k].t}</button>`).join('');
+  m.onclick = e => { const b = e.target.closest('button'); if (!b) return; fecharMenuPlaca(); definirCrit(ref, id, b.dataset.c); };
+  document.body.appendChild(m);
+  const w = m.offsetWidth, hgt = m.offsetHeight, x = Math.max(8, Math.min(r.left, innerWidth - w - 8)), y = r.bottom + 6 + hgt > innerHeight - 8 ? Math.max(8, r.top - hgt - 6) : r.bottom + 6;
+  m.style.left = x + 'px'; m.style.top = y + 'px'; m.querySelector('button').focus();
+  setTimeout(() => { document.addEventListener('pointerdown', fora_menuPlaca, true); document.addEventListener('keydown', esc_menuPlaca, true); }, 0);
+}
+function definirCrit(ref, id, crit) {
+  const lista = ref === 'alerta' ? db.alertas : ref === 'agend' ? db.agendamentos : ((App.dados && App.dados.ocorrencias) || []);
+  const x = lista.find(i => String(i.id) === String(id)); if (!x) return;
+  const brutoLista = ref === 'alerta' ? (App.dados.alertas || []) : ref === 'agend' ? (App.dados.agendamentos || []) : [];
+  const bruto = brutoLista.find(i => String(i.id) === String(id));
+  const antes = x.criticidade; x.criticidade = crit; if (bruto) bruto.criticidade = crit;
+  renderTelaAtual(); toast('Criticidade: ' + CRITS[crit].t + '.');
+  execBackground(async () => { try { await apiPost('definirCriticidade', { ref, id, criticidade: crit }); } catch (e) { x.criticidade = antes; if (bruto) bruto.criticidade = antes; renderTelaAtual(); throw e; } }, 'Não foi possível mudar a criticidade');
+}
+function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; document.getElementById('mCritWrap').style.display = ag ? 'block' : 'none'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
 
 function abrirModalManut(placa, manut, modo) {
   veiculoSel = placa; manutEditId = manut ? manut.id : null;
@@ -502,19 +590,14 @@ function abrirModalManut(placa, manut, modo) {
   document.getElementById('mData').value = manut ? manut.data : hojeISO(); document.getElementById('mDataPrevista').value = ''; 
   document.getElementById('mValor').value = (manut && manut.valor > 0) ? Number(manut.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''; 
   document.getElementById('mObs').value = manut ? (manut.observacao || '') : '';
+  { const sel = document.getElementById('mClasse'); delete sel.dataset.mexeu; sel.onchange = () => { sel.dataset.mexeu = '1'; };
+    sel.value = manut ? classeDe(manut) : 'corretiva'; if (manut && manut.classe) sel.dataset.mexeu = '1'; if (!manut) sugerirClasse();
+    document.getElementById('mCrit').value = manut && CRITS[manut.criticidade] ? manut.criticidade : 'normal'; }
   onModoChange(); const infoEdicao = document.getElementById('infoEdicao'); infoEdicao.textContent = manut ? ("👤 Última alteração: " + (manut.nome || "Não identificado")) : ("👤 Lançando como: " + (GF.nome())); openModal('modalManut');
 }
 
-async function salvarManutencao() {
-  const modo = document.getElementById('mModo').value; const textoTipo = document.getElementById('mTipoInput').value.trim(); const kmInput = document.getElementById('mKm').value.trim(); const data = document.getElementById('mData').value; const dataPrevista = document.getElementById('mDataPrevista').value; 
-  const valor = parseNumeroBR(document.getElementById('mValor').value) || 0; 
-  const observacao = document.getElementById('mObs').value.trim();
-  
-  if (!textoTipo) return toast('Informe qual manutenção será feita.', true);
-  
-  const editando = !!manutEditId;
-  const manutOriginal = editando ? db.manutencoes.find(m => m.id === manutEditId) : null;
-
+/** Texto digitado no serviço → tipo rastreado (óleo, alinhamento, engraxamento...) ou 'outro' com a descrição. */
+function tipoDoTexto(textoTipo, manutOriginal) {
   const txtMin = textoTipo.toLowerCase(); let tipoFinal = 'outro'; let descricaoFinal = textoTipo;
   
   // Preserva o tipo 'abastecimento' se já era abastecimento ou se for combustível/Arla
@@ -523,8 +606,10 @@ async function salvarManutencao() {
     descricaoFinal = textoTipo;
   } else if (txtMin === 'alinhamento') {
     tipoFinal = 'alinhamento'; descricaoFinal = '';
+  } else if (/engrax|lubrifica[çc][ãa]o de chassi|graxa/.test(txtMin)) {
+    tipoFinal = 'engraxamento'; descricaoFinal = '';
   } else if (txtMin === 'oleo' || txtMin === 'óleo' || txtMin === 'troca de oleo' || txtMin === 'troca de óleo') {
-    return toast('⚠️ Especifique o óleo: Motor, Caixa, Diferencial, Freio ou Embreagem?', true);
+    return { erro: '⚠️ Especifique o óleo: Motor, Caixa, Diferencial, Freio ou Embreagem?' };
   } else if (txtMin.includes('oleo') || txtMin.includes('óleo') || txtMin.includes('fluido') || txtMin.includes('fluído')) {
     
     // 1º: Intercepta freio e embreagem ANTES de ler a palavra motor
@@ -537,6 +622,21 @@ async function salvarManutencao() {
     else if (txtMin.includes('diferencial')) { tipoFinal = 'oleo_diferencial'; descricaoFinal = ''; }
     else if (txtMin.includes('motor')) { tipoFinal = 'oleo'; descricaoFinal = ''; }
   }
+  return { tipo: tipoFinal, descricao: descricaoFinal };
+}
+
+async function salvarManutencao() {
+  const modo = document.getElementById('mModo').value; const textoTipo = document.getElementById('mTipoInput').value.trim(); const kmInput = document.getElementById('mKm').value.trim(); const data = document.getElementById('mData').value; const dataPrevista = document.getElementById('mDataPrevista').value; 
+  const valor = parseNumeroBR(document.getElementById('mValor').value) || 0; 
+  const observacao = document.getElementById('mObs').value.trim();
+  
+  if (!textoTipo) return toast('Informe qual manutenção será feita.', true);
+  
+  const editando = !!manutEditId;
+  const manutOriginal = editando ? db.manutencoes.find(m => m.id === manutEditId) : null;
+
+  const tt = tipoDoTexto(textoTipo, manutOriginal); if (tt.erro) return toast(tt.erro, true);
+  const tipoFinal = tt.tipo, descricaoFinal = tt.descricao;
 
   const isAbastecimento = (tipoFinal === 'abastecimento');
   const kmParsed = parseNumeroBR(kmInput);
@@ -567,14 +667,14 @@ async function salvarManutencao() {
   
   if (modo === 'agendar') {
     const agOriginal = editando ? db.agendamentos.find(a => a.id === manutEditId) : null;
-    const ag = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, dataPrevista, valor, observacao, criadoEm: agOriginal ? agOriginal.criadoEm : hojeISO(), nome: nomeUsuario };
+    const ag = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, dataPrevista, valor, observacao, criadoEm: agOriginal ? agOriginal.criadoEm : hojeISO(), nome: nomeUsuario, classe: document.getElementById('mClasse').value, criticidade: document.getElementById('mCrit').value };
     if (editando) { const idx = db.agendamentos.findIndex(a => a.id === manutEditId); if (idx >= 0) db.agendamentos[idx] = ag; } else { db.agendamentos.push(ag); }
     salvarCache(); renderTelaAtual(); toast(editando ? 'Agendamento atualizado...' : 'Agendamento salvo...');
     execBackground(async () => { try { await apiPost(editando ? 'updateAgendamento' : 'addAgendamento', ag); } catch(e) { if(editando){ await apiPost('deleteAgendamento', { id: ag.id }); await apiPost('addAgendamento', ag); } else throw e; } }, 'Erro agendamento');
     if (kmInput !== '' && km > 0) { execBackground(async () => { await apiPost('updateKmVeiculo', { placa, kmAtual: km }); }, 'Erro KM'); } return;
   }
 
-  const registro = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, km, data, valor, observacao, nome: nomeUsuario };
+  const registro = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, km, data, valor, observacao, nome: nomeUsuario, classe: isAbastecimento ? '' : document.getElementById('mClasse').value, nota: manutOriginal ? manutOriginal.nota || '' : '' };
   
   const agCumpridos = db.agendamentos.filter(a => a.placa === placa && normPeca(a.tipo === 'outro' ? a.descricao : a.tipo) === normPeca(tipoFinal === 'outro' ? descricaoFinal : tipoFinal));
   
@@ -855,6 +955,116 @@ function renderDashboard() {
   renderDashboardCiclos();
 }
 
+/* ================= RELATÓRIO DE CUSTO (para imprimir/compartilhar com a equipe) ================= */
+/** Custos de cada caminhão no período: oficina (separada por classificação), combustível, km rodado e custo por km. */
+function dadosRelatorioCusto(de, ate) {
+  const dentro = m => m.data >= de && m.data <= ate, linhas = [], servicos = {};
+  db.veiculos.forEach(v => {
+    const todas = db.manutencoes.filter(m => m.placa === v.placa).sort((a, b) => String(a.data).localeCompare(String(b.data))), per = todas.filter(dentro);
+    let ofic = 0, comb = 0, litros = 0, nServ = 0; const porClasse = { preventiva: 0, corretiva: 0, preditiva: 0, emergencial: 0 };
+    per.forEach(m => {
+      const val = Number(m.valor) || 0;
+      if (m.tipo === 'abastecimento') { comb += val; const l = m._litros || ((String(m.observacao || '').match(/Qtd:\s*([\d.]+)\s*L/) || [])[1]); litros += Number(l) || 0; return; }
+      if (m.descricao === 'Registro de KM') return;
+      ofic += val; nServ++; porClasse[classeDe(m)] += val;
+      const nome = nomeManutencao(m); (servicos[nome] = servicos[nome] || { nome, valor: 0, vezes: 0 }); servicos[nome].valor += val; servicos[nome].vezes++;
+    });
+    let km = 0; try { km = Number(estimarKmNoPeriodo(v, db.manutencoes, de, ate).km) || 0; } catch (e) { km = 0; }
+    const cons = typeof consumoPares === 'function' ? consumoPares(todas, de, ate) : { km: 0, lit: 0 };
+    const total = ofic + comb;
+    if (total > 0 || km > 0) linhas.push({ placa: v.placa, modelo: v.modelo || '', ofic, comb, total, km, nServ, porClasse, custoKm: km > 0 ? total / km : 0, oficKm: km > 0 ? ofic / km : 0, kmL: cons.lit > 0 ? cons.km / cons.lit : 0 });
+  });
+  linhas.sort((a, b) => b.total - a.total);
+  const soma = k => linhas.reduce((t, l) => t + l[k], 0), comKm = linhas.filter(l => l.km >= 500);
+  const maisCaroKm = comKm.slice().sort((a, b) => b.custoKm - a.custoKm)[0] || null, maisOficina = linhas.slice().sort((a, b) => b.ofic - a.ofic)[0] || null;
+  return { de, ate, linhas, maisCaro: linhas[0] || null, maisCaroKm, maisOficina, total: soma('total'), ofic: soma('ofic'), comb: soma('comb'), km: soma('km'),
+    servicos: Object.values(servicos).filter(x => x.valor > 0).sort((a, b) => b.valor - a.valor).slice(0, 6) };
+}
+function abrirRelatorioCusto() {
+  const hoje = hojeLocal(), [y, mo] = hoje.split('-').map(Number), z = n => String(n).padStart(2, '0');
+  const ultimoDia = (yy, mm) => new Date(yy, mm, 0).getDate();
+  const pmY = mo === 1 ? y - 1 : y, pmM = mo === 1 ? 12 : mo - 1;
+  const fDe = document.getElementById('dashDataInicio').value, fAte = document.getElementById('dashDataFim').value;
+  const op = [
+    ['mes', 'Este mês', `${y}-${z(mo)}-01`, hoje],
+    ['passado', 'Mês passado', `${pmY}-${z(pmM)}-01`, `${pmY}-${z(pmM)}-${z(ultimoDia(pmY, pmM))}`],
+    ['90', 'Últimos 90 dias', App.isoMenos(90), hoje],
+    ['ano', 'Este ano', `${y}-01-01`, hoje]
+  ];
+  if (fDe || fAte) op.unshift(['filtro', 'Período do filtro', fDe || '2000-01-01', fAte || hoje]);
+  const esc = { v: op[0][0] }, seg = h('div', { class: 'os-seg rel-seg', role: 'radiogroup' });
+  op.forEach(([k, t, d1, d2]) => { const b = h('button', { type: 'button', class: 'os-seg-b' + (k === esc.v ? ' on' : ''), role: 'radio', 'aria-checked': k === esc.v ? 'true' : 'false' }, h('b', { text: t }), h('small', { text: fmtData(d1) + ' a ' + fmtData(d2) }));
+    b.onclick = () => { esc.v = k; seg.querySelectorAll('.os-seg-b').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); }); }; seg.append(b); });
+  const periodo = () => op.find(o => o[0] === esc.v);
+  const preparar = async () => { const [, , d1] = periodo(); if (App.precisaHistorico && App.precisaHistorico(d1)) await App.pedirHistorico(d1, true); const [, nome, a, b] = periodo(); return Object.assign(dadosRelatorioCusto(a, b), { nome }); };
+  const imp = h('button', { class: 'btn', type: 'button', text: '🖨️ Gerar relatório (imprimir ou PDF)' }), txt = h('button', { class: 'btn secondary', type: 'button', text: '💬 Copiar resumo para o WhatsApp' });
+  logoDataUrl();
+  imp.onclick = async () => {
+    // a janela abre na hora do toque (senão o navegador bloqueia); o conteúdo entra quando os números ficam prontos
+    const w = window.open('', '_blank', 'width=960,height=700'); if (!w) return toast('O navegador bloqueou a janela do relatório. Libere pop-ups para este site.', true);
+    w.document.write('<p style="font-family:Arial;padding:30px">Montando o relatório…</p>');
+    const r = await preparar(); if (!r.linhas.length) { w.close(); return toast('Nenhum gasto nem rodagem nesse período.', true); }
+    imprimirRelatorioCusto(r, w); m.fechar();
+  };
+  txt.onclick = async () => { const r = await preparar(); if (!r.linhas.length) return toast('Nenhum gasto nem rodagem nesse período.', true); compartilharResumoCusto(r); };
+  const m = abrirModal('Relatório de custo por caminhão', h('div', { class: 'rel-cfg' }, h('p', { class: 'hint', text: 'Mostra qual caminhão custou mais no período (oficina + combustível), o custo por km e onde foi o dinheiro. Bom para mostrar à equipe.' }), seg, h('div', { class: 'modal-actions' }, txt, imp)), { largo: true });
+}
+function textoResumoCusto(r) {
+  const brl = v => fmtMoeda(v), L = [];
+  L.push(`🚛 *Custo da frota — ${fmtData(r.de)} a ${fmtData(r.ate)}*`);
+  L.push(`Total: ${brl(r.total)} (oficina ${brl(r.ofic)} · combustível ${brl(r.comb)})`);
+  if (r.maisCaro) L.push(`\n💸 *Caminhão mais caro:* ${r.maisCaro.placa} — ${brl(r.maisCaro.total)}${r.maisCaro.km ? ` (${brl(r.maisCaro.custoKm)}/km)` : ''}`);
+  if (r.maisCaroKm && (!r.maisCaro || r.maisCaroKm.placa !== r.maisCaro.placa)) L.push(`📈 Maior custo por km: ${r.maisCaroKm.placa} — ${brl(r.maisCaroKm.custoKm)}/km`);
+  if (r.maisOficina && r.maisOficina.ofic > 0) L.push(`🔧 Mais gasto com oficina: ${r.maisOficina.placa} — ${brl(r.maisOficina.ofic)}`);
+  L.push('\n*Ranking*'); r.linhas.slice(0, 10).forEach((l, i) => L.push(`${i + 1}. ${l.placa} — ${brl(l.total)}${l.km ? ` · ${fmtKm(l.km)} · ${brl(l.custoKm)}/km` : ''}`));
+  if (r.servicos.length) { L.push('\n*Onde mais se gastou na oficina*'); r.servicos.slice(0, 4).forEach(x => L.push(`• ${x.nome}: ${brl(x.valor)} (${x.vezes}x)`)); }
+  L.push('\nCuidar do caminhão no dia a dia (checklist, avisar defeito cedo) é o que mais baixa esse custo. 👊');
+  return L.join('\n');
+}
+async function compartilharResumoCusto(r) {
+  const t = textoResumoCusto(r);
+  try { if (navigator.share) { await navigator.share({ text: t }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(t); toast('Resumo copiado. É só colar no WhatsApp.'); }
+  catch (e) { const ta = h('textarea', { rows: 12, readonly: true }); ta.value = t; abrirModal('Copie o resumo', ta); ta.select(); }
+}
+let _logoDataUrl = null;
+async function logoDataUrl() {     // a logo vai embutida no relatório: aparece no PDF e na impressão mesmo sem internet
+  if (_logoDataUrl) return _logoDataUrl;
+  try { const b = await (await fetch('logotrm.png')).blob(); _logoDataUrl = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(''); fr.readAsDataURL(b); }); } catch (e) { _logoDataUrl = ''; }
+  return _logoDataUrl;
+}
+function imprimirRelatorioCusto(r, janela) {
+  const e = escHtml, brl = fmtMoeda, max = Math.max(1, ...r.linhas.map(l => l.total)), logo = _logoDataUrl || new URL('logotrm.png', location.href).href, emitido = new Date().toLocaleString('pt-BR').slice(0, 17);
+  const destaque = (rot, l, valor, sub) => l ? `<div class="dest"><div class="dest-rot">${rot}</div><div class="dest-placa">${e(l.placa)}</div><div class="dest-val">${valor}</div><div class="dest-sub">${sub}</div></div>` : '';
+  const pctClasse = l => ['preventiva', 'corretiva', 'preditiva', 'emergencial'].filter(k => l.porClasse[k] > 0).map(k => `<span class="cl ${k}" style="width:${(l.porClasse[k] / Math.max(1, l.ofic) * 100).toFixed(1)}%" title="${CLASSES[k]}: ${brl(l.porClasse[k])}"></span>`).join('');
+  const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:28px 32px;font-size:13px}
+  header{display:flex;align-items:center;gap:18px;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:18px}header img{height:54px}header h1{font-size:22px;margin:0}header p{margin:3px 0 0;color:#444}
+  .dests{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.dest{border:2px solid #111;border-radius:10px;padding:12px}.dest:first-child{background:#111;color:#fff}.dest-rot{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+  .dest-placa{font-size:26px;font-weight:bold;letter-spacing:.04em;margin:4px 0}.dest-val{font-size:17px;font-weight:bold}.dest-sub{font-size:12px;opacity:.85;margin-top:2px}
+  .tot{display:flex;gap:26px;margin:0 0 14px;font-size:13px}.tot b{font-size:16px;display:block}
+  table{width:100%;border-collapse:collapse;margin-bottom:18px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #111;padding:6px 6px}td{padding:7px 6px;border-bottom:1px solid #ddd;vertical-align:middle}
+  td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.top td{font-weight:bold;background:#f3f3f3}.barra{height:10px;background:#eee;border-radius:5px;overflow:hidden;min-width:90px}.barra i{display:block;height:100%;background:#c8102e}
+  .mix{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#eee;min-width:70px}.cl{display:block;height:100%}.cl.preventiva{background:#1d4ed8}.cl.corretiva{background:#d97706}.cl.preditiva{background:#7c3aed}.cl.emergencial{background:#b91c1c}
+  .leg{font-size:11px;color:#444;margin:-10px 0 16px}.leg span{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
+  h2{font-size:15px;margin:0 0 8px}.serv{columns:2;column-gap:26px;margin:0 0 16px;padding:0;list-style:none}.serv li{padding:4px 0;border-bottom:1px dotted #bbb;break-inside:avoid;display:flex;justify-content:space-between;gap:10px}
+  footer{margin-top:10px;font-size:11px;color:#555;border-top:1px solid #ccc;padding-top:8px}@media print{@page{size:A4;margin:12mm}body{padding:0}}`;
+  const tabela = r.linhas.map((l, i) => `<tr class="${i === 0 ? 'top' : ''}"><td>${i + 1}º</td><td><b>${e(l.placa)}</b>${l.modelo ? `<br><small>${e(l.modelo)}</small>` : ''}</td>
+    <td><div class="barra"><i style="width:${(l.total / max * 100).toFixed(1)}%"></i></div></td><td class="n"><b>${brl(l.total)}</b></td><td class="n">${brl(l.ofic)}</td><td class="n">${brl(l.comb)}</td>
+    <td class="n">${l.km ? fmtKm(l.km) : '-'}</td><td class="n">${l.km ? brl(l.custoKm) : '-'}</td><td class="n">${l.kmL ? l.kmL.toFixed(2).replace('.', ',') : '-'}</td><td>${l.ofic > 0 ? `<div class="mix">${pctClasse(l)}</div>` : '-'}</td></tr>`).join('');
+  const corpo = `<header><img src="${logo}" alt="Transmarina"><div><h1>Custo da frota por caminhão</h1><p>${e(r.nome)}: ${fmtData(r.de)} a ${fmtData(r.ate)} · emitido em ${emitido}</p></div></header>
+    <div class="dests">${destaque('💸 Caminhão mais caro', r.maisCaro, r.maisCaro ? brl(r.maisCaro.total) : '', r.maisCaro ? `oficina ${brl(r.maisCaro.ofic)} · combustível ${brl(r.maisCaro.comb)}` : '')}
+      ${destaque('📈 Maior custo por km', r.maisCaroKm, r.maisCaroKm ? brl(r.maisCaroKm.custoKm) + ' / km' : '', r.maisCaroKm ? fmtKm(r.maisCaroKm.km) + ' rodados no período' : '')}
+      ${destaque('🔧 Mais gasto com oficina', r.maisOficina && r.maisOficina.ofic > 0 ? r.maisOficina : null, r.maisOficina ? brl(r.maisOficina.ofic) : '', r.maisOficina ? r.maisOficina.nServ + ' serviço(s)' : '')}</div>
+    <div class="tot"><div>Total da frota<b>${brl(r.total)}</b></div><div>Oficina<b>${brl(r.ofic)}</b></div><div>Combustível<b>${brl(r.comb)}</b></div><div>Rodagem estimada<b>${fmtKm(r.km)}</b></div><div>Custo médio<b>${r.km ? brl(r.total / r.km) + ' / km' : '-'}</b></div></div>
+    <table><thead><tr><th></th><th>Caminhão</th><th></th><th class="n">Total</th><th class="n">Oficina</th><th class="n">Combustível</th><th class="n">Km</th><th class="n">R$/km</th><th class="n">Km/L</th><th>Oficina por tipo</th></tr></thead><tbody>${tabela}</tbody></table>
+    <div class="leg">Oficina por tipo:<span style="background:#1d4ed8"></span>Preventiva<span style="background:#d97706"></span>Corretiva<span style="background:#7c3aed"></span>Preditiva<span style="background:#b91c1c"></span>Emergencial</div>
+    ${r.servicos.length ? `<h2>Onde mais se gastou na oficina</h2><ul class="serv">${r.servicos.map(x => `<li><span>${e(x.nome)} <small>(${x.vezes}x)</small></span><b>${brl(x.valor)}</b></li>`).join('')}</ul>` : ''}
+    <footer>Km rodado estimado pelo histórico de KM do caminhão. Custo por km considera só caminhões com pelo menos 500 km no período. Combustível pelas faturas do posto e lançamentos.</footer>`;
+  const w = janela || window.open('', '_blank', 'width=960,height=700'); if (!w) { toast('O navegador bloqueou a janela do relatório. Libere pop-ups para este site.', true); return; }
+  w.document.open(); w.document.write(`<html><head><title>Custo por caminhão · ${fmtData(r.de)} a ${fmtData(r.ate)}</title><style>${css}</style></head><body>${corpo}</body></html>`); w.document.close(); w.focus();
+  const img = w.document.querySelector('img'); const imprimir = () => setTimeout(() => w.print(), 300); if (img && !img.complete) { img.onload = imprimir; img.onerror = imprimir; } else imprimir();
+}
+
 /* ================= ABA 4: ALERTAS ================= */
 async function marcarResolvido(id) { 
   const a = db.alertas.find(x => x.id === id); if (!a) return;
@@ -882,8 +1092,17 @@ function alterarAlerta(id, status) {
 }
 function resolverOcorrenciaGF(id) {
   const d = App.dados, o = (d.ocorrencias || []).find(x => x.id === id); if (!o) return;
-  o.status = 'RESOLVIDA'; renderTelaAtual();
-  execBackground(async () => { await apiPost('resolverOcorrencia', { id }); if (typeof App !== 'undefined' && App.recarregar) App.recarregar(true); }, 'Não foi possível marcar a ocorrência como resolvida');
+  const antes = { status: o.status, resolvidoEm: o.resolvidoEm, resolvidoPor: o.resolvidoPor };
+  o.status = 'RESOLVIDA'; o.resolvidoEm = hojeLocal() + ' ' + new Date().toTimeString().slice(0, 8); o.resolvidoPor = GF.nome();
+  renderTelaAtual(); toast('Ocorrência resolvida: foi para Resolvido.');
+  execBackground(async () => { try { await apiPost('resolverOcorrencia', { id }); } catch (e) { Object.assign(o, antes); renderTelaAtual(); throw e; } }, 'Não foi possível marcar a ocorrência como resolvida');
+}
+function reabrirOcorrenciaGF(id) {
+  const d = App.dados, o = (d.ocorrencias || []).find(x => x.id === id); if (!o) return;
+  const antes = { status: o.status, resolvidoEm: o.resolvidoEm, resolvidoPor: o.resolvidoPor };
+  o.status = 'ABERTA'; o.resolvidoEm = ''; o.resolvidoPor = '';
+  renderTelaAtual(); toast('Ocorrência reaberta: voltou para pendente.');
+  execBackground(async () => { try { await apiPost('reabrirOcorrencia', { id }); } catch (e) { Object.assign(o, antes); renderTelaAtual(); throw e; } }, 'Não foi possível reabrir a ocorrência');
 }
 function marcarAnalise(id) { alterarAlerta(id, 'analise'); }
 function reabrirAlerta(id) { alterarAlerta(id, 'ativo'); }
@@ -906,7 +1125,7 @@ function iniciarAnaliseAgendamento(id) {
   else { const novoAlerta = { id: gerarId(), placa: ag.placa, tipo: tipoA, status: 'analise', dataAnalise: hojeISO(), dataResolucao: null, classificadoPor: quemEQuando() }; db.alertas.push(novoAlerta); salvarCache(); renderTelaAtual(); execBackground(async () => { await apiPost('addAlerta', novoAlerta); }, 'Erro andamento'); }
 }
 function irParaVeiculo(placa) { Hub.ir('frota'); selecionarVeiculo(placa); }
-const estadoAccordions = { ocorrencia: true, atrasado: true, pendente: true, andamento: true, resolvido: false };
+const estadoAccordions = { aprovar: true, ocorrencia: true, atrasado: true, pendente: true, andamento: true, resolvido: false };
 function toggleSecaoAlerta(header, secaoId) {
   const corpo = header.nextElementSibling; const seta = header.querySelector('.alert-secao-seta'); const estavaAberto = corpo.style.display !== 'none';
   corpo.style.display = estavaAberto ? 'none' : 'block'; seta.textContent = estavaAberto ? '▸' : '▾'; estadoAccordions[secaoId] = !estavaAberto; 
@@ -924,14 +1143,50 @@ function dicaAlerta(a, grp) {
 function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.nome || 'Não identificado'}`; }
 /** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
 /* Ocorrências dos motoristas (checklist aprovado ou defeito relatado) que estão pendentes: entram no GF como pendência. */
+/* ---------- Caminhão parado: marcado pela placa, aparece em todos os alertas daquele caminhão ---------- */
+function veiculoParado(placa) { const v = db.veiculos.find(x => x.placa === placa); return v && v.paradoDesde ? v : null; }
+function fmtQuando(dh) { const t = String(dh || ''); return t.length >= 10 ? fmtData(t.slice(0, 10)) + (t.length >= 16 ? ' ' + t.slice(11, 16) : '') : '-'; }
+function tagParado(placa) { const v = veiculoParado(placa); return v ? `<span class="tag-parado" title="Parado desde ${escAttr(fmtQuando(v.paradoDesde))} · ${escAttr(v.paradoPor || '')}">🚫 Parado</span>` : ''; }
+function placaClicavel(placa) { return `<span class="oc-placa" role="button" tabindex="0" title="Opções do caminhão" onclick="menuPlaca(event,'${escAttr(placa)}')" onkeydown="if(event.key==='Enter')menuPlaca(event,'${escAttr(placa)}')">${escHtml(placa)}</span>${tagParado(placa)}`; }
+function fecharMenuPlaca() { const m = document.getElementById('menuPlaca'); if (m) m.remove(); document.removeEventListener('pointerdown', fora_menuPlaca, true); document.removeEventListener('keydown', esc_menuPlaca, true); }
+function fora_menuPlaca(e) { const m = document.getElementById('menuPlaca'); if (m && !m.contains(e.target)) fecharMenuPlaca(); }
+function esc_menuPlaca(e) { if (e.key === 'Escape') { e.stopImmediatePropagation(); fecharMenuPlaca(); } }
+function menuPlaca(ev, placa) {
+  ev.stopPropagation(); fecharMenuPlaca();
+  const parado = !!veiculoParado(placa), r = ev.currentTarget.getBoundingClientRect(), m = document.createElement('div');
+  m.id = 'menuPlaca'; m.className = 'menu-placa'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<div class="menu-placa-tit">${escHtml(placa)}${parado ? ' · parado' : ''}</div>
+    <button type="button" role="menuitem" data-a="abrir">🚛 Abrir o caminhão</button>
+    <button type="button" role="menuitem" data-a="parado" class="${parado ? 'lib' : 'par'}">${parado ? '✅ Liberar (voltou a rodar)' : '🚫 Marcar como parado'}</button>`;
+  m.onclick = e => { const b = e.target.closest('button'); if (!b) return; fecharMenuPlaca(); if (b.dataset.a === 'abrir') irParaVeiculo(placa); else alternarParado(placa); };
+  document.body.appendChild(m);
+  const w = m.offsetWidth, hgt = m.offsetHeight, x = Math.max(8, Math.min(r.left, innerWidth - w - 8)), y = r.bottom + 6 + hgt > innerHeight - 8 ? Math.max(8, r.top - hgt - 6) : r.bottom + 6;
+  m.style.left = x + 'px'; m.style.top = y + 'px'; m.querySelector('button').focus();
+  setTimeout(() => { document.addEventListener('pointerdown', fora_menuPlaca, true); document.addEventListener('keydown', esc_menuPlaca, true); }, 0);
+}
+function alternarParado(placa) {
+  const v = db.veiculos.find(x => x.placa === placa); if (!v) return;
+  const vai = !v.paradoDesde, antes = { paradoDesde: v.paradoDesde, paradoPor: v.paradoPor };
+  // grava também nos dados do Hub: quando o histórico antigo chega, o GF é remontado a partir deles
+  const bruto = (((typeof App !== 'undefined' && App.dados) || {}).veiculos || []).find(x => String(x.placa).trim().toUpperCase() === placa);
+  const marcar = (pd, pp) => { v.paradoDesde = pd; v.paradoPor = pp; if (bruto) { bruto.paradoDesde = pd; bruto.paradoPor = pp; } };
+  marcar(vai ? hojeLocal() + ' ' + new Date().toTimeString().slice(0, 8) : '', vai ? GF.nome() : '');
+  salvarCache(); renderTelaAtual(); toast(vai ? placa + ' marcado como parado.' : placa + ' liberado.');
+  execBackground(async () => {
+    try { const r = await apiPost('marcarParado', { placa, parado: vai }); if (vai && r && r.paradoDesde) { marcar(r.paradoDesde, r.paradoPor || v.paradoPor); salvarCache(); } }
+    catch (e) { marcar(antes.paradoDesde, antes.paradoPor); salvarCache(); renderTelaAtual(); throw e; }
+  }, 'Não foi possível ' + (vai ? 'marcar o caminhão como parado' : 'liberar o caminhão'));
+}
 function ocorrenciasAbertas() { const d = (typeof App !== 'undefined' && App.dados) || {}; return (d.ocorrencias || []).filter(o => String(o.status || '').toUpperCase() === 'ABERTA'); }
 function ocorrenciaGrave(o) { return /alta|grave|urgente/i.test(o.prioridade || '') || /sim/i.test(o.restringeCirculacao || ''); }
 function montarCardOcorrencia(o, comPlaca) {
   const d = (typeof App !== 'undefined' && App.dados) || {}, m = (d.motoristas || []).find(x => x.id === o.motoristaId);
-  const origem = o.origem === 'relato' ? 'defeito relatado' : 'checklist';
-  return `<div class="alert-card ${ocorrenciaGrave(o) ? 'atrasado' : 'pendente'} oc-gf"><div class="alert-info"><div class="alert-title">${comPlaca ? `<span class="oc-placa" title="Abrir o caminhão" onclick="irParaVeiculo('${escAttr(o.placa)}')">${escHtml(o.placa)}</span> ` : ''}${escHtml(o.item || 'Ocorrência')}${/sim/i.test(o.restringeCirculacao || '') ? ' · 🚫 caminhão parado' : ''}</div>
-    <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : ''} · ${escHtml(m ? m.nome : 'Motorista')} · ${origem}</div></div>
-    <div class="alert-actions"><button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button></div></div>`;
+  const origem = o.origem === 'relato' ? 'defeito relatado' : 'checklist', resolvida = String(o.status || '').toUpperCase() === 'RESOLVIDA';
+  const quando = resolvida ? 'resolvida ' + fmtQuando(o.resolvidoEm) + (o.resolvidoPor ? ' por ' + escHtml(o.resolvidoPor) : '') : (o.dataAbertura ? fmtData(String(o.dataAbertura).slice(0, 10)) : '');
+  const botao = resolvida ? `<button class="btn small secondary" onclick="reabrirOcorrenciaGF('${escAttr(o.id)}')">Reabrir</button>` : `<button class="btn small" onclick="resolverOcorrenciaGF('${escAttr(o.id)}')">Resolvido</button>`;
+  return `<div class="alert-card ${resolvida ? 'resolvido' : ocorrenciaGrave(o) ? 'atrasado' : 'pendente'} oc-gf"><div class="alert-info"><div class="alert-title">${comPlaca ? placaClicavel(o.placa) + ' ' : ''}${resolvida ? '📣 ' : ''}${escHtml(o.item || 'Ocorrência')}</div>
+    <div class="alert-sub">${escHtml(o.descricao || '-')}</div><div class="alert-sub">${quando} · ${escHtml(m ? m.nome : 'Motorista')} · ${origem}</div>${resolvida ? '' : `<div class="alert-crit">${chipCrit('ocorrencia', o, 'oc')}<span class="classe-tag">Corretiva</span></div>`}</div>
+    <div class="alert-actions">${botao}</div></div>`;
 }
 function montarCardOcorrencias(placa, soSeTiver) {
   const lista = ocorrenciasAbertas().filter(o => o.placa === placa).sort((a, b) => (ocorrenciaGrave(b) - ocorrenciaGrave(a)) || String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
@@ -945,15 +1200,15 @@ function montarCardAlerta(a) {
   let btn = grp === 'resolvido' ? `<button class="btn small secondary" onclick="reativarResolvido('${a.id}')">Reabrir</button>${isAdmin ? `<button class="btn small danger" onclick="excluirManutencao('${a.id}')">Excluir</button>` : ''}` :
             grp === 'andamento' ? `<button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button><button class="btn small secondary" onclick="reabrirAlerta('${a.id}')">Voltar</button>` :
             `<button class="btn small secondary" onclick="marcarAnalise('${a.id}')">Em andamento</button><button class="btn small" onclick="marcarResolvido('${a.id}')">Resolvido</button>`;
-  return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${a.placa} — ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div></div><div class="alert-actions">${btn}</div></div>`;
+  return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${placaClicavel(a.placa)} ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div>${grp === 'resolvido' ? '' : `<div class="alert-crit">${chipCrit('alerta', a, 'alerta')}<span class="classe-tag">Preventiva</span></div>`}</div><div class="alert-actions">${btn}</div></div>`;
 }
 
 function montarCardAgAtrasado(ag) { 
-    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}<span class="classe-tag">${CLASSES[classeDe(ag)]}</span></div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function montarCardAgPendente(ag) { 
-    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${ag.placa} — ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}<span class="classe-tag">${CLASSES[classeDe(ag)]}</span></div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function renderAlertas() {
@@ -1003,18 +1258,24 @@ function renderAlertas() {
       });
   }
 
+  // Ocorrências resolvidas (pelo GF, pelo Fleet ou na aprovação do checklist) entram em Resolvido junto com as manutenções — com Reabrir
+  let ocsRes = ((typeof App !== 'undefined' && App.dados && App.dados.ocorrencias) || []).filter(o => String(o.status || '').toUpperCase() === 'RESOLVIDA');
+  if (termoLimpo) ocsRes = ocsRes.filter(o => (o.placa + ' ' + o.item + ' ' + o.descricao).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termoLimpo));
   let ocs = ocorrenciasAbertas();
   if (termoLimpo) ocs = ocs.filter(o => (o.placa + ' ' + o.item + ' ' + o.descricao).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termoLimpo));
-  ocs.sort((a, b) => (ocorrenciaGrave(b) - ocorrenciaGrave(a)) || String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
-  if (baseAlertas.length === 0 && baseAgs.length === 0 && g.resolvido.length === 0 && !ocs.length) { c.innerHTML = '<p class="empty">Nenhum alerta encontrado. ✅</p>'; return; }
+  ocs.sort((a, b) => (CRITS[critDe('ocorrencia', a)].n - CRITS[critDe('ocorrencia', b)].n) || String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
+  if (baseAlertas.length === 0 && baseAgs.length === 0 && g.resolvido.length === 0 && !ocs.length && !ocsRes.length && !manutMotoristaPendentes().length) { c.innerHTML = '<p class="empty">Nenhum alerta encontrado. ✅</p>'; return; }
 
   const hoje = hojeLocal(); const agsAtrasados = baseAgs.filter(ag => ag.dataPrevista && ag.dataPrevista < hoje); const agsPendentes = baseAgs.filter(ag => !(ag.dataPrevista && ag.dataPrevista < hoje));
-  const listaAtrasados = [ ...g.atrasado.map(a => ({ html: montarCardAlerta(a), ts: dataCriacaoAlertaTs(a) })), ...agsAtrasados.map(ag => ({ html: montarCardAgAtrasado(ag), ts: new Date(ag.dataPrevista + 'T00:00:00').getTime() })) ];
-  listaAtrasados.sort((a, b) => a.ts - b.ts);
+  // dentro de cada grupo: primeiro o que obriga a parar, depois rodar com cautela, depois o resto
+  const listaAtrasados = [ ...g.atrasado.map(a => ({ html: montarCardAlerta(a), ts: dataCriacaoAlertaTs(a), c: CRITS[critDe('alerta', a)].n })), ...agsAtrasados.map(ag => ({ html: montarCardAgAtrasado(ag), ts: new Date(ag.dataPrevista + 'T00:00:00').getTime(), c: CRITS[critDe('agend', ag)].n })) ];
+  listaAtrasados.sort((a, b) => (a.c - b.c) || (a.ts - b.ts));
   
   const sec = (grp, tit, html, num) => { if(num === 0) return ''; const exp = estadoAccordions[grp]; return `<div class="alert-secao ${grp}"><div class="alert-secao-header" onclick="toggleSecaoAlerta(this, '${grp}')"><span>${tit}</span><span class="alert-secao-count">${num}</span><span class="alert-secao-seta">${exp ? '▾' : '▸'}</span></div><div class="alert-secao-corpo" style="display:${exp ? 'block' : 'none'}">${html}</div></div>`; };
-  const htmlAtrasados = listaAtrasados.map(item => item.html).join(''); const htmlPendentes = g.pendente.map(montarCardAlerta).join('') + agsPendentes.map(montarCardAgPendente).join('');
-  c.innerHTML = sec('ocorrencia', '📣 Ocorrências dos motoristas', ocs.map(o => montarCardOcorrencia(o, true)).join(''), ocs.length) + sec('atrasado', '🔴 Atrasado', htmlAtrasados, listaAtrasados.length) + sec('pendente', '🟡 Pendente', htmlPendentes, g.pendente.length + agsPendentes.length) + sec('andamento', '🟠 Em andamento', g.andamento.map(montarCardAlerta).join(''), g.andamento.length) + sec('resolvido', '🟢 Resolvido', g.resolvido.map(montarCardAlerta).join(''), g.resolvido.length);
+  const htmlAtrasados = listaAtrasados.map(item => item.html).join(''); const htmlPendentes = [...g.pendente.map(a => ({ c: CRITS[critDe('alerta', a)].n, html: montarCardAlerta(a) })), ...agsPendentes.map(ag => ({ c: CRITS[critDe('agend', ag)].n, html: montarCardAgPendente(ag) }))].sort((x, y) => x.c - y.c).map(x => x.html).join('');
+  let mms = manutMotoristaPendentes(); if (termoLimpo) mms = mms.filter(x => (x.placa + ' ' + x.servico).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termoLimpo));
+  c.innerHTML = sec('aprovar', '🧾 Manutenções lançadas pelos motoristas', mms.map(montarCardManutMotorista).join(''), mms.length) +
+    sec('ocorrencia', '📣 Ocorrências dos motoristas', ocs.map(o => montarCardOcorrencia(o, true)).join(''), ocs.length) + sec('atrasado', '🔴 Atrasado', htmlAtrasados, listaAtrasados.length) + sec('pendente', '🟡 Pendente', htmlPendentes, g.pendente.length + agsPendentes.length) + sec('andamento', '🟠 Em andamento', g.andamento.map(montarCardAlerta).join(''), g.andamento.length) + sec('resolvido', '🟢 Resolvido', [...g.resolvido.map(a => ({ d: String(a.dataResolucao || ''), html: montarCardAlerta(a) })), ...ocsRes.map(o => ({ d: String(o.resolvidoEm || o.dataAbertura || ''), html: montarCardOcorrencia(o, true) }))].sort((x, y) => y.d.slice(0, 10).localeCompare(x.d.slice(0, 10))).map(x => x.html).join(''), g.resolvido.length + ocsRes.length);
 }
 
 function filtrarHistorico() {
@@ -1133,17 +1394,19 @@ function osItens() {
       if (info.limiteData !== null) { const dd = Math.round((new Date(info.limiteData + 'T00:00:00') - new Date(hojeISO() + 'T00:00:00')) / 864e5); txtData = dd >= 0 ? `Faltam ${dd} dias` : `Excedido há ${-dd} dias`; }
       sit = info.cfg.modo === 'km' ? txtKm : info.cfg.modo === 'meses' ? txtData : `${txtKm} | ${txtData}`;
     }
-    itens.push({ id: 'al:' + a.id, kind: 'alerta', placa: a.placa, nome: nomeTipo(a.tipo), ultima, sit, detalhe: '' });
+    itens.push({ id: 'al:' + a.id, kind: 'alerta', placa: a.placa, nome: nomeTipo(a.tipo), ultima, sit, detalhe: '', crit: critDe('alerta', a), classe: 'preventiva' });
   });
   db.agendamentos.forEach(ag => {
     if (db.alertas.some(a => a.placa === ag.placa && normPeca(a.tipo) === normPeca(ag.tipo === 'outro' ? ag.descricao : ag.tipo) && a.status !== 'resolvido')) return;
     const nome = (ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo), h0 = ultimaManut(ag.placa, ag.tipo === 'outro' ? ag.descricao : ag.tipo);
-    itens.push({ id: 'ag:' + (ag.id || ag.placa + nome), kind: 'agend', placa: ag.placa, nome: nome + ' (agendado)', ultima: h0 ? `${fmtData(h0.data)} (aos ${fmtKm(h0.km)})` : 'Serviço avulso (sem histórico)', sit: ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : 'Agendamento pendente', detalhe: ag.descricao || '' });
+    itens.push({ id: 'ag:' + (ag.id || ag.placa + nome), kind: 'agend', placa: ag.placa, nome: nome + ' (agendado)', ultima: h0 ? `${fmtData(h0.data)} (aos ${fmtKm(h0.km)})` : 'Serviço avulso (sem histórico)', sit: ag.dataPrevista ? `Agendado para ${fmtData(ag.dataPrevista)}` : 'Agendamento pendente', detalhe: ag.descricao || '' , crit: critDe('agend', ag), classe: classeDe(ag) });
   });
   (d.ocorrencias || []).filter(o => String(o.status || '').toUpperCase() === 'ABERTA').forEach(o => {
-    itens.push({ id: 'oc:' + o.id, kind: 'ocorrencia', placa: o.placa, nome: 'Ocorrência: ' + (o.item || ''), ultima: '-', sit: (o.dataAbertura ? 'Relatada em ' + fmtData(String(o.dataAbertura).slice(0, 10)) : 'Relatada pelo motorista') + (/sim/i.test(o.restringeCirculacao || '') ? ' · restringe circulação' : ''), detalhe: (o.descricao || '') + (mot[o.motoristaId] ? ' (relato de ' + mot[o.motoristaId] + ')' : ''), alta: /alta/i.test(o.prioridade || '') });
+    itens.push({ id: 'oc:' + o.id, kind: 'ocorrencia', placa: o.placa, nome: 'Ocorrência: ' + (o.item || ''), ultima: '-', sit: (o.dataAbertura ? 'Relatada em ' + fmtData(String(o.dataAbertura).slice(0, 10)) : 'Relatada pelo motorista') + (/sim/i.test(o.restringeCirculacao || '') ? ' · restringe circulação' : ''), detalhe: (o.descricao || '') + (mot[o.motoristaId] ? ' (relato de ' + mot[o.motoristaId] + ')' : ''), alta: /alta/i.test(o.prioridade || '') , crit: critDe('ocorrencia', o), classe: 'corretiva' });
   });
-  return itens.sort((a, b) => a.placa.localeCompare(b.placa) || a.nome.localeCompare(b.nome));
+  // Ordem da OS: o caminhão com o item mais crítico primeiro; dentro dele, do mais crítico para o menos
+  const pior = {}; itens.forEach(i => { const n = CRITS[i.crit].n; pior[i.placa] = Math.min(pior[i.placa] === undefined ? 9 : pior[i.placa], n); });
+  return itens.sort((a, b) => (pior[a.placa] - pior[b.placa]) || a.placa.localeCompare(b.placa) || (CRITS[a.crit].n - CRITS[b.crit].n) || a.nome.localeCompare(b.nome));
 }
 
 function imprimirRelatorioMecanico() {
@@ -1169,7 +1432,7 @@ function imprimirRelatorioMecanico() {
     tudo.onchange = () => marcar(doVeic, tudo.checked);
     const grupo = h('div', { class: 'os-grupo' }, h('label', { class: 'os-placa' }, tudo, h('b', { text: pl }), h('span', { text: doVeic.length + (doVeic.length > 1 ? ' itens' : ' item') })));
     doVeic.forEach(i => { const c = h('input', { type: 'checkbox' }); cks[i.id] = c; c.onchange = () => { marcados[i.id] = c.checked; att(); };
-      grupo.append(h('label', { class: 'os-item' }, c, h('span', { class: 'os-tx' }, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), i.kind === 'ocorrencia' ? h('span', { class: 'badge ' + (i.alta ? 'red' : 'amber'), text: 'motorista' }) : null)); });
+      grupo.append(h('label', { class: 'os-item' }, c, h('span', { class: 'os-tx' }, h('b', { text: i.nome }), h('small', { text: i.sit + (i.detalhe ? ' — ' + i.detalhe : '') })), h('span', { class: 'crit-chip ' + i.crit, text: CRITS[i.crit].ic + ' ' + CRITS[i.crit].t }))); });
     lista.append(grupo);
   });
   const barra = h('div', { class: 'os-barra' }, h('button', { class: 'btn small secondary', type: 'button', text: 'Marcar tudo', onclick: () => marcar(itens, true) }), h('button', { class: 'btn small secondary', type: 'button', text: 'Limpar', onclick: () => marcar(itens, false) }));
@@ -1187,20 +1450,31 @@ function imprimirOS(itens, tipo, prestador, obs) {
   .veiculo{border:2px solid #000;border-radius:8px;padding:12px;margin-bottom:14px;font-size:16px;line-height:1.6}.pagina{page-break-after:always}.pagina:last-child{page-break-after:auto}
   .linha{border-bottom:1px solid #000;display:inline-block;min-width:160px}.campos{display:flex;gap:30px;margin:14px 0;font-size:15px}.ass{display:flex;gap:40px;margin-top:50px;text-align:center;font-size:14px;font-weight:bold}.ass div{flex:1;border-top:2px solid #000;padding-top:4px}
   .def{font-size:16px;line-height:1.5;margin:4px 0}.obs{border:1px solid #666;border-radius:6px;padding:8px;margin:10px 0;font-size:15px}
+  .placa small{font-size:15px;font-weight:normal;color:#333}.serv{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px dashed #999}.serv:first-of-type{border-top:0}.serv .cb{margin-top:2px}
+  .serv-tx{flex:1}.serv-nome{font-size:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.serv .info{margin-top:4px;border:0;padding:0;font-size:14px;line-height:1.5}
+  .crit{display:inline-block;font-size:12px;font-weight:bold;border:2px solid #000;border-radius:4px;padding:1px 6px;letter-spacing:.03em}.crit.parar{background:#000;color:#fff}.crit.cautela{border-style:solid}.crit.normal{border-style:dashed}
+  .cls{font-size:12px;color:#333;text-transform:uppercase;letter-spacing:.04em}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   @media print{@page{margin:1cm}}`;
   let corpo = '';
+  const critTxt = i => `<span class="crit ${i.crit}">${CRITS[i.crit].ic} ${CRITS[i.crit].t.toUpperCase()}</span> <span class="cls">${esc(CLASSES[i.classe] || '')}</span>`;
+  const placas = Array.from(new Set(itens.map(i => i.placa)));          // já vêm na ordem de criticidade (osItens)
   if (!externa) {
-    corpo = `<h1>🔧 Aviso de Serviço - Oficina</h1><div class="emissao">Impresso em: ${hoje}</div>` + itens.map(i => `<div class="item"><div class="placa">🚛 Placa: ${esc(i.placa)}</div><div class="servico"><div class="cb"></div> ⚠️ Serviço: <strong>${esc(i.nome.toUpperCase())}</strong></div>
-      <div class="info">${i.detalhe ? `<span class="lb">Relato:</span> <span class="vl">${esc(i.detalhe)}</span><br>` : ''}<span class="lb">Última troca:</span> <span class="vl">${esc(i.ultima)}</span><br><span class="lb">Situação atual:</span> <span class="vl">${esc(i.sit)}</span></div></div>`).join('')
-      + `<div class="ass"><div>Visto da Oficina</div></div>`;
+    // um bloco por caminhão, com todos os serviços dele juntos, do mais crítico para o menos
+    corpo = `<h1>🔧 Ordem de Serviço - Oficina</h1><div class="emissao">Impresso em: ${hoje} · ${itens.length} serviço(s) em ${placas.length} caminhão(ões) · ordem: o mais crítico primeiro</div>` + placas.map(pl => {
+      const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl), parado = veiculoParado(pl);
+      return `<div class="item"><div class="placa">🚛 ${esc(pl)}${v.modelo ? ' <small>· ' + esc(v.modelo) + '</small>' : ''} <small>· Km ${fmtKm(v.kmAtual || 0)}</small>${parado ? ' <span class="crit parar">🚫 PARADO</span>' : ''}</div>
+        ${doVeic.map(i => `<div class="serv"><div class="cb"></div><div class="serv-tx"><div class="serv-nome"><strong>${esc(i.nome.toUpperCase())}</strong> ${critTxt(i)}</div>
+          <div class="info">${i.detalhe ? `<span class="lb">Relato:</span> <span class="vl">${esc(i.detalhe)}</span><br>` : ''}${i.ultima && i.ultima !== '-' ? `<span class="lb">Última troca:</span> <span class="vl">${esc(i.ultima)}</span><br>` : ''}<span class="lb">Situação:</span> <span class="vl">${esc(i.sit)}</span></div></div></div>`).join('')}
+        <div class="campos"><span>Mecânico: <span class="linha"></span></span><span>Concluído em: ___/___/______</span></div></div>`;
+    }).join('') + `<div class="ass"><div>Visto da Oficina</div><div>Gestão</div></div>`;
   } else {
-    const placas = Array.from(new Set(itens.map(i => i.placa)));
     corpo = placas.map(pl => {
       const v = db.veiculos.find(x => x.placa === pl) || {}, doVeic = itens.filter(i => i.placa === pl);
       return `<div class="pagina"><h1>Ordem de Serviço Externa</h1><div class="emissao">Emitida em: ${hoje} · Transmarina</div>
         <div class="veiculo"><b>Veículo:</b> ${esc(pl)}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(String(v.ano)) : ''}<br><b>Km atual:</b> ${fmtKm(v.kmAtual || 0)}<br><b>Prestador / local:</b> ${prestador ? esc(prestador) : '<span class="linha"></span>'}</div>
         <div style="font-size:18px;font-weight:bold;margin-bottom:6px">O que precisa ser feito</div>
-        ${doVeic.map(i => `<div class="item"><div class="servico"><div class="cb"></div><strong>${esc(i.nome)}</strong></div><div class="def">${i.detalhe ? `<b>Defeito / relato:</b> ${esc(i.detalhe)}<br>` : ''}<b>Situação:</b> ${esc(i.sit)}${i.ultima && i.ultima !== '-' ? `<br><b>Última vez feito:</b> ${esc(i.ultima)}` : ''}</div></div>`).join('')}
+        ${doVeic.map(i => `<div class="item"><div class="servico"><div class="cb"></div><strong>${esc(i.nome)}</strong> ${critTxt(i)}</div><div class="def">${i.detalhe ? `<b>Defeito / relato:</b> ${esc(i.detalhe)}<br>` : ''}<b>Situação:</b> ${esc(i.sit)}${i.ultima && i.ultima !== '-' ? `<br><b>Última vez feito:</b> ${esc(i.ultima)}` : ''}</div></div>`).join('')}
         ${obs ? `<div class="obs"><b>Observações:</b> ${esc(obs)}</div>` : ''}
         <div class="campos"><span>Orçamento: R$ <span class="linha"></span></span><span>Prazo: <span class="linha"></span></span></div>
         <div class="campos"><span>Entrada: ___/___/______</span><span>Saída: ___/___/______</span><span>Km: <span class="linha" style="min-width:90px"></span></span></div>

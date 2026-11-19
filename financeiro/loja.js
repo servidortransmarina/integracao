@@ -154,12 +154,12 @@ function aplicarDadosHub(r){
   document.getElementById('depositStatus').textContent=DEPOSITOS.length?`${DEPOSITOS.length} depósito(s) na base${DEPOSITOS.length-new Set(DEPOSITOS.map(d=>d.data)).size?' · atenção: datas repetidas':''}`:'Nenhum depósito na base: saldos indisponíveis até carregar a aba PARCIAL DE FRETE.';
   populateFilters(); render();
 }
-async function carregarDaPlanilha(mostrarAlertaErro, online){
+async function carregarDaPlanilha(mostrarAlertaErro, online, fundo){
   const statusEl=document.getElementById('uploadStatus'), btn=document.getElementById('btnAtualizarPlanilha');
   if(btn){ btn.disabled=true; btn.textContent=online?'Lendo a planilha…':'Atualizando…'; }
   if(!VIAGENS.length) statusEl.textContent='Carregando a base…';
   try{
-    const r=await hubFin().chamar(online?'financeiroLojaAtualizar':'financeiroLojaCarregar');
+    const r=await hubFin().chamar(online?'financeiroLojaAtualizar':'financeiroLojaCarregar',{},fundo?{fundo:true}:undefined);
     aplicarDadosHub(r);
     return true;
   }catch(err){
@@ -1241,7 +1241,7 @@ async function iniciar(){
 }
 iniciar();
 // confere a base a cada 5 min com a tela visível (o robô do servidor lê a planilha a cada 30 min)
-setInterval(()=>{if(!document.hidden) carregarDaPlanilha(false,false);},5*60*1000);
+setInterval(()=>{if(!document.hidden) carregarDaPlanilha(false,false,true);},5*60*1000);   // atualização automática: segundo plano
 // o Hub troca a aba (Operacional, Financeiro, CB) pela barra de cima
 window.addEventListener('message',e=>{ if(e.origin!==location.origin||!e.data||e.data.tipo!=='fin-aba') return; if(['operacional','financeiro','cb'].indexOf(e.data.aba)>=0) selecionarVisao(e.data.aba); });
 try{ window.parent.postMessage({tipo:'fin-pronto',area:'loja'},location.origin); }catch(e){}

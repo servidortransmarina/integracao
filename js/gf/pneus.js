@@ -288,23 +288,32 @@ function pneusRenderPainel(v, m) {
   document.getElementById('pneusPainel').innerHTML = `<h2>Posições</h2><div class="pn-linhas">${linhas}</div>${detalhe}`;
 }
 
+/* Tabelas compactas: cada pneu cabe numa linha (ação principal + menu "Mais" com o resto). */
+const kmCurto = v => Math.round(Number(v) || 0).toLocaleString('pt-BR');
+function vidaCurta(p) { const r = p.recapagens || 0; return r === 0 ? 'Novo' : r + 'ª recap.'; }
 function pneusRenderTabela() {
   const f = (document.getElementById('pneusFiltro').value || '').trim().toLowerCase();
   const lista = db.pneus.filter(p => !f || [p.codigo, p.marca, p.modelo, p.medida, p.placa, p.posicao, ROTULO_STATUS_PNEU[p.status]].join(' ').toLowerCase().includes(f))
     .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
   const el = document.getElementById('pneusTabela');
   if (!lista.length) { el.innerHTML = '<div class="empty">Nenhum pneu cadastrado.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Código</th><th>Pneu</th><th>Vida</th><th>KM nesta vida</th><th>KM total</th><th>Situação</th><th>Local</th><th>Ações</th></tr></thead><tbody>${lista.map(p => {
+  el.innerHTML = `<table class="pn-tab"><thead><tr><th>Pneu</th><th title="Vida do pneu · KM nesta vida / KM total">Vida · KM</th><th>Situação</th><th></th></tr></thead><tbody>${lista.map(p => {
     const k = pneuKm(p), c = escHtml(p.codigo);
-    const local = p.status === 'montado' ? `${escHtml(p.placa)} · ${escHtml(nomePosicao(p.placa, p.posicao))}` : '-';
-    const acoes = [`<button class="btn secondary small" onclick="abrirModalPneu('${c}')">Editar</button>`];
-    if (p.status === 'estoque') acoes.push(`<button class="btn small" onclick="abrirModalMontar({codigo:'${c}'})">Montar</button>`);
-    if (p.status === 'estoque' || p.status === 'recapagem') acoes.push(`<button class="btn success small" onclick="recaparPneu('${c}')">Recapagem concluída</button>`);
-    if (p.status === 'montado') acoes.push(`<button class="btn danger small" onclick="abrirModalDesmontar('${c}')">Desmontar</button>`);
-    if (p.status === 'estoque' || p.status === 'recapagem') acoes.push(`<button class="btn secondary small" onclick="descartarPneu('${c}')">Descartar</button>`);
-    if (p.status !== 'montado') acoes.push(`<button class="btn danger small" onclick="excluirPneu('${c}')">Excluir</button>`);
-    return `<tr><td><b>${c}</b></td><td>${escHtml(textoPneu(p))}</td><td>${rotuloVida(p)}</td><td>${fmtKm(k.vida)}</td><td>${fmtKm(k.total)}</td><td>${swatchPneu(p)} ${ROTULO_STATUS_PNEU[p.status] || escHtml(p.status)}</td><td>${local}</td><td class="pn-td-acoes">${acoes.join(' ')}</td></tr>`;
+    const sit = p.status === 'montado' ? `<span title="${escHtml(nomePosicao(p.placa, p.posicao))}">${escHtml(p.placa)} · ${escHtml(p.posicao)}</span>` : (ROTULO_STATUS_PNEU[p.status] || escHtml(p.status));
+    const principal = p.status === 'estoque' ? `<button class="btn small" onclick="abrirModalMontar({codigo:'${c}'})">Montar</button>`
+      : p.status === 'montado' ? `<button class="btn danger small" onclick="abrirModalDesmontar('${c}')">Desmontar</button>`
+      : p.status === 'recapagem' ? `<button class="btn success small" onclick="recaparPneu('${c}')">Voltou</button>` : '';
+    const mais = [['editar', 'Editar']];
+    if (p.status === 'estoque') mais.push(['recap', 'Recapagem concluída']);
+    if (p.status === 'estoque' || p.status === 'recapagem') mais.push(['descartar', 'Descartar']);
+    if (p.status !== 'montado') mais.push(['excluir', 'Excluir']);
+    const menu = `<select class="pn-mais" aria-label="Mais ações do pneu ${c}" onchange="pneuMenu(this,'${c}')"><option value="">⋯</option>${mais.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+    return `<tr><td><b>${c}</b><small>${escHtml(textoPneu(p))}</small></td><td class="pn-vida" title="${escHtml(rotuloVida(p))} · ${kmCurto(k.vida)} km nesta vida / ${kmCurto(k.total)} km no total">${vidaCurta(p)}<small>${kmCurto(k.vida)} / ${kmCurto(k.total)} km</small></td><td>${swatchPneu(p)} ${sit}</td><td class="pn-td-acoes"><div>${principal}${menu}</div></td></tr>`;
   }).join('')}</tbody></table>`;
+}
+function pneuMenu(sel, codigo) {
+  const v = sel.value; sel.value = '';
+  if (v === 'editar') abrirModalPneu(codigo); else if (v === 'recap') recaparPneu(codigo); else if (v === 'descartar') descartarPneu(codigo); else if (v === 'excluir') excluirPneu(codigo);
 }
 
 function pneusRenderMov() {
@@ -313,9 +322,12 @@ function pneusRenderMov() {
     .sort((a, b) => String(b.m.data).localeCompare(String(a.m.data)) || b.i - a.i).slice(0, 150);
   const el = document.getElementById('pneusMov');
   if (!lista.length) { el.innerHTML = '<div class="empty">Nenhuma movimentação registrada.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Data</th><th>Pneu</th><th>Movimento</th><th>Caminhão · posição</th><th>KM do caminhão</th><th>KM do pneu</th><th>Responsável</th></tr></thead><tbody>${lista.map(({ m }) => {
+  const ano = String(new Date().getFullYear()), dataCurta = d => { const x = String(d || '').slice(0, 10).split('-'); return x.length === 3 ? x[2] + '/' + x[1] + (x[0] === ano ? '' : '/' + x[0].slice(2)) : escHtml(d); };
+  el.innerHTML = `<table class="pn-tab"><thead><tr><th>Data</th><th>Pneu</th><th>Movimento</th><th>Caminhão</th><th class="num" title="KM do caminhão · KM rodado pelo pneu">KM cam. · pneu</th><th>Por</th></tr></thead><tbody>${lista.map(({ m }) => {
     const det = m.destino ? ` <span class="pn-dim">(${escHtml(ROTULO_DESTINO[m.destino] || m.destino)})</span>` : '';
-    return `<tr><td>${fmtData(m.data)}</td><td><b>${escHtml(m.codigo)}</b></td><td>${ROTULO_MOV[m.tipo] || escHtml(m.tipo)}${det}</td><td>${m.placa ? escHtml(m.placa) + ' · ' + escHtml(m.posicao) : '-'}</td><td>${m.kmVeiculo !== '' && m.kmVeiculo !== undefined ? fmtKm(m.kmVeiculo) : '-'}</td><td>${fmtKm(m.kmPneu)}</td><td>${escHtml(m.nome || '-')}</td></tr>`;
+    const kmV = m.kmVeiculo !== '' && m.kmVeiculo !== undefined && m.kmVeiculo !== null ? kmCurto(m.kmVeiculo) : '-';
+    const nome = String(m.nome || '-'), primeiro = nome.split(' ')[0];
+    return `<tr><td>${dataCurta(m.data)}</td><td><b>${escHtml(m.codigo)}</b></td><td>${ROTULO_MOV[m.tipo] || escHtml(m.tipo)}${det}</td><td${m.placa ? '' : ' class="pn-nada"'}>${m.placa ? escHtml(m.placa) + ' · ' + escHtml(m.posicao) : '-'}</td>${kmV === '-' && !Number(m.kmPneu) ? '<td class="num pn-nada">-</td>' : '<td class="num">' + kmV + ' · ' + kmCurto(m.kmPneu) + '</td>'}<td class="pn-por" title="${escHtml(nome)}">${escHtml(primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase())}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 

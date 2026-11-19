@@ -12,13 +12,13 @@ const Motorista = {
 
   /* ---------- CHECKLIST ---------- */
   /* ---------- fotos do checklist: reduz no aparelho e envia na hora, em segundo plano ---------- */
-  async reduzirFoto(arquivo) {
+  async reduzirFoto(arquivo, max = 1280, qual = 0.7) {
     const url = URL.createObjectURL(arquivo);
     try {
       const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Não consegui abrir a foto.')); i.src = url; });
-      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
       c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', 0.7);
+      return c.toDataURL('image/jpeg', qual);
     } finally { URL.revokeObjectURL(url); }
   },
   filaFotos: { ativos: 0, espera: [] },
@@ -185,6 +185,56 @@ const Motorista = {
       h('div', { class: 'field' }, h('label', { text: 'Descreva' }), desc), h('div', { class: 'field' }, h('label', { text: 'Gravidade' }), seg), linhaParado, msg, h('div', { class: 'modal-actions' }, env)),
       meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus relatos' }), ...meus.map(o => this.linhaOc(o))) : null);
   },
+  /* ---------- MANUTENÇÃO feita pelo motorista (com foto da nota, opcional): só entra no histórico depois da aprovação ---------- */
+  manutencao() {
+    const d = this.d(), esc = d.escalaHoje, hoje = Motorista.hoje(), placa = this.placaSel(esc ? esc.placa : '');
+    const SUG = ['Engraxamento', 'Troca de óleo do motor', 'Troca de lâmpada', 'Borracharia (conserto de pneu)', 'Troca de pneu', 'Elétrica', 'Freio', 'Mangueira', 'Correia', 'Filtro', 'Lavagem'];
+    const lista = h('datalist', { id: 'mmSug' }, ...SUG.map(x => h('option', { value: x })));
+    const serv = h('input', { type: 'text', list: 'mmSug', maxlength: 80, placeholder: 'Ex.: Engraxamento, troca de lâmpada…' });
+    const data = h('input', { type: 'date', value: hoje, max: hoje }), km = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: 'KM do painel' });
+    const val = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: 0, placeholder: 'R$ (se pagou)' }), local = h('input', { type: 'text', maxlength: 80, placeholder: 'Oficina, posto, borracharia…' });
+    const obs = h('textarea', { rows: 2, maxlength: 400, placeholder: 'Opcional' });
+    // foto da nota: uma só, opcional; vai sendo enviada enquanto ele preenche
+    const nota = { f: null }, caixa = h('div', { class: 'mm-foto' });
+    const inp = h('input', { type: 'file', accept: 'image/*', hidden: true });
+    inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
+      try { const dados = await this.reduzirFoto(arq, 1600, 0.8); nota.f = { tipo: 'nota', slot: 'nota', dados, estado: 'enviando' }; nota.f.aviso = pinta; this.enviarFoto(nota.f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
+    const pinta = () => {
+      limpar(caixa); const f = nota.f;
+      if (!f) { caixa.append(h('button', { type: 'button', class: 'ckf-add mm-add', onclick: () => inp.click() }, h('b', { text: '🧾' }), h('span', { text: 'Foto da nota (opcional)' }))); }
+      else caixa.append(h('div', { class: 'ckf-mini ' + f.estado, title: f.estado === 'erro' ? 'Toque para tentar de novo' : '', onclick: () => { if (f.estado === 'erro') this.enviarFoto(f, () => placa.value); } },
+        h('img', { src: f.dados, alt: 'Foto da nota' }), h('span', { class: 'ckf-st', text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' }),
+        h('button', { type: 'button', class: 'ckf-x', 'aria-label': 'Tirar a foto', onclick: ev => { ev.stopPropagation(); nota.f = null; pinta(); } }, '×')));
+      caixa.append(inp);
+    };
+    pinta();
+    const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar para aprovação' });
+    env.onclick = async () => {
+      mensagem(msg, ''); if (!placa.value) return mensagem(msg, 'Escolha o caminhão.'); if (serv.value.trim().length < 3) return mensagem(msg, 'Diga qual serviço ou peça foi feito.');
+      if (!data.value) return mensagem(msg, 'Informe a data.');
+      env.disabled = true; env.textContent = 'Enviando…';
+      try {
+        if (nota.f && nota.f.estado === 'enviando') await nota.f.pronta;
+        if (nota.f && nota.f.estado === 'erro') throw new Error('A foto da nota não foi enviada. Toque nela para tentar de novo ou tire a foto.');
+        await API.chamar('lancarManutMotorista', { placa: placa.value, servico: serv.value.trim(), data: data.value, km: this.numero(km.value) || '', valor: this.numero(val.value) || '', local: local.value.trim(), obs: obs.value.trim(), nota: nota.f ? nota.f.id : '' });
+        toast('Enviado! A gestão vai conferir e aprovar.'); App.recarregar(true); App.abrirAba('manutmot');
+      } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar para aprovação'; }
+    };
+    const meus = (d.manutMotorista || []).slice().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 10);
+    const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
+    return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Lançar manutenção' }), lista,
+      h('p', { class: 'hint', text: 'Fez algum serviço no caminhão na rua (engraxamento, lâmpada, borracharia…)? Lance aqui. Ele só entra no histórico do caminhão depois que a gestão aprovar.' }),
+      h('div', { class: 'row' }, campo('Caminhão', placa), campo('Data', data)), campo('O que foi feito', serv),
+      h('div', { class: 'row' }, campo('KM', km), campo('Valor', val)), campo('Onde foi feito', local), campo('Observação', obs),
+      campo('Nota / recibo', caixa), msg, h('div', { class: 'modal-actions' }, env)),
+      meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus lançamentos' }), ...meus.map(x => this.linhaManut(x))) : null);
+  },
+  linhaManut(x) {
+    const ST = { PENDENTE: ['⏳ aguardando aprovação', 'amber'], APROVADA: ['✅ aprovada', 'green'], RECUSADA: ['recusada', 'red'] }, st = ST[x.status] || [x.status, 'gray'];
+    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: x.placa + ' · ' + x.servico }),
+      h('small', { text: [this.dia(x.data), Number(x.valor) > 0 ? fmtMoeda(Number(x.valor)) : '', x.nota ? '🧾 com nota' : '', x.status === 'RECUSADA' && x.motivo ? 'Motivo: ' + x.motivo : ''].filter(Boolean).join(' · ') })),
+      h('span', { class: 'badge ' + st[1], text: st[0] }));
+  },
   linhaAbast(a) {
     const ST = { provisorio: ['⏳ aguardando fatura', 'amber'], conferido: ['✅ conferido', 'green'], expirado: ['sem fatura', 'gray'] }, s = ST[a.status] || [a.status, 'gray'];
     return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: a.placa + ' · ' + a.produto }), h('small', { text: this.dia(a.data) + ' · ' + Number(a.litros).toLocaleString('pt-BR') + ' L · ' + fmtMoeda(Number(a.valor)) })), h('span', { class: 'badge ' + s[1], text: s[0] }));
@@ -197,6 +247,7 @@ const Motorista = {
     (d.checklists || []).forEach(c => ev.push({ t: 'checklist', ts: String(c.data).slice(0, 10) + ' ' + (c.hora || ''), el: () => this.linhaCheck(c) }));
     (d.abastecimentos || []).forEach(a => ev.push({ t: 'abastecimento', ts: String(a.data).slice(0, 10) + ' ' + (a.hora || ''), el: () => this.linhaAbast(a) }));
     (d.ocorrencias || []).forEach(o => ev.push({ t: 'ocorrencia', ts: String(o.dataAbertura).slice(0, 10) + ' 99', el: () => this.linhaOc(o) }));
+    (d.manutMotorista || []).forEach(x => ev.push({ t: 'ocorrencia', ts: String(x.criadoEm), el: () => this.linhaManut(x) }));
     (d.pontos || []).forEach(p => ev.push({ t: 'pontos', ts: String(p.dataHora), el: () => h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: p.descricao || p.evento }), h('small', { text: this.dia(p.dataHora) })), h('b', { class: Number(p.pontos) < 0 ? 'neg' : 'pos', text: (Number(p.pontos) > 0 ? '+' : '') + p.pontos + ' pts' })) }));
     ev.sort((a, b) => b.ts.localeCompare(a.ts));
     const corpo = h('div', { class: 'card' }), chips = h('div', { class: 'chips' }), pinta = () => {
@@ -231,12 +282,18 @@ const Motorista = {
     const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
     g.append(lista); return g;
   },
+  /** Caminhão marcado como parado pela oficina/gestão (só aparece para quem vê o GF). */
+  paradoTag(placa) {
+    if (App.sessao.perfil === 'motorista') return null;
+    const v = ((typeof db !== 'undefined' && db.veiculos) || []).find(x => x.placa === placa);
+    return v && v.paradoDesde ? h('span', { class: 'tag-parado', text: '🚫 Parado' }) : null;
+  },
   linhaOc(o, acao, comPlaca = true) {
     const ST = { ABERTA: ['pendente', 'amber'], AGUARDANDO: ['aguardando aprovação', 'gray'], DESCARTADA: ['descartada', 'gray'], RESOLVIDA: ['resolvida', 'green'] }, s = ST[String(o.status).toUpperCase()] || [o.status, 'gray'];
     const grave = o.prioridade === 'ALTA' || /sim/i.test(o.restringeCirculacao || '');
     return h('div', { class: 'oc-linha' + (grave && o.status === 'ABERTA' ? ' grave' : '') },
-      h('div', { class: 'oc-tx' }, h('b', { text: (grave ? '🚨 ' : '⚠️ ') + o.item + (comPlaca ? ' · ' + o.placa : '') }), h('p', { text: o.descricao || '' }),
-        h('small', { text: [this.dia(o.dataAbertura), o.origem === 'relato' ? 'defeito relatado' : 'checklist', /sim/i.test(o.restringeCirculacao || '') ? 'caminhão parado' : '', o.resolucao || ''].filter(Boolean).join(' · ') })),
+      h('div', { class: 'oc-tx' }, h('b', { text: (grave ? '🚨 ' : '⚠️ ') + o.item + (comPlaca ? ' · ' + o.placa : '') }, this.paradoTag(o.placa)), h('p', { text: o.descricao || '' }),
+        h('small', { text: [this.dia(o.dataAbertura), o.origem === 'relato' ? 'defeito relatado' : 'checklist', App.sessao.perfil === 'motorista' && /sim/i.test(o.restringeCirculacao || '') ? 'você indicou que não roda' : '', o.resolucao || ''].filter(Boolean).join(' · ') })),
       h('div', { class: 'oc-lado' }, h('span', { class: 'badge ' + s[1], text: s[0] }), acao || null));
   },
 

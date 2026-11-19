@@ -18,6 +18,7 @@ const ABAS = [
   { id: 'checklists', sis: 'fleet', nome: 'Checklist', curto: 'Checklist', ic: '✅', perfis: TODOS_P, hub: () => App.sessao.perfil === 'motorista' ? Motorista.checklist() : Motorista.gestaoChecklists() },
   { id: 'abastecimento', sis: 'fleet', nome: 'Abastecimento', curto: 'Abastecer', ic: '⛽', perfis: ['motorista'], hub: () => Motorista.abastecer() },
   { id: 'defeito', sis: 'fleet', nome: 'Relatar defeito', curto: 'Defeito', ic: '🛠️', perfis: ['motorista'], hub: () => Motorista.defeito() },
+  { id: 'manutmot', sis: 'fleet', nome: 'Lançar manutenção', curto: 'Manutenção', ic: '🔧', perfis: ['motorista'], hub: () => Motorista.manutencao() },
   { id: 'historico', sis: 'fleet', nome: 'Histórico', curto: 'Histórico', ic: '🗂️', perfis: ['motorista'], hub: () => Motorista.historico() },
   { id: 'escala', sis: 'fleet', nome: 'Escalas', curto: 'Escalas', ic: '📅', perfis: ['motorista'], hub: () => Motorista.escala() },
   { id: 'ocorrencias', sis: 'fleet', nome: 'Ocorrências', curto: 'Ocorrências', ic: '⚠️', perfis: GESTAO_P, hub: () => Motorista.gestaoOcorrencias() },
@@ -76,7 +77,7 @@ const App = {
     const me = (login.token && login.usuario && login.acessos) ? login : await API.chamar('me');     // o login já traz tudo: poupa uma ida ao servidor (~4 s)
     this.sessao = { usuario: me.usuario, nome: me.nome, email: me.email, avatar: me.avatar || '🔧', perfil: (me.acessos && me.acessos.frota) || '', acessos: me.acessos, pontoPerfil: me.pontoPerfil || '', sistemas: me.sistemas || sistemasPadrao((me.acessos && me.acessos.frota) || '') };
     if (!this.sessao.perfil) { API.guardar(''); throw new Error('Sua conta ainda não tem acesso a nenhum sistema.'); }
-    $('#auth').hidden = true; $('#app').hidden = false;
+    $('#auth').hidden = true; $('#app').hidden = false; corBarra('#f3f4f6');
     this.montarUsuario(); this.montarNavegacao();
     if (login.trocarSenha) { exigirTrocaSenha(() => this.recarregar()); return; }
     if (login.dados && login.dados.sucesso) { this.dados = login.dados; delete login.dados; await this.aplicarDados(); return; }
@@ -85,6 +86,23 @@ const App = {
 
   async recarregar(silencioso) {
     if (!silencioso) setLoading(true);
+    // Atualização silenciosa vai para o segundo plano; se a pessoa lançar algo enquanto ela corre, a resposta (que pode
+    // ter saído antes do lançamento) é descartada e uma nova é pedida — assim o que acabou de ser lançado não "some".
+    if (silencioso) {
+      if (this._recFundo) return this._recFundo;
+      const vez = async () => { for (let i = 0; i < 3; i++) { const m0 = API.marco, d = await API.chamar('getBootstrap', {}, { fundo: true }); if (API.marco === m0) return d; } return API.chamar('getBootstrap'); };
+      const ocupado = () => { const a = document.activeElement; return !!$('.overlay.show') || !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('#hubConteudo, #gfRoot')); };
+      this._recFundo = vez().then(async d => {
+        this.dados = d;
+        // Pessoa preenchendo algo: atualiza números e menus, mas não redesenha a tela por baixo dela.
+        if (ocupado()) {
+          this.sessao.perfil = d.perfil || this.sessao.perfil; this.juntarHistorico(); Hub.aposDados(); this.montarNavegacao(); Online.atualizar(d);
+          const quandoLivre = n => { if (this.dados !== d || !this.sessao) return; if (ocupado() && n < 600) { setTimeout(() => quandoLivre(n + 1), 200); return; } this.abrirAba(this.abaValida(this.aba)); };
+          setTimeout(() => quandoLivre(0), 200); return;
+        }
+        await this.aplicarDados(); }).catch(() => {}).finally(() => { this._recFundo = null; });
+      return this._recFundo;
+    }
     try { this.dados = await API.chamar('getBootstrap'); } catch (e) { setLoading(false); if (!silencioso) toast(e.message, true);
       if (!this.dados) { $('#gfRoot').hidden = true; const c = limpar($('#hubConteudo')); c.hidden = false; c.append(h('div', { class: 'card' }, h('h2', { text: 'Não consegui carregar os dados' }), h('p', { class: 'hint', text: e.message }), h('button', { class: 'btn', text: 'Tentar de novo', onclick: () => this.recarregar() }))); }
       return; }
@@ -151,10 +169,50 @@ const App = {
 
     // barra inferior (celular): Painel + um botão por sistema ativo + Mais. As abas do sistema aparecem numa faixa no topo.
     const barra = limpar($('#bottombar'));
-    const bt = (id, ic, nome, ativo, n, clique) => h('button', { dataset: { aba: id }, class: ativo ? 'active' : '', onclick: clique }, h('span', { class: 'ic', text: ic }), nome, n ? h('span', { class: 'n', text: String(n) }) : null);
+    // Os botões do meio são os atalhos que a pessoa escolheu (sistemas ou telas); sem escolha, um por sistema.
+    const bt = (id, ic, nome, ativo, n, clique) => h('button', { dataset: { aba: id }, class: ativo ? 'active' : '', onclick: clique }, h('span', { class: 'ic' }, icone(ic)), nome, n ? h('span', { class: 'n', text: String(n) }) : null);
     barra.append(bt('inicio', '🏠', 'Painel', sisAtual === 'painel', 0, () => this.abrirAba('inicio')));
-    ativos.forEach(x => { if (this.abasDoPerfil().some(a => a.sis === x.id)) barra.append(bt(x.id, x.ic, x.nome, sisAtual === x.id, this.badge(x), () => this.abrirSistema(x.id))); });
+    const ats = this.atalhos(), telaFixa = ats.some(o => o.tipo === 'a' && o.a.id === this.aba);
+    ats.forEach(o => barra.append(o.tipo === 's' ? bt(o.x.id, o.ic, o.nome, sisAtual === o.x.id && !telaFixa, this.badge(o.x), () => this.abrirSistema(o.x.id))
+      : bt(o.a.id, o.ic, o.nome, this.aba === o.a.id, this.badge(o.a), () => this.abrirAba(o.a.id))));
     barra.append(bt('mais', '⋯', 'Mais', false, 0, () => this.abrirMais()));
+  },
+  /* ---- atalhos da barra de baixo (celular): cada pessoa escolhe quais sistemas/telas ficam em destaque ---- */
+  ATALHOS_MAX: 5,
+  opcoesAtalho() {
+    const abas = this.abasDoPerfil(), out = [];
+    this.sistemasDoPerfil().filter(x => !x.futuro && abas.some(a => a.sis === x.id)).forEach(x => {
+      out.push({ k: 's:' + x.id, tipo: 's', ic: x.ic, nome: x.nome, grupo: x.nome, x });
+      abas.filter(a => a.sis === x.id && !a.visivel && !a.acao).forEach(a => out.push({ k: 'a:' + a.id, tipo: 'a', ic: a.ic, nome: a.curto || a.nome, longo: a.nome, grupo: x.nome, a }));
+    });
+    return out;
+  },
+  chaveAtalhos() { return 'trm.atalhos.' + ((this.sessao && this.sessao.usuario) || ''); },
+  atalhosSalvos() { try { const v = JSON.parse(localStorage.getItem(this.chaveAtalhos()) || 'null'); return Array.isArray(v) ? v : null; } catch (e) { return null; } },
+  atalhos() {
+    const ops = this.opcoesAtalho(), esc = this.atalhosSalvos();
+    const val = esc ? esc.map(k => ops.find(o => o.k === k)).filter(Boolean).slice(0, this.ATALHOS_MAX) : [];
+    return val.length ? val : ops.filter(o => o.tipo === 's');
+  },
+  configAtalhos() {
+    const ops = this.opcoesAtalho(), MAX = this.ATALHOS_MAX, marcados = this.atalhos().map(o => o.k), corpo = h('div', { class: 'atalhos-cfg' });
+    const conta = h('div', { class: 'atalhos-conta' }), caixas = [];
+    const atualizar = () => { const n = marcados.length; conta.textContent = n + ' de ' + MAX + ' escolhidos · Painel e Mais ficam sempre'; caixas.forEach(({ cb, o }) => { cb.disabled = !cb.checked && n >= MAX; }); };
+    corpo.append(h('p', { class: 'dim', text: 'Escolha o que fica fixo na barra de baixo do celular. Pode ser um sistema inteiro (abre a última tela usada) ou uma tela específica.' }), conta);
+    let grupo = '';
+    ops.forEach(o => {
+      if (o.grupo !== grupo) { grupo = o.grupo; corpo.append(h('div', { class: 'side-sec', text: grupo })); }
+      const cb = h('input', { type: 'checkbox' }); cb.checked = marcados.indexOf(o.k) >= 0;
+      cb.onchange = () => { const i = marcados.indexOf(o.k); if (cb.checked && i < 0) marcados.push(o.k); if (!cb.checked && i >= 0) marcados.splice(i, 1); atualizar(); };
+      caixas.push({ cb, o });
+      corpo.append(h('label', { class: 'atalho-op' + (o.tipo === 's' ? ' sis' : '') }, cb, h('span', { class: 'ic' }, icone(o.ic)), h('span', { class: 'tx', text: o.tipo === 's' ? o.nome + ' (sistema)' : (o.longo || o.nome) })));
+    });
+    const salvar = h('button', { class: 'btn', type: 'button', text: 'Salvar' }), padrao = h('button', { class: 'btn secondary', type: 'button', text: 'Voltar ao padrão' });
+    corpo.append(h('div', { class: 'modal-actions' }, padrao, salvar));
+    const m = abrirModal('⭐ Atalhos da barra', corpo);
+    salvar.onclick = () => { if (!marcados.length) { toast('Escolha pelo menos um atalho (ou volte ao padrão).', true); return; } const ordem = ops.map(o => o.k).filter(k => marcados.indexOf(k) >= 0); try { localStorage.setItem(this.chaveAtalhos(), JSON.stringify(ordem)); } catch (e) {} m.fechar(); this.montarNavegacao(); toast('Barra de baixo atualizada.'); };
+    padrao.onclick = () => { try { localStorage.removeItem(this.chaveAtalhos()); } catch (e) {} m.fechar(); this.montarNavegacao(); toast('Barra de baixo voltou ao padrão.'); };
+    atualizar();
   },
   abrirSistema(id) {
     const abas = this.abasDoPerfil().filter(a => a.sis === id); if (!abas.length) return;
@@ -199,7 +257,7 @@ const App = {
     caixa.append(h('div', { class: 'side-sec', text: 'Sistemas' }));
     const abas = this.abasDoPerfil();                                     // sistema sem nenhuma tela para esta pessoa não aparece (ex.: Escalas para o motorista, que vê a escala dentro do Fleet)
     this.sistemasDoPerfil().filter(x => x.futuro || abas.some(a => a.sis === x.id)).forEach(x => caixa.append(item(x.ic, x.nome, x.futuro ? null : () => this.abrirSistema(x.id), x.futuro ? h('small', { text: 'em breve' }) : null)));
-    caixa.append(h('div', { class: 'side-sec', text: 'Minha conta' }), item('✏️', 'Editar perfil', () => Perfil.abrir()));
+    caixa.append(h('div', { class: 'side-sec', text: 'Minha conta' }), item('✏️', 'Editar perfil', () => Perfil.abrir()), item('⭐', 'Atalhos da barra de baixo', () => this.configAtalhos()));
     if (S.perfil === 'master') {
       const np = (this.dados && this.dados.pendenciasPlaca) || 0;
       caixa.append(item('👥', 'Usuários', () => Usuarios.abrir(), Usuarios.pendentes ? h('span', { class: 'badge red', text: String(Usuarios.pendentes) }) : null), item('🧾', 'Pendências de placa', () => Pendencias.abrir(), np ? h('span', { class: 'badge red', text: String(np) }) : null));
@@ -214,7 +272,7 @@ const App = {
     API.guardar(''); Online.parar(); this.sessao = null; this.dados = null; this.hist = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
-    $('#app').hidden = true; $('#auth').hidden = false; Auth.mostrar('entrar');
+    $('#app').hidden = true; $('#auth').hidden = false; corBarra('#140405'); Auth.mostrar('entrar');
   },
   async retomar() {
     // Sem sessão: a abertura roda enquanto o servidor acorda, e sai mostrando o login.
@@ -241,7 +299,7 @@ const App = {
     const h = this.hist; if (!this.precisaHistorico(de) || h.carregando) return false;
     h.carregando = true; if (avisar) toast('Buscando o histórico mais antigo…');
     try {
-      const r = await API.chamar('getHistorico', { de: de || '', ate: h.inicio }, { mudo: true });
+      const r = await API.chamar('getHistorico', { de: de || '', ate: h.inicio }, avisar ? {} : { fundo: true });
       ['manutencoes', 'abastecimentos', 'alertas'].forEach(k => { h.lotes[k] = h.lotes[k].concat(r[k] || []); });
       h.inicio = de || '0000-00-00'; if (!de) h.completo = true;
       this.juntarHistorico(); Hub.aposDados();
@@ -296,7 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '3w',
+  VERSAO: '4a',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */
@@ -324,7 +382,7 @@ const Online = {
   },
   async pingar() {
     if (!App.sessao || document.hidden) return;
-    try { const r = await API.chamar('presenca', {}, { mudo: true }); this.atualizar(r); } catch (e) { /* indicador é só informativo */ }
+    try { const r = await API.chamar('presenca', {}, { fundo: true }); this.atualizar(r); } catch (e) { /* indicador é só informativo */ }
   },
   parar() { if (this._timer) clearInterval(this._timer); this._timer = null; this._dados = { online: 0 }; document.querySelectorAll('.online-ind').forEach(b => b.remove()); },
   abrirLista() {
@@ -337,6 +395,7 @@ const Online = {
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && App.sessao) Online.pingar(); });
 
+function corBarra(c) { const sp = document.getElementById('splash'); if (sp && !sp.classList.contains('sai')) return; const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.setAttribute('content', c); }
 /* Abertura do portal: tempo mínimo para a animação terminar; depois sai com zoom (estilo PS2). */
 const Splash = {
   t0: (window.performance && performance.now()) || 0,
@@ -351,5 +410,7 @@ const Splash = {
     const alvo = !$('#app').hidden ? $('#app') : $('#auth');                // a tela de baixo "chega" enquanto a câmera entra na logo
     if (alvo) { alvo.classList.add('chegando'); setTimeout(() => alvo.classList.remove('chegando'), 1100); }
     e.classList.add('sai'); setTimeout(() => e.remove(), 800);
+    // barra do celular: escura na abertura/login, clara no sistema
+    corBarra(alvo && alvo.id === 'app' ? '#f3f4f6' : '#140405');
   }
 };

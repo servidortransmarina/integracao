@@ -39,5 +39,6 @@ window.addEventListener('message', e => {
 /** Ponte usada pelo iframe: mesma sessão do Hub, mesma ação "ponto" no servidor. */
 window.HubPonto = {
   sessao() { return App.sessao ? { perfil: PontoHub.perfil(), usuario: App.sessao.usuario, nome: nomeBonito(App.sessao.nome) } : null; },
-  chamar(acao, extras) { return API.chamar('ponto', Object.assign({}, extras || {}, { acao })); }
+  // atualizações automáticas do Ponto (cartas do ADM, pendentes do encarregado) e chamadas com o Ponto fora da tela vão para o segundo plano
+  chamar(acao, extras, opc) { const r = $('#pontoRoot'), fundo = acao === 'getAcoesCartasADM' || !r || r.hidden; return API.chamar('ponto', Object.assign({}, extras || {}, { acao }), opc || (fundo ? { fundo: true } : undefined)); }
 };
