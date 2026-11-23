@@ -98,7 +98,8 @@ function normalizarDadosDaPlanilha(raw) {
     id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: (t => t === 'outro' && /^\s*engrax/i.test(String(m.descricao || '')) ? 'engraxamento' : t)(String(m.tipo || '').trim().toLowerCase()),
     descricao: String(m.descricao || m['descrição'] || m['Descricao'] || m['Descrição'] || m['descriçao'] || m['Descriçao'] || '').trim(),
     km: Number(m.km) || 0, data: formatarDataPlanilhaParaISO(m.data), valor: Number(m.valor) || 0, observacao: m.observacao || '', nome: m.nome || m['Nome'] || m.responsavel || '',
-    classe: String(m.classe || '').toLowerCase(), nota: String(m.nota || '')
+    classe: String(m.classe || '').toLowerCase(), nota: String(m.nota || ''), garantia: String(m.garantia || ''),
+    criadoEmTxt: String(m.criadoEm || ''), criadoPor: String(m.criadoPor || ''), alteradoEm: String(m.alteradoEm || '')
   }));
   const limites = {};
   (raw.limites || []).forEach(l => {
@@ -116,7 +117,7 @@ function normalizarDadosDaPlanilha(raw) {
   const agendamentos = (raw.agendamentos || []).map(a => ({
     id: String(a.id), placa: String(a.placa).trim().toUpperCase(), tipo: String(a.tipo || '').trim(),
     descricao: a.descricao || a['descrição'] || a['Descricao'] || a['Descrição'] || a['descriçao'] || a['Descriçao'] || '',
-    dataPrevista: a.dataPrevista ? formatarDataPlanilhaParaISO(a.dataPrevista) : '', valor: Number(a.valor) || 0, observacao: a.observacao || '', criadoEm: a.criadoEm ? formatarDataPlanilhaParaISO(a.criadoEm) : '', nome: a.nome || a['Nome'] || a.responsavel || '',
+    dataPrevista: a.dataPrevista ? formatarDataPlanilhaParaISO(a.dataPrevista) : '', valor: Number(a.valor) || 0, observacao: a.observacao || '', criadoEm: a.criadoEm ? formatarDataPlanilhaParaISO(a.criadoEm) : '', criadoEmTxt: String(a.criadoEm || ''), criadoPor: String(a.criadoPor || ''), alteradoEm: String(a.alteradoEm || ''), nome: a.nome || a['Nome'] || a.responsavel || '',
     classe: String(a.classe || '').toLowerCase(), criticidade: String(a.criticidade || '').toLowerCase()
   }));
   const pendentes = [];
@@ -433,8 +434,10 @@ function renderDetalhe() {
     const colKm = '<div style="font-size: 10px; color: var(--dim); text-transform: uppercase;">Apurado com</div><div style="font-weight: 600;">' + fmtKm(m.km) + '</div>';
     const btnExcluir = isAdmin ? `<button class="btn danger small" onclick="excluirManutencao('${m.id}')">Excluir</button>` : '';
     const cl = m.tipo === 'abastecimento' ? '' : tagClasse(classeDe(m));
-    const nota = m.nota ? ` <button type="button" class="btn-nota" title="Ver a foto da nota" onclick="verNota('${escAttr(m.nota)}', '${escAttr(nomeManutencao(m))}')">🧾 Nota</button>` : '';
-    return `<tr title="👤 Última alteração: ${m.nome || 'Não identificado'}"><td>${nomeManutencao(m)}<div class="hist-tags">${cl}${nota}</div></td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
+    const nota = (m.nota ? ` <button type="button" class="btn-nota" title="Ver a foto da nota" onclick="verNota('${escAttr(m.nota)}', '${escAttr(nomeManutencao(m))}')">🧾 Nota</button>` : '')
+      + (m.garantia ? ` <button type="button" class="btn-nota" title="Ver a foto da garantia" onclick="verNota('${escAttr(m.garantia)}', '${escAttr(nomeManutencao(m))}', 'Garantia')">🛡️ Garantia</button>` : '');
+    const qq = m._abs ? (m.nome ? 'Lançado por ' + m.nome : '') : quemQuando(m, 'Lançado');
+    return `<tr><td>${nomeManutencao(m)}<div class="hist-tags">${cl}${nota}</div>${qq ? `<div class="quem-quando">👤 ${escHtml(qq)}</div>` : ''}</td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
   }).join('');
 
   document.getElementById('manutDetalheWrap').innerHTML = `
@@ -545,8 +548,8 @@ function montarCardManutMotorista(x) {
   const val = Number(x.valor) > 0 ? ' · ' + fmtMoeda(Number(x.valor)) : '', km = Number(x.km) > 0 ? ' · ' + fmtKm(Number(x.km)) : '';
   return `<div class="alert-card pendente mm-card"><div class="alert-info"><div class="alert-title">${placaClicavel(x.placa)} 🔧 ${escHtml(x.servico)}</div>
     <div class="alert-sub">${fmtData(String(x.data).slice(0, 10))}${km}${val}${x.local ? ' · ' + escHtml(x.local) : ''}</div>
-    <div class="alert-sub">Lançado por ${escHtml(x.motoristaNome || 'motorista')}${x.nota ? ' · 🧾 com nota' : ' · sem nota'}${x.obs ? ' — ' + escHtml(x.obs) : ''}</div></div>
-    <div class="alert-actions">${x.nota ? `<button class="btn small secondary ver" onclick="verNota('${escAttr(x.nota)}','${escAttr(x.servico)}')">🧾 Nota</button>` : ''}<button class="btn small" onclick="abrirAprovarManut('${escAttr(x.id)}')">Conferir</button></div></div>`;
+    <div class="alert-sub">Lançado por ${escHtml(x.motoristaNome || 'motorista')}${x.nota ? ' · 🧾 com nota' : ' · sem nota'}${x.garantia ? ' · 🛡️ com garantia' : ''}${x.obs ? ' — ' + escHtml(x.obs) : ''}</div></div>
+    <div class="alert-actions">${x.nota ? `<button class="btn small secondary ver" onclick="verNota('${escAttr(x.nota)}','${escAttr(x.servico)}')">🧾 Nota</button>` : ''}${x.garantia ? `<button class="btn small secondary ver" onclick="verNota('${escAttr(x.garantia)}','${escAttr(x.servico)}','Garantia')">🛡️ Garantia</button>` : ''}<button class="btn small" onclick="abrirAprovarManut('${escAttr(x.id)}')">Conferir</button></div></div>`;
 }
 function abrirAprovarManut(id) {
   const x = manutMotoristaPendentes().find(m => m.id === id); if (!x) return toast('Esse lançamento já foi decidido.');
@@ -555,7 +558,9 @@ function abrirAprovarManut(id) {
   const classe = h('select', {}, ...Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
   const ajusta = () => { const t = tipoDoTexto(serv.value.trim() || 'x', null); classe.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL'; }; ajusta(); serv.oninput = ajusta;
   const motivo = h('input', { type: 'text', maxlength: 200, placeholder: 'Obrigatório para recusar (o motorista vai ver)' });
-  const fotoEl = x.nota ? h('button', { type: 'button', class: 'mm-nota', title: 'Ampliar a nota', onclick: () => verNota(x.nota, x.servico) }, h('img', { src: urlFotoDrive(x.nota, 640), alt: 'Foto da nota' })) : h('p', { class: 'hint', text: 'O motorista não mandou foto da nota.' });
+  const fotoNota = x.nota ? h('button', { type: 'button', class: 'mm-nota', title: 'Ampliar a nota', onclick: () => verNota(x.nota, x.servico) }, h('img', { src: urlFotoDrive(x.nota, 640), alt: 'Foto da nota' }), h('small', { text: '🧾 Nota' })) : h('p', { class: 'hint', text: 'O motorista não mandou foto da nota.' });
+  const fotoGar = x.garantia ? h('button', { type: 'button', class: 'mm-nota', title: 'Ampliar a garantia', onclick: () => verNota(x.garantia, x.servico, 'Garantia') }, h('img', { src: urlFotoDrive(x.garantia, 640), alt: 'Foto da garantia' }), h('small', { text: '🛡️ Garantia' })) : null;
+  const fotoEl = fotoGar ? h('div', { class: 'mm-fotos' }, fotoNota, fotoGar) : fotoNota;
   const ok = h('button', { class: 'btn', type: 'button', text: '✅ Aprovar e pôr no histórico' }), nao = h('button', { class: 'btn danger secondary', type: 'button', text: 'Recusar' });
   const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
   const corpo = h('div', { class: 'mm-conferir' }, fotoEl,
@@ -581,7 +586,7 @@ function abrirAprovarManut(id) {
   ok.onclick = () => decidir(true); nao.onclick = () => decidir(false);
 }
 function urlFotoDrive(id, tam) { return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + (tam || 1600); }
-function verNota(id, leg) { Visor.abrir([{ src: urlFotoDrive(id, 1600), leg: 'Nota · ' + leg }], 0); }
+function verNota(id, leg, rot) { Visor.abrir([{ src: urlFotoDrive(id, 1600), leg: (rot || 'Nota') + ' · ' + leg }], 0); }
 function sugerirClasse() {
   const t = tipoDoTexto(document.getElementById('mTipoInput').value.trim() || 'x', null), sel = document.getElementById('mClasse');
   if (sel && !sel.dataset.mexeu) sel.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL';
@@ -1182,7 +1187,18 @@ function dicaAlerta(a, grp) {
   if (grp === 'atrasado' && !quem) quem = 'Sistema (automático)';
   return quem ? (grp === 'resolvido' ? `👤 Resolvido por: ${quem}` : `👤 ${rot} — classificado por: ${quem}`) : `👤 ${rot} — sem registro de quem classificou`;
 }
-function dicaAgendamento(ag, rot) { return `👤 ${rot} — agendado por: ${ag.nome || 'Não identificado'}`; }
+function dicaAgendamento(ag, rot) { return `👤 ${rot} — ${quemQuando(ag, 'Programado')}`; }
+/** Quem lançou/programou e quando (e a última alteração, se houve). Registros antigos não têm a hora: mostra só o nome. */
+function quemQuando(r, verbo) {
+  const cr = String(r.criadoEmTxt || ''), alt = String(r.alteradoEm || ''), temHora = x => /\d{2}:\d{2}/.test(x);
+  if (r.criadoPor) {
+    let t = verbo + ' por ' + r.criadoPor + (cr ? ' em ' + fmtQuando(cr) : '');
+    if (alt && alt.slice(0, 16) !== cr.slice(0, 16)) t += ' · alterado por ' + (r.nome || '—') + ' em ' + fmtQuando(alt);
+    return t;
+  }
+  if (alt) return 'Último registro por ' + (r.nome || 'não identificado') + ' em ' + fmtQuando(alt);
+  return (r.nome ? 'Registrado por ' + r.nome : 'Sem autor registrado') + (cr && temHora(cr) ? ' em ' + fmtQuando(cr) : cr ? ' em ' + fmtData(cr.slice(0, 10)) : ' (data não registrada)');
+}
 /** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
 /* Ocorrências dos motoristas (checklist aprovado ou defeito relatado) que estão pendentes: entram no GF como pendência. */
 /* ---------- Caminhão parado: marcado pela placa, aparece em todos os alertas daquele caminhão ---------- */
@@ -1269,11 +1285,11 @@ function montarCardAlerta(a) {
 }
 
 function montarCardAgAtrasado(ag) { 
-    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function montarCardAgPendente(ag) { 
-    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function renderAlertas() {

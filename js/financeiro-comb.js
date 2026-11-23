@@ -100,14 +100,16 @@ const Comb = {
     const box = h('div', { class: 'cb-lanc' }, this.chipsFaturas(true));
     if (this.ocupado) { box.append(h('div', { class: 'cb-vazio mini' }, h('p', { text: 'Salvando a fatura…' }))); return box; }
     if (!f) { box.append(h('div', { class: 'cb-vazio mini' }, h('p', { text: 'Crie a fatura que chegou do posto para começar a lançar.' }), this.aberto ? h('button', { class: 'btn', type: 'button', text: '+ Fatura da segunda', onclick: () => this.editarFatura() }) : null)); return box; }
-    const info = [f.data ? 'Chegou ' + this.dt(f.data) : '', f.de && f.ate ? 'abastecimentos de ' + this.periodo(f) : 'sem período (não compara com o robô)'].filter(Boolean).join(' · ');
+    const refs = this.refsDe(f);
+    const info = [f.data ? 'Chegou ' + this.dt(f.data) : '', refs.length ? 'comparando com ' + refs.length + (refs.length > 1 ? ' faturas lidas' : ' fatura lida') + ' pelo robô (' + refs.map(r => 'e-mail de ' + this.dm(r)).join(', ') + ')' : f.de && f.ate ? 'abastecimentos de ' + this.periodo(f) + ' (sem fatura do robô ligada)' : 'sem período (não compara com o robô)'].filter(Boolean).join(' · ');
     const cab = h('div', { class: 'cb-fat-cab' }, h('h3', { text: this.nomeFat(f) }), h('span', { class: 'hint', text: info }),
       this.aberto ? h('button', { class: 'btn-link', type: 'button', text: 'Editar fatura', onclick: () => this.editarFatura(f) }) : null);
     box.append(cab);
     if (this.aberto) box.append(this.formLanc(f));
     else if (d.pagamento.status === 'FECHADO') box.append(h('div', { class: 'cb-aviso', text: 'Pagamento fechado: os valores estão travados. Reabra para corrigir.' }));
     const grade = h('div', { class: 'cb-grade' }, this.tabela(this.lancs(f.id), 'AGREGADO', [f.id]), this.tabela(this.lancs(f.id), 'FROTA', [f.id]));
-    box.append(h('label', { class: 'cb-todos' }, h('input', { type: 'checkbox', checked: this.todos ? true : null, onchange: e => { this.todos = e.target.checked; this.render(); } }), ' Mostrar também quem não abasteceu'), grade);
+    const vis = (v, t) => h('button', { type: 'button', role: 'radio', 'aria-checked': this.todos === v ? 'true' : 'false', class: this.todos === v ? 'on' : '', text: t, onclick: () => { this.todos = v; this.render(); } });
+    box.append(h('div', { class: 'cb-ver' }, h('span', { text: 'Na tabela:' }), h('div', { class: 'cb-seg', role: 'radiogroup', 'aria-label': 'Quem aparece na tabela' }, vis(false, 'Só quem abasteceu'), vis(true, 'Todos os cadastrados'))), grade);
     return box;
   },
   formLanc(f) {
@@ -150,7 +152,7 @@ const Comb = {
     const cel = (x, p) => { const v = x.postos[p] || 0; return h('td', { class: 'n' + (v ? '' : ' z') }, v ? h('button', { type: 'button', class: 'cb-v', title: x.ls.filter(l => l.posto === p).length + ' lançamento(s)', onclick: () => this.verLancs(x, p), text: fmtMoeda(v) }) : '—'); };
     let tRobo = 0, tComp = 0;
     const corpo = rows.map(x => {
-      const cp = frota ? this.comparar(x, fids) : { robo: 0, comp: 0 }, robo = cp.robo; tRobo += robo; tComp += cp.comp;
+      const cp = frota ? this.comparar(x, fids) : { robo: 0, comp: 0 }, robo = cp.robo; if (cp.comp) { tRobo += robo; tComp += cp.comp; }   // só soma no total o que dá para comparar (robô leu E houve lançamento)
       return h('tr', {}, h('td', { class: 'nm', text: x.c.nome }), h('td', { class: 'pl', text: x.c.placa }), postos.map(p => cel(x, p)), h('td', { class: 'n t', text: x.total ? fmtMoeda(x.total) : '—' }),
         frota ? h('td', { class: 'n r', text: robo ? fmtMoeda(robo) : '—' }) : null, frota ? h('td', { class: 'n e', text: robo && cp.comp ? fmtMoeda(this.r2(robo - cp.comp)) : '—' }) : null);
     });
@@ -175,16 +177,32 @@ const Comb = {
       this.mut++; API.chamar('combExcluirLanc', { id: l.id }, { mudo: true }).then(() => { this.d.lancamentos = this.d.lancamentos.filter(x => x.id !== l.id); Financeiro.resumoCombCache = null; toast('Lançamento apagado'); this.render(); }).catch(e => toast(e.message || String(e), true));
     });
   },
+  refsDe(f) { try { const r = JSON.parse((f && f.roboRef) || '[]'); return Array.isArray(r) ? r : []; } catch (e) { return []; } },
+  /** Lista das faturas que o robô leu do e-mail: marcar quais são ESTA fatura (assim a semana seguinte nunca cai aqui). */
+  listaRobo(f, de, ate) {
+    const sel = new Set(this.refsDe(f)), todas = (this.d.roboFaturas || []), box = h('div', { class: 'cb-robo' });
+    const livres = todas.filter(r => !r.ligadaA || (f && r.ligadaA === f.id));
+    if (!f) livres.forEach(r => { if (!r.ligadaA && de.value && ate.value && r.de >= de.value && r.ate <= ate.value) sel.add(r.ref); });   // sugestão: cupons todos dentro do período
+    if (!todas.length) box.append(h('p', { class: 'hint', text: 'O robô ainda não leu nenhuma fatura com essa identificação (começa nas próximas que chegarem no e-mail). Até lá, a comparação usa o período acima.' }));
+    todas.slice(0, 12).forEach(r => {
+      const outra = r.ligadaA && (!f || r.ligadaA !== f.id), fat = outra ? this.d.faturas.find(x => x.id === r.ligadaA) : null;
+      const cb = h('input', { type: 'checkbox', checked: sel.has(r.ref) ? true : null, disabled: outra ? true : null, onchange: e => { if (e.target.checked) sel.add(r.ref); else sel.delete(r.ref); } });
+      box.append(h('label', { class: 'cb-robo-i' + (outra ? ' off' : '') }, cb, h('span', {}, h('b', { text: 'E-mail de ' + this.dt(r.ref.slice(0, 10)) + ' ' + r.ref.slice(11, 16) }), h('small', { text: r.ref.slice(19) }),
+        h('small', { text: r.cupons + ' cupons · abastecimentos de ' + this.dm(r.de) + ' a ' + this.dm(r.ate) + ' · frota ' + fmtMoeda(r.frota) + (outra ? ' · já é da ' + (fat ? this.nomeFat(fat) : 'outra fatura') : '') }))));
+    });
+    return { el: box, valor: () => Array.from(sel) };
+  },
   editarFatura(f) {
     const segunda = (() => { const x = new Date(); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return hojeLocalDe(x); })();
     const data = h('input', { type: 'date', value: f ? String(f.data || '').slice(0, 10) : segunda }), de = h('input', { type: 'date', value: f ? String(f.de || '').slice(0, 10) : '' }), ate = h('input', { type: 'date', value: f ? String(f.ate || '').slice(0, 10) : '' });
     const rot = h('input', { maxlength: 40, value: f ? f.rotulo || '' : '', placeholder: 'Opcional, ex.: Fatura 1' }), msg = h('div', { class: 'msg' });
     const auto = () => { if (!data.value) return; if (!f || !de.dataset.mexeu) de.value = addDias(data.value, -7); if (!f || !ate.dataset.mexeu) ate.value = addDias(data.value, -1); };
     if (!f) auto(); data.addEventListener('change', () => { if (!f) auto(); }); de.addEventListener('input', () => { de.dataset.mexeu = 1; }); ate.addEventListener('input', () => { ate.dataset.mexeu = 1; });
-    const corpo = h('div', {}, campo('Dia que a fatura chegou', data), h('div', { class: 'cb-2' }, campo('Abastecimentos de', de), campo('até', ate)),
-      h('p', { class: 'hint', text: 'O período serve para comparar a frota própria com a fatura lida pelo robô (sem desconto).' }), campo('Nome', rot), msg,
+    const robo = this.listaRobo(f, de, ate);
+    const corpo = h('div', {}, campo('Dia que a fatura chegou', data), h('div', { class: 'cb-2' }, campo('Abastecimentos de', de), campo('até', ate)), campo('Nome', rot),
+      h('div', { class: 'field' }, h('label', { text: 'Fatura lida pelo robô (sem desconto)' }), h('p', { class: 'hint', style: 'margin:0 0 6px', text: 'Marque a(s) que são esta fatura. O robô soma todos os cupons de cada placa (dois de R$ 500 = R$ 1.000), e a fatura de outra semana nunca entra aqui.' }), robo.el), msg,
       h('div', { class: 'cb-acoes' }, h('button', { class: 'btn', type: 'button', text: f ? 'Salvar fatura' : 'Criar fatura', onclick: () => {
-        const dados = f ? { acao: 'editar', id: f.id, data: data.value, de: de.value, ate: ate.value, rotulo: rot.value } : { acao: 'criar', pagamentoId: this.pagId, data: data.value, de: de.value, ate: ate.value, rotulo: rot.value };
+        const dados = f ? { acao: 'editar', id: f.id, data: data.value, de: de.value, ate: ate.value, rotulo: rot.value, roboRef: robo.valor() } : { acao: 'criar', pagamentoId: this.pagId, data: data.value, de: de.value, ate: ate.value, rotulo: rot.value, roboRef: robo.valor() };
         // enquanto a fatura é gravada, a tela de lançar fica em espera: nada pode cair na fatura errada
         this.ocupado = true; m.el.querySelectorAll('button').forEach(b => { b.disabled = true; });
         API.chamar('combFatura', dados).then(r => { m.fechar(); this.render(); return this.carregar().then(() => { if (r.id) this.fatId = r.id; }); })
@@ -224,7 +242,7 @@ const Comb = {
     const d = this.d, e = escHtml, ls = this.lancs(), fids = d.faturas.map(f => f.id), brl = fmtMoeda, logo = _logoDataUrl || new URL('logotrm.png', location.href).href;
     const tab = (grupo) => {
       const frota = grupo === 'FROTA', rows = this.linhas(ls, grupo).filter(x => x.total > 0).sort((a, b) => a.c.nome.localeCompare(b.c.nome)); let tr = 0, tc = 0;
-      const corpo = rows.map(x => { const cp = frota ? this.comparar(x, fids) : { robo: 0, comp: 0 }, r = cp.robo; tr += r; tc += cp.comp; return `<tr><td>${e(x.c.nome)}</td><td>${e(x.c.placa)}</td>${d.postos.map(p => `<td class="n">${x.postos[p] ? brl(x.postos[p]) : '—'}</td>`).join('')}<td class="n b">${brl(x.total)}</td>${frota ? `<td class="n">${r ? brl(r) : '—'}</td><td class="n">${r && cp.comp ? brl(this.r2(r - cp.comp)) : '—'}</td>` : ''}</tr>`; }).join('');
+      const corpo = rows.map(x => { const cp = frota ? this.comparar(x, fids) : { robo: 0, comp: 0 }, r = cp.robo; if (cp.comp) { tr += r; tc += cp.comp; } return `<tr><td>${e(x.c.nome)}</td><td>${e(x.c.placa)}</td>${d.postos.map(p => `<td class="n">${x.postos[p] ? brl(x.postos[p]) : '—'}</td>`).join('')}<td class="n b">${brl(x.total)}</td>${frota ? `<td class="n">${r ? brl(r) : '—'}</td><td class="n">${r && cp.comp ? brl(this.r2(r - cp.comp)) : '—'}</td>` : ''}</tr>`; }).join('');
       return `<h2>${frota ? 'Frota própria' : 'Agregados — descontar do agregado'}</h2><table><thead><tr><th>Motorista</th><th>Placa</th>${d.postos.map(p => `<th class="n">${e(p)}</th>`).join('')}<th class="n">Total</th>${frota ? '<th class="n">Robô (sem desc.)</th><th class="n">Economia</th>' : ''}</tr></thead><tbody>${corpo || `<tr><td colspan="9">Nenhum abastecimento.</td></tr>`}</tbody>
         <tfoot><tr><td colspan="2">Total</td>${d.postos.map(p => `<td class="n">${brl(this.soma(ls, grupo, p))}</td>`).join('')}<td class="n">${brl(this.soma(ls, grupo))}</td>${frota ? `<td class="n">${tr ? brl(this.r2(tr)) : '—'}</td><td class="n">${tr ? brl(this.r2(tr - tc)) : '—'}</td>` : ''}</tr></tfoot></table>`;
     };

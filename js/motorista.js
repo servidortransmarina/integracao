@@ -114,7 +114,8 @@ const Motorista = {
     // foto de cada item (opcional): itens que já têm foto no cartão de fotos (pneus e cabine) não pedem de novo
     const jaTemFoto = (mod.fotos && mod.fotos.pneus || []).concat(mod.fotos && mod.fotos.cabineItem ? [mod.fotos.cabineItem] : []);
     const comFotoPropria = mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
-    const pintaCont = () => { const n = comFotoPropria.filter(n => fotoItem[n]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + comFotoPropria.length + (n === comFotoPropria.length ? ' ✓ (+ pontos extras)' : ' · foto de todos = pontos extras'); };
+    const naPode = mod.naPode || [], naCam = () => ((mod.naoAplica || {})[placa.value] || []);
+    const pintaCont = () => { const l = comFotoPropria.filter(n => naCam().indexOf(n) < 0 && resp[n] !== 'na'), n = l.filter(x => fotoItem[x]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + l.length + ' · cada foto boa vale pontos'; };
     const botaoFoto = nome => {
       const ob = obrig.indexOf(nome) >= 0;
       const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true }), bt = h('button', { type: 'button', class: 'ck-foto' + (ob ? ' obrig' : ''), 'aria-label': 'Foto de ' + nome + (ob ? ' (obrigatória)' : ''), title: ob ? 'Foto obrigatória' : 'Foto (opcional)' });
@@ -126,9 +127,16 @@ const Motorista = {
       pinta(); return h('span', { class: 'ck-foto-cx' }, bt, inp);
     };
     const feitoHoje = (d.checklists || []).some(c => String(c.data).slice(0, 10) === Motorista.hoje());
-    const total = mod.categorias.reduce((n, c) => n + c.itens.length, 0), prog = h('span', { class: 'ck-prog' });
-    const atualizarProg = () => { const n = Object.keys(resp).length; prog.textContent = n + ' de ' + total + ' itens'; };
+    let total = 0; const prog = h('span', { class: 'ck-prog' });
+    const atualizarProg = () => { const vis = Object.keys(linhas).filter(n => !linhas[n].hidden); total = vis.length; prog.textContent = vis.filter(n => resp[n]).length + ' de ' + total + ' itens'; };
+    // itens que o caminhão não tem (confirmados pela gestão) somem do checklist dele
+    const aplicarNA = () => { const na = naCam(); Object.keys(linhas).forEach(n => { const off = na.indexOf(n) >= 0; linhas[n].hidden = off; if (off) delete resp[n]; });
+      cats.forEach(x => { x.cx.hidden = x.itens.every(n => linhas[n].hidden); }); atualizarProg(); pintaCont(); };
+    const cats = [];
+    const marcarNA = (nome, linha, area, liga) => { if (liga) resp[nome] = 'na'; else delete resp[nome]; linha.classList.toggle('na', liga); $$('.ck-op', linha).forEach(b => b.classList.remove('on')); area.hidden = true; linha.classList.remove('falta');
+      const b = $('.ck-na', linha); if (b) { b.textContent = liga ? '↩︎ tem sim' : 'não tem neste caminhão'; b.setAttribute('aria-pressed', liga ? 'true' : 'false'); } atualizarProg(); pintaCont(); mudou(); };
     const botao = (nome, cod, ic, rot, linha, area) => h('button', { type: 'button', class: 'ck-op ' + cod, 'aria-label': rot, title: rot, onclick: () => {
+      if (resp[nome] === 'na') marcarNA(nome, linha, area, false);
       resp[nome] = cod; $$('.ck-op', linha).forEach(b => b.classList.toggle('on', b.classList.contains(cod))); area.hidden = cod === 'ok'; linha.classList.remove('falta'); atualizarProg(); mudou();
       if (cod !== 'ok' && pronto) area.querySelector('input').focus(); } }, ic);
     const raiz = h('div', { class: 'ck' },
@@ -137,7 +145,7 @@ const Motorista = {
         h('div', { class: 'ck-leg' }, h('span', { class: 'ok' }, h('i', { text: '✓' }), 'Ok: funcionando bem'), h('span', { class: 'warn' }, h('i', { text: '!' }), 'Atenção: algo estranho ou gasto'), h('span', { class: 'bad' }, h('i', { text: '✕' }), 'Ruim: defeito (a oficina é avisada)'),
           h('button', { class: 'btn small secondary', type: 'button', text: '? Como fazer', onclick: () => Ajuda.abrir('checklist') })), h('small', { class: 'ck-imp-leg', text: '⛔ item impeditivo: marcado como Ruim, o caminhão fica bloqueado na hora e a oficina é avisada.' }), contFotos));
     mod.categorias.forEach(c => {
-      const cx = h('div', { class: 'card ck-cat' }, h('h3', { text: c.cat }));
+      const cx = h('div', { class: 'card ck-cat' }, h('h3', { text: c.cat })); cats.push({ cx, itens: c.itens });
       cx.append(h('div', { class: 'ck-cols' }, h('span', { text: 'Ok' }), h('span', { text: 'Atenção' }), h('span', { text: 'Ruim' })));
       c.itens.forEach(nome => {
         const area = h('div', { class: 'ck-obs', hidden: true }, h('input', { type: 'text', maxlength: 300, placeholder: 'Descreva o problema', oninput: e => { obs[nome] = e.target.value; mudou(); } }));
@@ -145,7 +153,8 @@ const Motorista = {
         const imp = (mod.impeditivos || []).indexOf(nome) >= 0;
         linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome' }, ob ? '🧯 ' : null, nome, imp ? h('span', { class: 'ck-imp', title: 'Item impeditivo: Ruim aqui bloqueia o caminhão na hora', 'aria-label': 'item impeditivo', text: '⛔' }) : null, ob ? h('span', { class: 'ck-obr', text: 'obrigatório' }) : null),
           jaTemFoto.indexOf(nome) < 0 ? botaoFoto(nome) : h('span', { class: 'ck-foto-cx vazio' }),
-          h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), ...(dicas[nome] ? [h('div', { class: 'ck-dica', text: dicas[nome] })] : []), area);
+          h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), ...(dicas[nome] ? [h('div', { class: 'ck-dica', text: dicas[nome] })] : []),
+          ...(naPode.indexOf(nome) >= 0 ? [h('button', { type: 'button', class: 'ck-na', 'aria-pressed': 'false', text: 'não tem neste caminhão', onclick: () => marcarNA(nome, linha, area, resp[nome] !== 'na') })] : []), area);
         ctl[nome] = { linha, area };
         cx.append(linha);
       });
@@ -163,8 +172,8 @@ const Motorista = {
       const k = this.numero(km.value); mensagem(msg, '');
       if (!placa.value) return mensagem(msg, 'Escolha o caminhão.');
       if (!(k > 0)) return mensagem(msg, 'Informe o KM atual.');
-      const falta = Object.keys(linhas).filter(n => !resp[n]); if (falta.length) { falta.forEach(n => linhas[n].classList.add('falta')); linhas[falta[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Faltam ' + falta.length + ' itens para responder.'); }
-      const semDesc = Object.keys(resp).filter(n => resp[n] !== 'ok' && String(obs[n] || '').trim().length < 3); if (semDesc.length) { linhas[semDesc[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Descreva o problema de: ' + semDesc[0] + '.'); }
+      const falta = Object.keys(linhas).filter(n => !linhas[n].hidden && !resp[n]); if (falta.length) { falta.forEach(n => linhas[n].classList.add('falta')); linhas[falta[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Faltam ' + falta.length + ' itens para responder.'); }
+      const semDesc = Object.keys(resp).filter(n => resp[n] !== 'ok' && resp[n] !== 'na' && String(obs[n] || '').trim().length < 3); if (semDesc.length) { linhas[semDesc[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Descreva o problema de: ' + semDesc[0] + '.'); }
       for (const n of mod.quantidades) if (String(qtd[n] == null ? '' : qtd[n]) === '') return mensagem(msg, 'Informe a quantidade de ' + n.toLowerCase() + '.');
       const semFoto = fotosCx.falta(); if (semFoto) { fotosCx.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, semFoto); }
       const semObr = obrig.find(n => !fotoItem[n] || fotoItem[n].estado === 'erro'); if (semObr) { linhas[semObr].classList.add('falta'); linhas[semObr].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Tire a foto do ' + semObr.toLowerCase() + ' (obrigatória: mostre o manômetro e a validade).'); }
@@ -185,14 +194,15 @@ const Motorista = {
     };
     atualizarProg(); pintaCont();
     raiz.append(outroCx, fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
-    placa.addEventListener('change', () => mudou()); km.addEventListener('input', () => mudou());
+    placa.addEventListener('change', () => { aplicarNA(); mudou(); }); km.addEventListener('input', () => mudou()); aplicarNA();
     // ---- continua de onde parou ----
     const n0 = rascunho ? Object.keys(rascunho.resp || {}).length : 0, f0 = rascunho && rascunho.fotos || {};
     const temFoto = (f0.c || []).length || Object.keys(f0.p || {}).length || f0.k || Object.keys(f0.i || {}).length;
     if (rascunho && (n0 || temFoto || rascunho.km)) {
       if (rascunho.placa && [...placa.options].some(o => o.value === rascunho.placa)) placa.value = rascunho.placa;
       if (rascunho.km) km.value = rascunho.km;
-      Object.keys(rascunho.resp || {}).forEach(n => { const c = ctl[n]; if (!c) return; const b = $('.ck-op.' + rascunho.resp[n], c.linha); if (b) b.click(); });
+      aplicarNA();
+      Object.keys(rascunho.resp || {}).forEach(n => { const c = ctl[n]; if (!c || c.linha.hidden) return; if (rascunho.resp[n] === 'na') { if ($('.ck-na', c.linha)) marcarNA(n, c.linha, c.area, true); return; } const b = $('.ck-op.' + rascunho.resp[n], c.linha); if (b) b.click(); });
       Object.keys(rascunho.obs || {}).forEach(n => { const c = ctl[n]; if (!c) return; obs[n] = rascunho.obs[n]; c.area.querySelector('input').value = rascunho.obs[n]; });
       Object.keys(rascunho.qtd || {}).forEach(n => { const i = ctl['qtd:' + n]; if (i) { i.value = rascunho.qtd[n]; qtd[n] = rascunho.qtd[n]; } });
       if (rascunho.outro) outroTx.value = rascunho.outro; if (rascunho.outroSt === 'bad') { const b = $('.oc-op[data-v="bad"]', outroSeg); if (b) b.click(); }
@@ -260,29 +270,36 @@ const Motorista = {
     const data = h('input', { type: 'date', value: hoje, max: hoje }), km = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: 'KM do painel' });
     const val = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: 0, placeholder: 'R$ (se pagou)' }), local = h('input', { type: 'text', maxlength: 80, placeholder: 'Oficina, posto, borracharia…' });
     const obs = h('textarea', { rows: 2, maxlength: 400, placeholder: 'Opcional' });
-    // foto da nota: uma só, opcional; vai sendo enviada enquanto ele preenche
-    const nota = { f: null }, caixa = h('div', { class: 'mm-foto' });
-    const inp = h('input', { type: 'file', accept: 'image/*', hidden: true });
-    inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
-      try { const dados = await this.reduzirFoto(arq, 1600, 0.8); nota.f = { tipo: 'nota', slot: 'nota', dados, estado: 'enviando' }; nota.f.aviso = pinta; this.enviarFoto(nota.f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
-    const pinta = () => {
-      limpar(caixa); const f = nota.f;
-      if (!f) { caixa.append(h('button', { type: 'button', class: 'ckf-add mm-add', onclick: () => inp.click() }, h('b', { text: '🧾' }), h('span', { text: 'Foto da nota (opcional)' }))); }
-      else caixa.append(h('div', { class: 'ckf-mini ' + f.estado, title: f.estado === 'erro' ? 'Toque para tentar de novo' : '', onclick: () => { if (f.estado === 'erro') this.enviarFoto(f, () => placa.value); } },
-        h('img', { src: f.dados, alt: 'Foto da nota' }), h('span', { class: 'ckf-st', text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' }),
-        h('button', { type: 'button', class: 'ckf-x', 'aria-label': 'Tirar a foto', onclick: ev => { ev.stopPropagation(); nota.f = null; pinta(); } }, '×')));
-      caixa.append(inp);
+    // fotos da nota (opcional) e da garantia (obrigatória para bateria, alternador…): vão sendo enviadas enquanto ele preenche
+    const caixaFoto = (emoji, rotulo, slot) => {
+      const st = { f: null, rotulo }, caixa = h('div', { class: 'mm-foto' }), inp = h('input', { type: 'file', accept: 'image/*', hidden: true });
+      inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
+        try { const dados = await this.reduzirFoto(arq, 1600, 0.8); st.f = { tipo: 'nota', slot, dados, estado: 'enviando' }; st.f.aviso = pinta; this.enviarFoto(st.f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
+      const pinta = () => {
+        limpar(caixa); const f = st.f;
+        if (!f) caixa.append(h('button', { type: 'button', class: 'ckf-add mm-add' + (st.obrig ? ' obrig' : ''), onclick: () => inp.click() }, h('b', { text: emoji }), h('span', { text: st.rotulo })));
+        else caixa.append(h('div', { class: 'ckf-mini ' + f.estado, title: f.estado === 'erro' ? 'Toque para tentar de novo' : '', onclick: () => { if (f.estado === 'erro') this.enviarFoto(f, () => placa.value); } },
+          h('img', { src: f.dados, alt: st.rotulo }), h('span', { class: 'ckf-st', text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' }),
+          h('button', { type: 'button', class: 'ckf-x', 'aria-label': 'Tirar a foto', onclick: ev => { ev.stopPropagation(); st.f = null; pinta(); } }, '×')));
+        caixa.append(inp);
+      };
+      st.pinta = pinta; st.caixa = caixa; pinta(); return st;
     };
-    pinta();
+    const nota = caixaFoto('🧾', 'Foto da nota (opcional)', 'nota'), gar = caixaFoto('🛡️', 'Foto da garantia (obrigatória)', 'garantia'), caixa = nota.caixa;
+    const PECAS_GARANTIA = ['bateria', 'alternador', 'motor de partida', 'motor de arranque', 'turbina', 'bomba injetora', 'compressor', 'radiador', 'embreagem'];
+    const semAc = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const pedeGar = () => PECAS_GARANTIA.some(p => semAc(serv.value).indexOf(semAc(p)) >= 0);
+    const campoGar = h('div', { class: 'field', hidden: true }, h('label', { text: 'Garantia' }), h('p', { class: 'hint', style: 'margin:0 0 6px', text: 'Esta peça tem garantia: tire a foto do certificado ou da etiqueta de garantia.' }), gar.caixa);
+    serv.addEventListener('input', () => { const p = pedeGar(); campoGar.hidden = !p; gar.obrig = p; gar.pinta(); });
     const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar para aprovação' });
     env.onclick = async () => {
       mensagem(msg, ''); if (!placa.value) return mensagem(msg, 'Escolha o caminhão.'); if (serv.value.trim().length < 3) return mensagem(msg, 'Diga qual serviço ou peça foi feito.');
       if (!data.value) return mensagem(msg, 'Informe a data.');
       env.disabled = true; env.textContent = 'Enviando…';
       try {
-        if (nota.f && nota.f.estado === 'enviando') await nota.f.pronta;
-        if (nota.f && nota.f.estado === 'erro') throw new Error('A foto da nota não foi enviada. Toque nela para tentar de novo ou tire a foto.');
-        await API.chamar('lancarManutMotorista', { placa: placa.value, servico: serv.value.trim(), data: data.value, km: this.numero(km.value) || '', valor: this.numero(val.value) || '', local: local.value.trim(), obs: obs.value.trim(), nota: nota.f ? nota.f.id : '' });
+        if (pedeGar() && !gar.f) throw new Error('Tire a foto da garantia: ' + serv.value.trim().toLowerCase() + ' tem garantia.');
+        for (const x of [nota, gar]) { if (x.f && x.f.estado === 'enviando') await x.f.pronta; if (x.f && x.f.estado === 'erro') throw new Error('A ' + x.rotulo.replace(/ \(.*\)/, '').toLowerCase() + ' não foi enviada. Toque nela para tentar de novo ou tire a foto.'); }
+        await API.chamar('lancarManutMotorista', { placa: placa.value, servico: serv.value.trim(), data: data.value, km: this.numero(km.value) || '', valor: this.numero(val.value) || '', local: local.value.trim(), obs: obs.value.trim(), garantia: pedeGar() && gar.f ? gar.f.id : '', nota: nota.f ? nota.f.id : '' });
         toast('Enviado! A gestão vai conferir e aprovar.'); App.recarregar(true); App.abrirAba('manutmot');
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar para aprovação'; }
     };
@@ -292,7 +309,7 @@ const Motorista = {
       h('p', { class: 'hint', text: 'Fez algum serviço no caminhão na rua (engraxamento, lâmpada, borracharia…)? Lance aqui. Ele só entra no histórico do caminhão depois que a gestão aprovar.' }),
       h('div', { class: 'row' }, campo('Caminhão', placa), campo('Data', data)), campo('O que foi feito', serv),
       h('div', { class: 'row' }, campo('KM', km), campo('Valor', val)), campo('Onde foi feito', local), campo('Observação', obs),
-      campo('Nota / recibo', caixa), msg, h('div', { class: 'modal-actions' }, env)),
+      campo('Nota / recibo', caixa), campoGar, msg, h('div', { class: 'modal-actions' }, env)),
       meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus lançamentos' }), ...meus.map(x => this.linhaManut(x))) : null);
   },
   linhaManut(x) {
@@ -326,8 +343,23 @@ const Motorista = {
   },
   STC: { OK: ['✅ tudo certo', 'green'], ATENCAO: ['⚠️ com atenção', 'amber'], CRITICO: ['❌ itens ruins', 'red'] },
   APR: { PENDENTE: ['aguardando aprovação', 'amber'], REJEITADO: ['devolvido', 'red'] },
+  /** Situação para mostrar: aprovado (ou aprovado com irregularidade), aguardando, devolvido. */
+  statusCheck(c) {
+    if (c.aprovacao === 'APROVADO') return String(c.statusGeral || 'OK') === 'OK' ? ['✅ aprovado', 'green'] : ['✅ aprovado · irregular', 'amber'];
+    return this.APR[c.aprovacao] || this.STC[c.statusGeral] || [c.statusGeral || '—', 'gray'];
+  },
+  fmtPts(v) { return (Math.round((Number(v) || 0) * 100) / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); },
+  /** Mesma conta do servidor (_pontosChecklist_), para a gestão ver os pontos enquanto avalia as fotos. */
+  calcPontos(c, itens, aval, na, R, rec, cfg) {
+    let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; } f = f || {};
+    const g = id => aval[id] || 'boa', vale = (id, cheio, meia) => g(id) === 'boa' ? cheio : g(id) === 'meia' ? (rec ? 0 : meia) : 0, min = (cfg && cfg.carroceriaMin) || 4;
+    const nItens = itens.filter(i => ['ok', 'warn', 'bad'].indexOf(i.status) >= 0 && String(i.quantidade) === '' && !/^Outro:/.test(i.item) && na.indexOf(i.item) < 0).length;
+    const car = f.c || [], obrig = car.slice(0, min).concat(Object.values(f.p || {}), f.k ? [f.k] : []), extras = car.slice(min), fi = Object.keys(f.i || {}).filter(n => na.indexOf(n) < 0).map(n => f.i[n]);
+    const t = nItens * R.item + obrig.reduce((a, id) => a + vale(id, R.obrig, R.obrig / 2), 0) + extras.reduce((a, id) => a + vale(id, R.extra, R.extra), 0) + fi.reduce((a, id) => a + vale(id, R.itemFoto, R.itemFoto), 0);
+    return { total: Math.round(t * 100) / 100, nItens, nFotos: obrig.length + extras.length + fi.length };
+  },
   linhaCheck(c) {
-    const s = this.APR[c.aprovacao] || this.STC[c.statusGeral] || [c.statusGeral, 'gray'], itens = (this.d().checklistItens || []).filter(i => String(i.checklistId) === String(c.id));
+    const s = this.statusCheck(c), itens = (this.d().checklistItens || []).filter(i => String(i.checklistId) === String(c.id));
     return h('div', { class: 'hist-lin click', onclick: () => this.detalheCheck(c, itens) }, h('div', {}, h('b', { text: 'Checklist · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + (c.aprovacao === 'REJEITADO' && c.obsAprov ? ' · ' + c.obsAprov : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }));
   },
   detalheCheck(c, itens) {
@@ -338,12 +370,13 @@ const Motorista = {
     if (!ruins.length) cx.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' })); cx.append(this.galeria(c)); abrirModal('Checklist', cx);
   },
   /** Fotos guardadas no Drive: miniaturas que abrem em tamanho grande. */
-  galeria(c) {
+  galeria(c, avaliacao) {
     let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; }
+    let av = {}; try { av = (JSON.parse(avaliacao || 'null') || {}).fotos || {}; } catch (e) { av = {}; }
     if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos (foi enviado antes da exigência).' });
     const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam;
     const itens = []; (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' }); Object.keys(f.i || {}).forEach(n => itens.push({ id: f.i[n], leg: n }));
-    const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg }));
+    const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg + (av[x.id] === 'meia' ? ' · meia boca' : av[x.id] === 'ruim' ? ' · ruim' : '') }));
     const g = h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos' }));
     const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
     g.append(lista); return g;
@@ -395,13 +428,14 @@ const Motorista = {
     const l = (this.d().checklists || []).slice().sort((a, b) => (pend(b) - pend(a)) || (String(b.data).slice(0, 10) + b.hora).localeCompare(String(a.data).slice(0, 10) + a.hora)).slice(0, 100);
     const np = l.filter(pend).length, cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }), np && gestor ? h('div', { class: 'aviso-aprov', text: np + (np > 1 ? ' checklists aguardam' : ' checklist aguarda') + ' sua aprovação' }) : null);
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum checklist enviado ainda.' }));
-    l.forEach(c => { const s = this.APR[c.aprovacao] || this.STC[c.statusGeral] || [c.statusGeral, 'gray'];
+    l.forEach(c => { const s = this.statusCheck(c);
       cx.append(h('div', { class: 'hist-lin click', onclick: () => this.abrirCheckGestao(c, gestor) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
     return cx;
   },
   /** Abre o checklist com itens, ocorrências e fotos; admin/master aprovam ou devolvem. */
   async abrirCheckGestao(c, gestor) {
-    const cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'), h('p', { text: c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' }));
+    const st = this.statusCheck(c), cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'),
+      h('p', {}, h('span', { class: 'badge ' + st[1], text: st[0] }), ' ' + c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' + (c.pontos !== '' && c.pontos != null && c.aprovacao === 'APROVADO' ? ' · ' + this.fmtPts(c.pontos) + ' pts' : '')));
     const m = abrirModal('Checklist · ' + c.placa, cx), corpo = h('div', {}, h('div', { class: 'hint', text: 'Carregando…' })); cx.append(corpo);
     let det; try { det = await API.chamar('checklistDetalhe', { id: c.id }, { mudo: true }); } catch (e) { corpo.textContent = e.message; return; }
     corpo.textContent = '';
@@ -426,15 +460,51 @@ const Motorista = {
     });
     if (ocs.length && decide) corpo.append(h('small', { class: 'hint', text: 'Pendente vai para a oficina (GF). Marque Resolvido no que já foi resolvido.' }));
     if (!ocs.length && !imp.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
-    corpo.append(this.galeria(c));
-    if (c.aprovacao === 'APROVADO' || c.aprovacao === 'REJEITADO') corpo.append(h('p', { class: 'hint', text: (c.aprovacao === 'APROVADO' ? 'Aprovado' : 'Devolvido') + ' por ' + c.aprovadoPor + (c.obsAprov ? ' · ' + c.obsAprov : '') }));
-    if (c.aprovacao === 'PENDENTE' && gestor) {
+    // ---- itens que o caminhão não tem: o motorista marca "não tem", a gestão confirma (some dos próximos checklists) ----
+    const naMot = (det.itens || []).filter(i => i.status === 'na').map(i => i.item), naSel = new Set((det.naoAplica || []).concat(naMot)), naPode = det.naPode || [];
+    const R = det.regras || { item: 0.5, itemFoto: 0.5, obrig: 1, extra: 0.5 }, aval = {}, ptsEl = h('b');
+    const recalc = () => { const p = this.calcPontos(c, det.itens || [], aval, Array.from(naSel), R, det.recorrente, det.fotosCfg); ptsEl.textContent = this.fmtPts(p.total) + ' pontos'; return p; };
+    if (gestor && (decide || naSel.size)) {
+      const chips = h('div', { class: 'na-chips' }), pinta = () => { limpar(chips); Array.from(naSel).sort().forEach(n => chips.append(h('span', { class: 'na-chip' + (naMot.indexOf(n) >= 0 && (det.naoAplica || []).indexOf(n) < 0 ? ' novo' : '') }, n,
+        decide ? h('button', { type: 'button', 'aria-label': 'Tirar ' + n, text: '×', onclick: () => { naSel.delete(n); pinta(); recalc(); } }) : null))); if (!naSel.size) chips.append(h('span', { class: 'hint', text: 'Nenhum. Todos os itens se aplicam a este caminhão.' })); };
+      const add = decide ? h('select', { class: 'na-add', 'aria-label': 'Marcar item que não se aplica', onchange: e => { if (e.target.value) { naSel.add(e.target.value); e.target.value = ''; pinta(); recalc(); } } },
+        h('option', { value: '', text: '+ marcar item que este caminhão não tem' }), naPode.map(n => h('option', { value: n, text: n }))) : null;
+      pinta();
+      corpo.append(h('div', { class: 'na-box' }, h('b', { text: 'Não se aplica a ' + c.placa }), h('small', { class: 'hint', text: naMot.length ? 'O motorista marcou que o caminhão não tem: ' + naMot.join(', ') + '. Ao aprovar, fica salvo e some dos próximos checklists (e o que estava aberto desses itens é encerrado).' : 'Itens que este caminhão não tem: somem do checklist dele.' }), chips, add));
+    }
+    // ---- fotos: a gestão avalia (boa, meia boca, ruim); cada foto boa vale pontos ----
+    corpo.append(decide ? this.galeriaAvaliar(c, aval, recalc, det) : this.galeria(c, c.avaliacao));
+    if (c.aprovacao === 'APROVADO' || c.aprovacao === 'REJEITADO') corpo.append(h('p', { class: 'hint', text: (c.aprovacao === 'APROVADO' ? 'Aprovado' : 'Devolvido') + ' por ' + c.aprovadoPor + (c.aprovadoEm ? ' em ' + String(c.aprovadoEm).slice(0, 16).split(' ').map((x, i) => i ? x : x.split('-').reverse().join('/')).join(' ') : '') + (c.obsAprov ? ' · ' + c.obsAprov : '') }));
+    if (decide) {
       const msg = h('div', { class: 'msg' }), mot = h('input', { type: 'text', placeholder: 'Motivo (só para devolver)', maxlength: 200 });
       const ok = h('button', { class: 'btn', type: 'button', text: 'Aprovar e liberar pontos' }), no = h('button', { class: 'btn sec', type: 'button', text: 'Devolver' });
-      const enviar = async (decisao) => { ok.disabled = no.disabled = true; try { const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, resolvidas: ocs.filter(o => escolha[o.id] === 'resolvido').map(o => o.id) }); m.fechar(); App.recarregar(true); } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
+      const resumo = h('div', { class: 'pts-prev' }, h('span', { text: 'O motorista vai ganhar ' }), ptsEl, det.recorrente ? h('small', { text: ' · meia boca recorrente: fotos meia boca valem 0' }) : null); recalc();
+      const enviar = async (decisao) => { ok.disabled = no.disabled = true;
+        try {
+          const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, resolvidas: ocs.filter(o => escolha[o.id] === 'resolvido').map(o => o.id), naoAplica: Array.from(naSel), fotosAval: aval });
+          // a tela muda na hora; os dados completos chegam em segundo plano
+          c.aprovacao = decisao === 'aprovar' ? 'APROVADO' : 'REJEITADO'; c.aprovadoPor = (App.sessao && App.sessao.nome) || ''; c.obsAprov = mot.value; if (r && r.calculo) c.pontos = r.calculo.total;
+          m.fechar(); toast(decisao === 'aprovar' ? 'Checklist aprovado' + (r && r.pontos ? ' · +' + this.fmtPts(r.pontos) + ' pts para o motorista' : '') : 'Checklist devolvido ao motorista'); App.abrirAba(App.aba); App.recarregar(true);
+        } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
       ok.onclick = () => enviar('aprovar'); no.onclick = () => enviar('devolver');
-      corpo.append(mot, msg, h('div', { class: 'modal-actions' }, no, ok));
+      corpo.append(resumo, mot, msg, h('div', { class: 'modal-actions' }, no, ok));
     }
+  },
+  /** Fotos para avaliar: toque na foto amplia; Boa / Meia / Ruim muda os pontos. */
+  galeriaAvaliar(c, aval, recalc, det) {
+    let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; }
+    if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos.' });
+    const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam, min = (det.fotosCfg && det.fotosCfg.carroceriaMin) || 4, itens = [];
+    (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) + (i >= min ? ' (extra)' : '') })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' }); Object.keys(f.i || {}).forEach(n => itens.push({ id: f.i[n], leg: n }));
+    const grade = h('div', { class: 'ckf-grid aval' });
+    itens.forEach((x, i) => {
+      const seg = h('div', { class: 'aval-seg', role: 'radiogroup', 'aria-label': 'Avaliar ' + x.leg }), card = h('div', { class: 'ckf-aval' });
+      const pinta = () => { const v = aval[x.id] || 'boa'; card.dataset.g = v; $$('button', seg).forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); }); };
+      [['boa', 'Boa'], ['meia', 'Meia'], ['ruim', 'Ruim']].forEach(([v, t]) => seg.append(h('button', { type: 'button', role: 'radio', dataset: { v }, text: t, onclick: () => { if (v === 'boa') delete aval[x.id]; else aval[x.id] = v; pinta(); recalc(); } })));
+      card.append(h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg })), seg);
+      pinta(); grade.append(card);
+    });
+    return h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos · avalie: boa vale ponto cheio, meia boca vale menos, ruim vale 0' }), grade);
   },
   /** Ocorrências: lista geral ou por caminhão, filtro por situação; Resolvido e Reabrir. */
   filtroOc: { placa: '', st: 'pendentes' },

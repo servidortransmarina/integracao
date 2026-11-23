@@ -5,19 +5,33 @@ const TACOGRAFO = { 'digital': 'Digital', 'manual-diario': 'Manual (disco diári
 const fmtAnoFleet = a => { const t = String(a || '').trim(); const m = t.match(/^(\d{4})[\/-](\d{2})/); return m ? m[1] + '/' + m[2] : (t.slice(0, 4) || '—'); };
 const fmtReais = n => 'R$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* Consumo (km/L) só com pares de abastecimentos confiáveis: tanque a tanque de diesel, sem Arla, sem salto de odômetro e dentro do que um caminhão faz.
+   Um par fora da faixa quase sempre é abastecimento que não entrou na fatura (outro posto) — esse par é ignorado em vez de inflar a média. */
+const CONSUMO_MIN = 0.8, CONSUMO_MAX = 6.5, SALTO_MAX_KM = 2500;
+function consumoPares(lista, de, ate) {
+  const ab = lista.filter(m => m.tipo === 'abastecimento' && !/arla/i.test(m.descricao || '') && Number(m.km) > 0 && (m._litros || 0) > 0)
+    .sort((a, b) => (a.data + (a._hora || '')).localeCompare(b.data + (b._hora || '')) || a.km - b.km);
+  const paradas = [];                 // dois lançamentos no mesmo KM (bomba dividida) viram uma parada só
+  ab.forEach(m => { const u = paradas[paradas.length - 1]; if (u && Math.abs(Number(m.km) - u.km) < 5 && m.data === u.data) u.litros += m._litros; else paradas.push({ km: Number(m.km), litros: m._litros, data: m.data }); });
+  let km = 0, lit = 0, usados = 0, ignorados = 0;
+  for (let i = 1; i < paradas.length; i++) {
+    const a = paradas[i - 1], b = paradas[i];
+    if ((de && b.data < de) || (ate && b.data > ate)) continue;
+    const d = b.km - a.km; if (d <= 0) { ignorados++; continue; }
+    const r = d / b.litros; if (d > SALTO_MAX_KM || r < CONSUMO_MIN || r > CONSUMO_MAX) { ignorados++; continue; }
+    km += d; lit += b.litros; usados++;
+  }
+  return { km, lit, usados, ignorados, kmPorL: lit > 0 ? km / lit : 0 };
+}
+
 function resumoCombustivel(placa, dias) {
   const lim = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10), hoje = new Date().toISOString().slice(0, 10);
   const todos = db.manutencoes.filter(m => m.placa === placa && m.tipo === 'abastecimento')
     .sort((a, b) => (a.data + (a._hora || '')).localeCompare(b.data + (b._hora || '')));
   const per = todos.filter(m => m.data >= lim && m.data <= hoje);
   const litros = per.reduce((s, m) => s + (m._litros || 0), 0), gasto = per.reduce((s, m) => s + (m.valor || 0), 0);
-  let km = 0, lit = 0;
-  for (let i = 1; i < todos.length; i++) {
-    const a = todos[i - 1], b = todos[i];
-    if (b.data < lim || !(a.km > 0 && b.km > a.km) || !(b._litros > 0)) continue;
-    km += b.km - a.km; lit += b._litros;
-  }
-  return { todos, per, litros, gasto, precoMedio: litros ? gasto / litros : 0, kmPorL: lit > 0 && km > 0 ? km / lit : 0 };
+  const c = consumoPares(todos, lim, hoje);
+  return { todos, per, litros, gasto, precoMedio: litros ? gasto / litros : 0, kmPorL: c.kmPorL, paresIgnorados: c.ignorados };
 }
 
 const _renderDetalheGF = renderDetalhe;
@@ -36,7 +50,7 @@ renderDetalhe = function () {
   const par = (rot, val) => [h('dt', { text: rot }), h('dd', { text: val })];
 
   // Motoristas dos últimos 7 dias (hoje + 6 anteriores): quem fez checklist, abasteceu ou abriu ocorrência neste caminhão
-  const D = (typeof App !== 'undefined' && App.dados) || {}, nomes = {}; (D.motoristas || []).forEach(m => { nomes[m.id] = m.nome; });
+  const D = (typeof App !== 'undefined' && App.dados) || {}, nomes = {}, podeMot = typeof Motoristas !== 'undefined' && ['master', 'admin'].indexOf((App.sessao || {}).perfil) >= 0; (D.motoristas || []).forEach(m => { nomes[m.id] = m.nome; });
   const hoje = hojeLocal(), d0 = new Date(hoje + 'T00:00:00'); d0.setDate(d0.getDate() - 6);
   const desde = d0.getFullYear() + '-' + String(d0.getMonth() + 1).padStart(2, '0') + '-' + String(d0.getDate()).padStart(2, '0');
   const mot = {};
@@ -46,18 +60,20 @@ renderDetalhe = function () {
   (D.ocorrencias || []).filter(o => o.placa === v.placa).forEach(o => marca(o.motoristaId, o.dataAbertura, 'ocorrência'));
   const lista = Object.values(mot).sort((x, y) => y.ult.localeCompare(x.ult));
   const motCard = h('div', { class: 'card' }, h('h2', { text: 'Motoristas na última semana' }), h('div', { class: 'hint', style: 'margin:-6px 0 10px', text: fmtData(desde) + ' a ' + fmtData(hoje) + ' (7 dias, contando hoje)' }),
-    lista.length ? h('div', { class: 'mot-lista' }, lista.map(m => h('div', { class: 'mot' }, h('b', { text: nomeBonito(nomes[m.id] || 'Motorista') }),
+    lista.length ? h('div', { class: 'mot-lista' }, lista.map(m => h(podeMot ? 'button' : 'div', { class: 'mot' + (podeMot ? ' click' : ''), type: podeMot ? 'button' : null, title: podeMot ? 'Ver e editar o motorista' : null, onclick: podeMot ? () => Motoristas.perfil(m.id) : null }, h('b', { text: nomeBonito(nomes[m.id] || 'Motorista') }),
       h('span', { text: Object.keys(m.tipos).map(t => m.tipos[t] + (m.tipos[t] > 1 ? '× ' : '× ') + t).join(' · ') + ' · último em ' + fmtData(m.ult) }))))
       : h('div', { class: 'empty', text: 'Nenhum motorista registrou checklist, abastecimento ou ocorrência neste caminhão nos últimos 7 dias.' }));
 
-  const checks = (D.checklists || []).filter(c => c.placa === v.placa).sort((x, y) => String(y.data).localeCompare(String(x.data))).slice(0, 5);
+  const checks = (D.checklists || []).filter(c => c.placa === v.placa).sort((x, y) => (String(y.data).slice(0, 10) + (y.hora || '')).localeCompare(String(x.data).slice(0, 10) + (x.hora || ''))).slice(0, 5);
+  const gestor = ['master', 'admin'].indexOf((App.sessao || {}).perfil) >= 0 && !(App.sessao || {}).chefe;
   const chkCard = h('div', { class: 'card' }, h('h2', { text: 'Checklist' }), checks.length
-    ? h('div', { class: 'mot-lista' }, checks.map(c => h('div', { class: 'mot' }, h('b', { text: fmtData(String(c.data).slice(0, 10)) + ' · ' + nomeBonito(nomes[c.motoristaId] || 'Motorista') }), h('span', { text: (c.statusGeral || '—') + ' · ' + (c.totalOk || 0) + ' ok, ' + (c.totalWarn || 0) + ' atenção, ' + (c.totalBad || 0) + ' problema' }))))
+    ? h('div', { class: 'mot-lista' }, checks.map(c => { const st = Motorista.statusCheck(c); return h('button', { type: 'button', class: 'mot click', title: 'Abrir o checklist', onclick: () => Motorista.abrirCheckGestao(c, gestor) }, h('b', { text: fmtData(String(c.data).slice(0, 10)) + ' · ' + nomeBonito(nomes[c.motoristaId] || 'Motorista') }),
+      h('span', {}, h('span', { class: 'badge ' + st[1], text: st[0] }), ' ' + (c.totalOk || 0) + ' ok, ' + (c.totalWarn || 0) + ' atenção, ' + (c.totalBad || 0) + ' problema')); }))
     : h('div', { class: 'empty', text: 'Nenhum checklist deste caminhão ainda. Entra junto com o módulo do motorista.' }));
 
   const combCard = h('div', { class: 'card' }, h('h2', { text: 'Combustível — últimos 90 dias' }),
     r.per.length ? h('div', { class: 'kpis' }, kpi('Gasto', fmtReais(r.gasto), r.per.length + ' abastecimentos'), kpi('Litros', r.litros.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' L'),
-      kpi('Preço médio', r.precoMedio ? fmtReais(r.precoMedio) + '/L' : '—'), kpi('Consumo', r.kmPorL ? r.kmPorL.toFixed(2).replace('.', ',') + ' km/L' : '—', 'estimado pelo KM entre abastecimentos'))
+      kpi('Preço médio', r.precoMedio ? fmtReais(r.precoMedio) + '/L' : '—'), kpi('Consumo', r.kmPorL ? r.kmPorL.toFixed(2).replace('.', ',') + ' km/L' : '—', r.paresIgnorados ? 'tanque a tanque; ' + r.paresIgnorados + ' trecho(s) sem abastecimento registrado ignorado(s)' : 'estimado pelo KM entre abastecimentos'))
       : h('div', { class: 'empty', text: 'Nenhum abastecimento neste período.' }),
     r.todos.length ? h('div', { class: 'table-wrap', style: 'margin-top:14px' }, h('table', {}, h('thead', {}, h('tr', {}, ['Data', 'Produto', 'Litros', 'Valor', 'KM'].map(t => h('th', { text: t })))),
       h('tbody', {}, r.todos.slice(-15).reverse().map(m => h('tr', {}, h('td', { text: fmtData(m.data) + (m._hora ? ' ' + m._hora.slice(0, 5) : '') }), h('td', { text: m.descricao }),

@@ -12,6 +12,7 @@ const Auth = {
 
 Auth.telas.entrar = () => {
   const u = h('input', { type: 'text', id: 'usuario', name: 'username', autocomplete: 'username', autocapitalize: 'none', autocorrect: 'off', spellcheck: 'false', inputmode: 'text', enterkeyhint: 'next', placeholder: 'Joao.123456' });
+  if (Auth._usuarioNovo) u.value = Auth._usuarioNovo;
   const s = h('input', { type: 'password', id: 'senha', name: 'password', autocomplete: 'current-password', enterkeyhint: 'go' });
   const m = h('div', { class: 'msg' }), b = h('button', { class: 'btn block', type: 'submit', text: 'Entrar' });
   const f = h('form', { method: 'post', action: '#', id: 'form-login', onsubmit: async e => {
@@ -33,8 +34,16 @@ Auth.telas.entrar = () => {
   return Auth.cartao('Entrar', 'Um só acesso para todos os sistemas', f);
 };
 
+/** O gerenciador de senhas do celular/navegador pega o primeiro campo de texto antes da senha (o e-mail) como usuário.
+    Por isso estas telas têm um campo de usuário escondido, preenchido com o LOGIN quando o servidor devolve; e, onde dá, já guardamos a credencial certa. */
+function campoLoginOculto() { return h('input', { type: 'text', name: 'username', autocomplete: 'username', tabindex: '-1', 'aria-hidden': 'true', class: 'login-oculto', value: '' }); }
+function guardarLogin(oculto, usuario, senha) {
+  if (!usuario) return; oculto.value = usuario;
+  try { if (window.PasswordCredential && navigator.credentials && navigator.credentials.store) navigator.credentials.store(new PasswordCredential({ id: usuario, password: senha, name: usuario })).catch(() => {}); } catch (e) { /* navegador sem suporte: o campo escondido resolve */ }
+}
 Auth.telas.cadastro = () => {
-  const email = h('input', { type: 'email', autocomplete: 'email', autocapitalize: 'none' });
+  const oculto = campoLoginOculto();
+  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', autocapitalize: 'none' });
   const cod = h('input', { type: 'text', inputmode: 'numeric', maxlength: '6', autocomplete: 'one-time-code', placeholder: '000000' });
   const nome = h('input', { type: 'text', autocomplete: 'name' });
   const cpf = h('input', { type: 'text', inputmode: 'numeric', maxlength: '14', placeholder: '000.000.000-00' });
@@ -71,10 +80,10 @@ Auth.telas.cadastro = () => {
     if (s1.value !== s2.value) return mensagem(m, 'As senhas não conferem.');
     bFim.disabled = true;
     try { const r = await API.chamar('concluirCadastro', { email: email.value.trim(), codigo: cod.value.trim(), nome: nome.value.trim(), cpf: cpf.value, senha: s1.value }, { semExpirar: true });
-      Auth._usuarioNovo = r.usuario; Auth.mostrar('cadastroOk'); }
+      Auth._usuarioNovo = r.usuario; guardarLogin(oculto, r.usuario, s1.value); Auth.mostrar('cadastroOk'); }
     catch (err) { mensagem(m, err.message); }
     bFim.disabled = false;
-  } }, campo('E-mail', email), bEnviar, m, passo2,
+  } }, oculto, campo('E-mail', email), bEnviar, m, passo2,
     h('div', { class: 'auth-links' }, h('button', { class: 'link', type: 'button', text: '← Voltar ao login', onclick: () => Auth.mostrar('entrar') })));
   return Auth.cartao('Criar conta', 'O administrador aprova seu acesso', f);
 };
@@ -85,7 +94,8 @@ Auth.telas.cadastroOk = () => Auth.cartao('Cadastro enviado', 'Aguarde a aprova�
   h('button', { class: 'btn block', text: 'Ir para o login', onclick: () => Auth.mostrar('entrar') }));
 
 Auth.telas.recuperar = () => {
-  const email = h('input', { type: 'email', autocomplete: 'email', autocapitalize: 'none' });
+  const oculto = campoLoginOculto();
+  const email = h('input', { type: 'email', name: 'email', autocomplete: 'email', autocapitalize: 'none' });
   const cod = h('input', { type: 'text', inputmode: 'numeric', maxlength: '6', autocomplete: 'one-time-code' });
   const s1 = h('input', { type: 'password', autocomplete: 'new-password' }), s2 = h('input', { type: 'password', autocomplete: 'new-password' });
   const m = h('div', { class: 'msg' }), passo2 = h('div', { hidden: true });
@@ -104,10 +114,11 @@ Auth.telas.recuperar = () => {
     if (passo2.hidden) { bEnviar.click(); return; }          // Enter no campo de e-mail: envia o código (antes tentava definir uma senha vazia)
     if (s1.value !== s2.value) return mensagem(m, 'As senhas não conferem.');
     bFim.disabled = true;
-    try { await API.chamar('redefinirSenha', { email: email.value.trim(), codigo: cod.value.trim(), senha: s1.value }, { semExpirar: true }); toast('Senha definida. Faça login.'); Auth.mostrar('entrar'); }
+    try { const r = await API.chamar('redefinirSenha', { email: email.value.trim(), codigo: cod.value.trim(), senha: s1.value }, { semExpirar: true }); guardarLogin(oculto, r.usuario, s1.value);
+      toast(r.usuario ? 'Senha definida. Seu usuário é ' + r.usuario + '.' : 'Senha definida. Faça login.'); Auth._usuarioNovo = r.usuario || ''; Auth.mostrar('entrar'); }
     catch (err) { mensagem(m, err.message); }
     bFim.disabled = false;
-  } }, campo('E-mail da conta', email), bEnviar, m, passo2,
+  } }, oculto, campo('E-mail da conta', email), bEnviar, m, passo2,
     h('div', { class: 'auth-links' }, h('button', { class: 'link', type: 'button', text: '← Voltar ao login', onclick: () => Auth.mostrar('entrar') })));
   return Auth.cartao('Recuperar acesso', 'Também serve para o primeiro acesso de quem foi convidado', f);
 };
