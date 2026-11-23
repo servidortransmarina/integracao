@@ -33,9 +33,13 @@ function abrirModal(titulo, conteudo, op) {
 }
 function mensagem(el, texto, tipo) { el.textContent = texto || ''; el.className = 'msg' + (texto ? ' show ' + (tipo || 'err') : ''); }
 /** Campo de senha com o olhinho para mostrar/ocultar. */
+const OLHO_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const OLHO_RISCADO_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
+/** Campo de senha com o botão de mostrar/ocultar (ícone de olho desenhado, igual em todos os aparelhos). */
 function comOlho(input) {
-  const b = h('button', { type: 'button', class: 'senha-olho', title: 'Mostrar senha', 'aria-label': 'Mostrar senha', text: '👁' });
-  b.onclick = () => { const ver = input.type === 'password'; input.type = ver ? 'text' : 'password'; b.textContent = ver ? '🙈' : '👁'; b.title = b['aria-label'] = ver ? 'Ocultar senha' : 'Mostrar senha'; b.setAttribute('aria-label', b.title); input.focus(); };
+  const b = h('button', { type: 'button', class: 'senha-olho', title: 'Mostrar senha', 'aria-label': 'Mostrar senha', 'aria-pressed': 'false' });
+  b.innerHTML = OLHO_SVG;      // SVG fixo, sem dado de ninguém
+  b.onclick = () => { const ver = input.type === 'password'; input.type = ver ? 'text' : 'password'; b.innerHTML = ver ? OLHO_RISCADO_SVG : OLHO_SVG; b.title = ver ? 'Ocultar senha' : 'Mostrar senha'; b.setAttribute('aria-label', b.title); b.setAttribute('aria-pressed', ver ? 'true' : 'false'); input.focus(); };
   return h('div', { class: 'senha-box' }, input, b);
 }
 function campo(rotulo, input, dica) { return h('div', { class: 'field' }, h('label', { text: rotulo }), input.type === 'password' ? comOlho(input) : input, dica ? h('div', { class: 'hint', text: dica }) : null); }

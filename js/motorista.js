@@ -35,14 +35,15 @@ const Motorista = {
     if (F.ativos < 2) rodar(); else F.espera.push(rodar);
   },
   /** Cartão "Fotos do caminhão". Devolve { el, estado() } — estado diz o que falta e permite esperar os envios. */
-  cartaoFotos(mod, placa) {
+  cartaoFotos(mod, placa, mudou) {
     const cfg = mod.fotos || { carroceriaMin: 4, carroceriaMax: 10, pneus: [], cabineItem: '' };
+    mudou = mudou || (() => {});
     const car = [], pneu = {}, cab = { v: null };
     const ver = f => f.estado === 'ok' ? '✅' : f.estado === 'erro' ? '⚠️ toque para tentar de novo' : '⏳';
     const miniatura = (f, remover) => {
       const m = h('div', { class: 'ckf-mini ' + f.estado }, h('img', { src: f.dados, alt: 'foto' }), h('span', { class: 'ckf-st' }));
       const pinta = () => { m.className = 'ckf-mini ' + f.estado; m.querySelector('.ckf-st').textContent = f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…'; m.title = ver(f); };
-      f.aviso = pinta; pinta();
+      f.aviso = () => { pinta(); if (f.estado === 'ok') mudou(); }; pinta();
       m.onclick = () => { if (f.estado === 'erro') this.enviarFoto(f, placa); };
       if (remover) m.append(h('button', { type: 'button', class: 'ckf-x', 'aria-label': 'Remover foto', onclick: ev => { ev.stopPropagation(); remover(); } }, '×'));
       return m;
@@ -55,7 +56,7 @@ const Motorista = {
     // carroceria
     const contador = h('small', { class: 'hint' }), gridCar = h('div', { class: 'ckf-grid' });
     const pintaCar = () => {
-      limpar(gridCar); car.forEach((f, i) => gridCar.append(miniatura(f, () => { car.splice(i, 1); pintaCar(); })));
+      limpar(gridCar); car.forEach((f, i) => gridCar.append(miniatura(f, () => { car.splice(i, 1); pintaCar(); mudou(); })));
       contador.textContent = car.length + ' de ' + cfg.carroceriaMin + ' fotos (mínimo)' + (car.length >= cfg.carroceriaMin ? ' ✓' : '');
       if (car.length < cfg.carroceriaMax) gridCar.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => pc.abrir() }, h('b', { text: '＋' }), h('span', { text: 'Foto' })));
     };
@@ -64,7 +65,7 @@ const Motorista = {
     const slot = (rotulo, guardar, obter, tipo, chave) => {
       const caixa = h('div', { class: 'ckf-slot' }), p = pegar(d => { const f = { tipo, slot: chave, dados: d, estado: 'enviando' }; guardar(f); this.enviarFoto(f, placa); pinta(); });
       const pinta = () => { limpar(caixa); const f = obter(); caixa.append(h('div', { class: 'ckf-rot', text: rotulo }));
-        if (f) caixa.append(miniatura(f, () => { guardar(null); pinta(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
+        if (f) caixa.append(miniatura(f, () => { guardar(null); pinta(); mudou(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
       pinta(); return caixa;
     };
     const el = h('div', { class: 'card ck-cat' }, h('h3', { text: 'FOTOS DO CAMINHÃO' }), h('small', { class: 'hint', text: 'Tire as fotos agora, com a câmera do celular. Elas são enviadas enquanto você responde o checklist.' }),
@@ -74,7 +75,13 @@ const Motorista = {
       h('div', { class: 'sec-t', text: 'Dentro da cabine (mostre a limpeza)' }), slot('Cabine por dentro', f => { cab.v = f; }, () => cab.v, 'cabine', 'k'));
     pintaCar();
     const todas = () => car.concat((cfg.pneus || []).map(n => pneu[n]).filter(Boolean), cab.v ? [cab.v] : []);
+    const salva = id => ({ tipo: 'salva', dados: urlFotoDrive(id, 400), estado: 'ok', id, pronta: Promise.resolve() });
     return { el, todas,
+      /** Volta as fotos de um checklist que ficou pela metade (já estão no Drive). */
+      restaurar(f) { if (!f) return; (f.c || []).forEach(id => car.push(salva(id))); Object.keys(f.p || {}).forEach(n => { if ((cfg.pneus || []).indexOf(n) >= 0) pneu[n] = salva(f.p[n]); }); if (f.k) cab.v = salva(f.k);
+        pintaCar(); $$('.ckf-slot', el).forEach(x => x.remove()); const pz = $('.ckf-pneus', el); limpar(pz); (cfg.pneus || []).forEach((n, i) => pz.append(slot(n, f2 => { pneu[n] = f2; }, () => pneu[n], 'pneu', 'p' + (i + 1))));
+        el.append(slot('Cabine por dentro', f2 => { cab.v = f2; }, () => cab.v, 'cabine', 'k')); },
+      ids() { const ok = f => f && f.estado === 'ok' && f.id ? f.id : ''; const p = {}; (cfg.pneus || []).forEach(n => { if (ok(pneu[n])) p[n] = pneu[n].id; }); return { c: car.map(ok).filter(Boolean), p, k: ok(cab.v) }; },
       falta() {
         if (car.length < cfg.carroceriaMin) return 'Tire mais ' + (cfg.carroceriaMin - car.length) + ' foto(s) da carroceria.';
         const sem = (cfg.pneus || []).find(n => !pneu[n]); if (sem) return 'Falta a foto de: ' + sem + '.';
@@ -84,19 +91,37 @@ const Motorista = {
       valor() { const pn = {}; (cfg.pneus || []).forEach(n => { pn[n] = pneu[n].id; }); return { carroceria: car.map(f => f.id), pneus: pn, cabine: cab.v.id }; } };
   },
 
+  temRascunho() {
+    let a = null; try { a = JSON.parse(localStorage.getItem('trm.ckrasc.' + (App.sessao && App.sessao.usuario)) || 'null'); } catch (e) { /* ok */ }
+    const r = (a && a.dia === Motorista.hoje()) ? a : this.d().rascunhoChecklist; return !!(r && Object.keys(r.resp || {}).length);
+  },
   checklist() {
     const d = this.d(), mod = d.checklistModelo; if (!mod) return h('div', { class: 'card soon' }, 'Checklist indisponível. Atualize a página.');
     const esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : ''), km = h('input', { type: 'number', inputmode: 'numeric', min: 1, placeholder: 'KM atual do painel' });
-    const resp = {}, qtd = {}, obs = {}, linhas = {}, fotoItem = {};
+    const resp = {}, qtd = {}, obs = {}, linhas = {}, fotoItem = {}, ctl = {}, obrig = mod.obrigatorios || [], dicas = mod.dicas || {};
+    // ---- rascunho: tudo o que foi respondido fica guardado (no celular na hora e no servidor a cada pausa); sair no meio não perde nada ----
+    const chave = 'trm.ckrasc.' + (App.sessao && App.sessao.usuario), hoje0 = Motorista.hoje();
+    const lerLocal = () => { try { const r = JSON.parse(localStorage.getItem(chave) || 'null'); return r && r.dia === hoje0 ? r : null; } catch (e) { return null; } };
+    const rascunho = (() => { const a = lerLocal(), b = d.rascunhoChecklist; if (b) b.dia = hoje0; if (!a) return b || null; if (!b) return a; return String(a.salvoEm || '') >= String(b.salvoEm || '') ? a : b; })();
+    let pronto = false, tServ = null;
+    const montarRasc = () => ({ dia: hoje0, salvoEm: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace('T', ' '), placa: placa.value, km: km.value, resp, obs, qtd, outro: outroTx.value, outroSt: outroSt.v,
+      fotos: Object.assign(fotosCx.ids(), { i: Object.keys(fotoItem).reduce((o, n) => { if (fotoItem[n].estado === 'ok' && fotoItem[n].id) o[n] = fotoItem[n].id; return o; }, {}) }) });
+    const enviarServ = () => { clearTimeout(tServ); tServ = null; const r = montarRasc(); API.chamar('salvarRascunhoChecklist', { rascunho: r }, { fundo: true }).catch(() => {}); };
+    const mudou = () => { if (!pronto) return; try { localStorage.setItem(chave, JSON.stringify(montarRasc())); } catch (e) { /* sem armazenamento: o servidor guarda */ } clearTimeout(tServ); tServ = setTimeout(enviarServ, 6000); };
+    Motorista._ckFlush = () => { if (tServ) enviarServ(); };      // app minimizado/fechado: manda o que falta para o servidor na hora
+    if (!Motorista._ckOuvindo) { Motorista._ckOuvindo = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && Motorista._ckFlush) Motorista._ckFlush(); }); }
+    const apagarRasc = () => { clearTimeout(tServ); tServ = null; Motorista._ckFlush = null; try { localStorage.removeItem(chave); } catch (e) { /* ok */ } };
     // foto de cada item (opcional): itens que já têm foto no cartão de fotos (pneus e cabine) não pedem de novo
     const jaTemFoto = (mod.fotos && mod.fotos.pneus || []).concat(mod.fotos && mod.fotos.cabineItem ? [mod.fotos.cabineItem] : []);
     const comFotoPropria = mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
     const pintaCont = () => { const n = comFotoPropria.filter(n => fotoItem[n]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + comFotoPropria.length + (n === comFotoPropria.length ? ' ✓ (+ pontos extras)' : ' · foto de todos = pontos extras'); };
     const botaoFoto = nome => {
-      const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true }), bt = h('button', { type: 'button', class: 'ck-foto', 'aria-label': 'Foto de ' + nome, title: 'Foto (opcional)' });
-      const pinta = () => { const f = fotoItem[nome]; limpar(bt); bt.className = 'ck-foto' + (f ? ' tem ' + f.estado : ''); if (f) bt.append(h('img', { src: f.dados, alt: '' }), h('i', { text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' })); else bt.append('📷'); pintaCont(); };
+      const ob = obrig.indexOf(nome) >= 0;
+      const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true }), bt = h('button', { type: 'button', class: 'ck-foto' + (ob ? ' obrig' : ''), 'aria-label': 'Foto de ' + nome + (ob ? ' (obrigatória)' : ''), title: ob ? 'Foto obrigatória' : 'Foto (opcional)' });
+      const pinta = () => { const f = fotoItem[nome]; limpar(bt); bt.className = 'ck-foto' + (ob ? ' obrig' : '') + (f ? ' tem ' + f.estado : ''); if (f) bt.append(h('img', { src: f.dados, alt: '' }), h('i', { text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' })); else bt.append('📷'); pintaCont(); };
+      ctl['foto:' + nome] = pinta;
       inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
-        try { const f = { tipo: 'item', slot: nome.slice(0, 12), dados: await this.reduzirFoto(arq), estado: 'enviando' }; f.aviso = pinta; fotoItem[nome] = f; this.enviarFoto(f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
+        try { const f = { tipo: 'item', slot: nome.slice(0, 12), dados: await this.reduzirFoto(arq), estado: 'enviando' }; f.aviso = () => { pinta(); if (f.estado === 'ok') mudou(); }; fotoItem[nome] = f; this.enviarFoto(f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
       bt.onclick = () => { const f = fotoItem[nome]; if (f && f.estado === 'erro') { this.enviarFoto(f, () => placa.value); return; } inp.click(); };
       pinta(); return h('span', { class: 'ck-foto-cx' }, bt, inp);
     };
@@ -104,8 +129,8 @@ const Motorista = {
     const total = mod.categorias.reduce((n, c) => n + c.itens.length, 0), prog = h('span', { class: 'ck-prog' });
     const atualizarProg = () => { const n = Object.keys(resp).length; prog.textContent = n + ' de ' + total + ' itens'; };
     const botao = (nome, cod, ic, rot, linha, area) => h('button', { type: 'button', class: 'ck-op ' + cod, 'aria-label': rot, title: rot, onclick: () => {
-      resp[nome] = cod; $$('.ck-op', linha).forEach(b => b.classList.toggle('on', b.classList.contains(cod))); area.hidden = cod === 'ok'; linha.classList.remove('falta'); atualizarProg();
-      if (cod !== 'ok') area.querySelector('input').focus(); } }, ic);
+      resp[nome] = cod; $$('.ck-op', linha).forEach(b => b.classList.toggle('on', b.classList.contains(cod))); area.hidden = cod === 'ok'; linha.classList.remove('falta'); atualizarProg(); mudou();
+      if (cod !== 'ok' && pronto) area.querySelector('input').focus(); } }, ic);
     const raiz = h('div', { class: 'ck' },
       h('div', { class: 'card' }, h('h2', { text: 'Checklist do dia' }), feitoHoje ? h('div', { class: 'ck-aviso', text: '✅ Você já enviou um checklist hoje. Só envie outro se trocou de caminhão.' }) : null,
         h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'KM atual' }), km)),
@@ -115,23 +140,24 @@ const Motorista = {
       const cx = h('div', { class: 'card ck-cat' }, h('h3', { text: c.cat }));
       cx.append(h('div', { class: 'ck-cols' }, h('span', { text: 'Ok' }), h('span', { text: 'Atenção' }), h('span', { text: 'Ruim' })));
       c.itens.forEach(nome => {
-        const area = h('div', { class: 'ck-obs', hidden: true }, h('input', { type: 'text', maxlength: 300, placeholder: 'Descreva o problema', oninput: e => { obs[nome] = e.target.value; } }));
-        const linha = h('div', { class: 'ck-lin' }); linhas[nome] = linha;
+        const area = h('div', { class: 'ck-obs', hidden: true }, h('input', { type: 'text', maxlength: 300, placeholder: 'Descreva o problema', oninput: e => { obs[nome] = e.target.value; mudou(); } }));
+        const ob = obrig.indexOf(nome) >= 0, linha = h('div', { class: 'ck-lin' + (ob ? ' obrig' : '') }); linhas[nome] = linha;
         const imp = (mod.impeditivos || []).indexOf(nome) >= 0;
-        linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome' }, nome, imp ? h('span', { class: 'ck-imp', title: 'Item impeditivo: Ruim aqui bloqueia o caminhão na hora', 'aria-label': 'item impeditivo', text: '⛔' }) : null),
+        linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome' }, ob ? '🧯 ' : null, nome, imp ? h('span', { class: 'ck-imp', title: 'Item impeditivo: Ruim aqui bloqueia o caminhão na hora', 'aria-label': 'item impeditivo', text: '⛔' }) : null, ob ? h('span', { class: 'ck-obr', text: 'obrigatório' }) : null),
           jaTemFoto.indexOf(nome) < 0 ? botaoFoto(nome) : h('span', { class: 'ck-foto-cx vazio' }),
-          h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), area);
+          h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), ...(dicas[nome] ? [h('div', { class: 'ck-dica', text: dicas[nome] })] : []), area);
+        ctl[nome] = { linha, area };
         cx.append(linha);
       });
       raiz.append(cx);
     });
     // campo aberto: algo que não está na lista
-    const outroTx = h('textarea', { rows: 2, maxlength: 300, placeholder: 'Ex.: retrovisor solto, barulho na suspensão… (deixe em branco se não tiver)' }), outroSt = { v: 'warn' };
-    const outroSeg = h('div', { class: 'oc-seg' }); [['warn', '! Atenção'], ['bad', '✕ Ruim']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + (v === 'warn' ? 'pendente on' : 'ruim'), text: t }); b.onclick = () => { outroSt.v = v; outroSeg.querySelectorAll('.oc-op').forEach(x => x.classList.toggle('on', x === b)); }; outroSeg.append(b); });
+    const outroTx = h('textarea', { rows: 2, maxlength: 300, placeholder: 'Ex.: retrovisor solto, barulho na suspensão… (deixe em branco se não tiver)', oninput: () => mudou() }), outroSt = { v: 'warn' };
+    const outroSeg = h('div', { class: 'oc-seg' }); [['warn', '! Atenção'], ['bad', '✕ Ruim']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + (v === 'warn' ? 'pendente on' : 'ruim'), text: t, dataset: { v } }); b.onclick = () => { outroSt.v = v; outroSeg.querySelectorAll('.oc-op').forEach(x => x.classList.toggle('on', x === b)); mudou(); }; outroSeg.append(b); });
     const outroCx = h('div', { class: 'card ck-cat ck-outro' }, h('h3', { text: 'OUTRO PROBLEMA (OPCIONAL)' }), h('p', { class: 'hint', text: 'Viu algo que não está na lista? Escreva aqui.' }), outroTx, outroSeg);
-    const fotosCx = this.cartaoFotos(mod, () => placa.value);
+    const fotosCx = this.cartaoFotos(mod, () => placa.value, () => mudou());
     const eq = h('div', { class: 'card ck-cat' }, h('h3', { text: 'QUANTIDADES' }));
-    mod.quantidades.forEach(n => { const i = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 999, placeholder: '0', oninput: e => { qtd[n] = e.target.value; } }); eq.append(h('div', { class: 'ck-lin' }, h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: 'Quantidade de ' + n.toLowerCase().replace(/s$/, '') + 's' }), h('span', { class: 'ck-qtd' }, i)))); });
+    mod.quantidades.forEach(n => { const i = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 999, placeholder: '0', oninput: e => { qtd[n] = e.target.value; mudou(); } }); ctl['qtd:' + n] = i; eq.append(h('div', { class: 'ck-lin' }, h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: 'Quantidade de ' + n.toLowerCase().replace(/s$/, '') + 's' }), h('span', { class: 'ck-qtd' }, i)))); });
     const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar checklist' });
     env.onclick = async () => {
       const k = this.numero(km.value); mensagem(msg, '');
@@ -141,6 +167,7 @@ const Motorista = {
       const semDesc = Object.keys(resp).filter(n => resp[n] !== 'ok' && String(obs[n] || '').trim().length < 3); if (semDesc.length) { linhas[semDesc[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Descreva o problema de: ' + semDesc[0] + '.'); }
       for (const n of mod.quantidades) if (String(qtd[n] == null ? '' : qtd[n]) === '') return mensagem(msg, 'Informe a quantidade de ' + n.toLowerCase() + '.');
       const semFoto = fotosCx.falta(); if (semFoto) { fotosCx.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, semFoto); }
+      const semObr = obrig.find(n => !fotoItem[n] || fotoItem[n].estado === 'erro'); if (semObr) { linhas[semObr].classList.add('falta'); linhas[semObr].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Tire a foto do ' + semObr.toLowerCase() + ' (obrigatória: mostre o manômetro e a validade).'); }
       const itens = Object.keys(resp).map(n => ({ item: n, status: resp[n], descricao: obs[n] || '' })).concat(mod.quantidades.map(n => ({ item: n, quantidade: qtd[n] })));
       env.disabled = true; env.textContent = 'Enviando fotos…';
       try {
@@ -149,7 +176,7 @@ const Motorista = {
         const fotos = fotosCx.valor(); fotos.itens = {}; Object.keys(fotoItem).forEach(n => { if (fotoItem[n].estado === 'ok' && fotoItem[n].id) fotos.itens[n] = fotoItem[n].id; });
         env.textContent = 'Enviando…';
         const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos, outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
-        App.recarregar(true);
+        apagarRasc(); App.recarregar(true);
         const m = abrirModal(r.bloqueado ? 'Caminhão BLOQUEADO 🔴' : 'Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })),
           r.bloqueado ? h('div', { class: 'ck-bloq' }, h('b', { text: 'Não saia com este caminhão.' }), h('span', { text: ' Você marcou como ruim: ' + (r.impeditivos || []).join(', ') + '. A oficina e a gestão já foram avisadas.' })) : null,
           h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
@@ -158,6 +185,25 @@ const Motorista = {
     };
     atualizarProg(); pintaCont();
     raiz.append(outroCx, fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
+    placa.addEventListener('change', () => mudou()); km.addEventListener('input', () => mudou());
+    // ---- continua de onde parou ----
+    const n0 = rascunho ? Object.keys(rascunho.resp || {}).length : 0, f0 = rascunho && rascunho.fotos || {};
+    const temFoto = (f0.c || []).length || Object.keys(f0.p || {}).length || f0.k || Object.keys(f0.i || {}).length;
+    if (rascunho && (n0 || temFoto || rascunho.km)) {
+      if (rascunho.placa && [...placa.options].some(o => o.value === rascunho.placa)) placa.value = rascunho.placa;
+      if (rascunho.km) km.value = rascunho.km;
+      Object.keys(rascunho.resp || {}).forEach(n => { const c = ctl[n]; if (!c) return; const b = $('.ck-op.' + rascunho.resp[n], c.linha); if (b) b.click(); });
+      Object.keys(rascunho.obs || {}).forEach(n => { const c = ctl[n]; if (!c) return; obs[n] = rascunho.obs[n]; c.area.querySelector('input').value = rascunho.obs[n]; });
+      Object.keys(rascunho.qtd || {}).forEach(n => { const i = ctl['qtd:' + n]; if (i) { i.value = rascunho.qtd[n]; qtd[n] = rascunho.qtd[n]; } });
+      if (rascunho.outro) outroTx.value = rascunho.outro; if (rascunho.outroSt === 'bad') { const b = $('.oc-op[data-v="bad"]', outroSeg); if (b) b.click(); }
+      fotosCx.restaurar(f0);
+      Object.keys(f0.i || {}).forEach(n => { if (!ctl['foto:' + n]) return; fotoItem[n] = { tipo: 'item', dados: urlFotoDrive(f0.i[n], 300), estado: 'ok', id: f0.i[n], pronta: Promise.resolve() }; ctl['foto:' + n](); });
+      const hora = String(rascunho.salvoEm || '').slice(11, 16);
+      raiz.firstChild.append(h('div', { class: 'ck-rasc' }, h('b', { text: '↩️ Continuando de onde você parou' }), h('span', { text: n0 + ' de ' + total + ' itens respondidos' + (hora ? ' · salvo às ' + hora : '') + '.' }),
+        h('button', { class: 'btn-link', type: 'button', text: 'Começar do zero', onclick: () => confirmarCustom('Começar do zero', 'Apagar as respostas e fotos deste checklist e começar de novo?').then(ok => {
+          if (!ok) return; apagarRasc(); API.chamar('salvarRascunhoChecklist', { rascunho: null }, { fundo: true }).catch(() => {}); d.rascunhoChecklist = null; App.abrirAba('checklists'); }) })));
+    }
+    pronto = true;
     return raiz;
   },
 
@@ -422,7 +468,7 @@ const Motorista = {
     const cx = h('div', { class: 'card hoje' }, h('h2', { text: 'Seu caminhão hoje' }));
     if (!e) { cx.append(h('div', { class: 'empty', text: 'Você ainda não está escalado para hoje. Fale com a gestão.' })); return cx; }
     cx.append(h('div', { class: 'hoje-linha' }, placaHtmlEl(e.placa), h('div', {}, h('b', { text: e.modelo || 'Caminhão' }), h('small', { text: e.origem === 'escala' ? 'Escalado para hoje' + (e.turno ? ' · ' + e.turno : '') : 'Caminhão fixo (sem escala lançada)' }))),
-      feito ? h('div', { class: 'ck-aviso', text: '✅ Checklist de hoje enviado.' }) : h('button', { class: 'btn', type: 'button', text: 'Fazer o checklist agora', onclick: () => App.abrirAba('checklists') }));
+      feito ? h('div', { class: 'ck-aviso', text: '✅ Checklist de hoje enviado.' }) : h('button', { class: 'btn', type: 'button', text: this.temRascunho() ? 'Continuar o checklist (salvo pela metade)' : 'Fazer o checklist agora', onclick: () => App.abrirAba('checklists') }));
     return cx;
   }
 };

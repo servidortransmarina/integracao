@@ -1077,18 +1077,19 @@ function imprimirRelatorioCusto(r, janela) {
   const e = escHtml, brl = fmtMoeda, max = Math.max(1, ...r.linhas.map(l => l.total)), logo = _logoDataUrl || new URL('logotrm.png', location.href).href, emitido = new Date().toLocaleString('pt-BR').slice(0, 17);
   const destaque = (rot, l, valor, sub) => l ? `<div class="dest"><div class="dest-rot">${rot}</div><div class="dest-placa">${e(l.placa)}</div><div class="dest-val">${valor}</div><div class="dest-sub">${sub}</div></div>` : '';
   const pctClasse = l => Object.keys(CLASSES).filter(k => l.porClasse[k] > 0).map(k => `<span class="cl ${k.toLowerCase()}" style="width:${(l.porClasse[k] / Math.max(1, l.ofic) * 100).toFixed(1)}%" title="${CLASSES[k]}: ${brl(l.porClasse[k])}"></span>`).join('');
-  const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:28px 32px;font-size:13px}
-  header{display:flex;align-items:center;gap:18px;border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:18px}header img{height:54px}header h1{font-size:22px;margin:0}header p{margin:3px 0 0;color:#444}
-  .dests{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}.dest{border:2px solid #111;border-radius:10px;padding:12px}.dest:first-child{background:#111;color:#fff}.dest-rot{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
-  .dest-placa{font-size:26px;font-weight:bold;letter-spacing:.04em;margin:4px 0}.dest-val{font-size:17px;font-weight:bold}.dest-sub{font-size:12px;opacity:.85;margin-top:2px}
-  .tot{display:flex;gap:26px;margin:0 0 14px;font-size:13px}.tot b{font-size:16px;display:block}
-  table{width:100%;border-collapse:collapse;margin-bottom:18px}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #111;padding:6px 6px}td{padding:7px 6px;border-bottom:1px solid #ddd;vertical-align:middle}
+  const css = `*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:24px 28px;font-size:12px}
+  header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #111;padding-bottom:8px;margin-bottom:12px}header img{height:44px}header h1{font-size:20px;margin:0}header p{margin:3px 0 0;color:#444}
+  .dests{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}.dest{border:2px solid #111;border-radius:10px;padding:8px 10px}.dest:first-child{background:#111;color:#fff}.dest-rot{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+  .dest-placa{font-size:22px;font-weight:bold;letter-spacing:.04em;margin:2px 0}.dest-val{font-size:15px;font-weight:bold}.dest-sub{font-size:12px;opacity:.85;margin-top:2px}
+  .tot{display:flex;gap:24px;margin:0 0 10px;font-size:12px}.tot b{font-size:15px;display:block}
+  table{width:100%;border-collapse:collapse;margin-bottom:10px}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.03em;border-bottom:2px solid #111;padding:4px 5px}td{padding:4px 5px;border-bottom:1px solid #ddd;vertical-align:middle}tr{break-inside:avoid}
+  td.cam{white-space:nowrap}td.cam small{display:inline-block;max-width:120px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;color:#555}
   td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.top td{font-weight:bold;background:#f3f3f3}.barra{height:10px;background:#eee;border-radius:5px;overflow:hidden;min-width:90px}.barra i{display:block;height:100%;background:#c8102e}
   .mix{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#eee;min-width:70px}.cl{display:block;height:100%}.cl.prev,.cl-prev{background:#1d4ed8}.cl.corr-pl,.cl-corr-pl{background:#d97706}.cl.corr-np,.cl-corr-np{background:#b91c1c}.cl.pred,.cl-pred{background:#7c3aed}.cl.det,.cl-det{background:#0f766e}.cl.sin,.cl-sin{background:#475569}
-  .leg{font-size:11px;color:#444;margin:-10px 0 16px}.leg span{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
-  h2{font-size:15px;margin:0 0 8px}.serv{columns:2;column-gap:26px;margin:0 0 16px;padding:0;list-style:none}.serv li{padding:4px 0;border-bottom:1px dotted #bbb;break-inside:avoid;display:flex;justify-content:space-between;gap:10px}
-  footer{margin-top:10px;font-size:11px;color:#555;border-top:1px solid #ccc;padding-top:8px}@media print{@page{size:A4;margin:12mm}body{padding:0}}`;
-  const tabela = r.linhas.map((l, i) => `<tr class="${i === 0 ? 'top' : ''}"><td>${i + 1}º</td><td><b>${e(l.placa)}</b>${l.modelo ? `<br><small>${e(l.modelo)}</small>` : ''}</td>
+  .leg{font-size:10.5px;color:#444;margin:0 0 4px}.nota{font-size:10px;color:#666;margin:0 0 12px}.leg span{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:-1px}
+  h2{font-size:14px;margin:0 0 6px;break-after:avoid}.serv{columns:2;column-gap:24px;margin:0;padding:0;list-style:none}.serv li{padding:3px 0;border-bottom:1px dotted #bbb;break-inside:avoid;display:flex;justify-content:space-between;gap:10px}
+  @media print{@page{size:A4;margin:10mm}body{padding:0}}`;
+  const tabela = r.linhas.map((l, i) => `<tr class="${i === 0 ? 'top' : ''}"><td>${i + 1}º</td><td class="cam"><b>${e(l.placa)}</b>${l.modelo ? ` <small>${e(l.modelo)}</small>` : ''}</td>
     <td><div class="barra"><i style="width:${(l.total / max * 100).toFixed(1)}%"></i></div></td><td class="n"><b>${brl(l.total)}</b></td><td class="n">${brl(l.ofic)}</td><td class="n">${brl(l.comb)}</td>
     <td class="n">${l.km ? fmtKm(l.km) : '-'}</td><td class="n">${l.km ? brl(l.custoKm) : '-'}</td><td class="n">${l.kmL ? l.kmL.toFixed(2).replace('.', ',') : '-'}</td><td>${l.ofic > 0 ? `<div class="mix">${pctClasse(l)}</div>` : '-'}</td></tr>`).join('');
   const corpo = `<header><img src="${logo}" alt="Transmarina"><div><h1>Custo da frota por caminhão</h1><p>${e(r.nome)}: ${fmtData(r.de)} a ${fmtData(r.ate)} · emitido em ${emitido}</p></div></header>
@@ -1098,8 +1099,9 @@ function imprimirRelatorioCusto(r, janela) {
     <div class="tot"><div>Total da frota<b>${brl(r.total)}</b></div><div>Oficina<b>${brl(r.ofic)}</b></div><div>Combustível<b>${brl(r.comb)}</b></div><div>Rodagem estimada<b>${fmtKm(r.km)}</b></div><div>Custo médio<b>${r.km ? brl(r.total / r.km) + ' / km' : '-'}</b></div></div>
     <table><thead><tr><th></th><th>Caminhão</th><th></th><th class="n">Total</th><th class="n">Oficina</th><th class="n">Combustível</th><th class="n">Km</th><th class="n">R$/km</th><th class="n">Km/L</th><th>Oficina por tipo</th></tr></thead><tbody>${tabela}</tbody></table>
     <div class="leg">Oficina por tipo:${Object.keys(CLASSES).map(k => `<span class="cl-${k.toLowerCase()}"></span>${CLASSE_CURTA[k]}`).join('')}</div>
+    <p class="nota">Km rodado estimado pelo histórico de KM do caminhão. Custo por km considera só caminhões com pelo menos 500 km no período. Combustível pelas faturas do posto e lançamentos.</p>
     ${r.servicos.length ? `<h2>Onde mais se gastou na oficina</h2><ul class="serv">${r.servicos.map(x => `<li><span>${e(x.nome)} <small>(${x.vezes}x)</small></span><b>${brl(x.valor)}</b></li>`).join('')}</ul>` : ''}
-    <footer>Km rodado estimado pelo histórico de KM do caminhão. Custo por km considera só caminhões com pelo menos 500 km no período. Combustível pelas faturas do posto e lançamentos.</footer>`;
+`;
   const w = janela || window.open('', '_blank', 'width=960,height=700'); if (!w) { toast('O navegador bloqueou a janela do relatório. Libere pop-ups para este site.', true); return; }
   w.document.open(); w.document.write(`<html><head><title>Custo por caminhão · ${fmtData(r.de)} a ${fmtData(r.ate)}</title><style>${css}</style></head><body>${corpo}</body></html>`); w.document.close(); w.focus();
   const img = w.document.querySelector('img'); const imprimir = () => setTimeout(() => w.print(), 300); if (img && !img.complete) { img.onload = imprimir; img.onerror = imprimir; } else imprimir();

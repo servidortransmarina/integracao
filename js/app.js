@@ -169,10 +169,14 @@ const App = {
     if (breve.length) lado.append(h('div', { class: 'side-sec', text: 'Em breve' }), ...breve.map(x => item(x.id, x.ic, x.nome, false, true, 0)));
 
     // abas do sistema aberto (topo, PC)
-    const topo = limpar($('#subTabs')), abasSis = this.abasDoPerfil().filter(a => a.sis === sisAtual && sisAtual !== 'painel');
+    const rolagem = $('#subTabs').scrollLeft, topo = limpar($('#subTabs')), abasSis = this.abasDoPerfil().filter(a => a.sis === sisAtual && sisAtual !== 'painel');
     topo.hidden = !abasSis.length; $('.hub-bar').hidden = topo.hidden;
     abasSis.forEach(a => { const n = this.badge(a); topo.append(h('button', { type: 'button', class: 'subtab' + (a.id === this.aba ? ' active' : ''), dataset: { aba: a.id }, onclick: () => this.abrirAba(a.id) }, a.ic ? h('span', { class: 'st-ic' }, icone(a.ic)) : null, a.nome, n ? h('span', { class: 'n', text: String(n) }) : null)); });
 
+    // a faixa de abas é refeita a cada troca: mantém onde a pessoa tinha deslizado e garante a aba ativa à vista (senão "pula" para o começo)
+    topo.scrollLeft = rolagem;
+    { const at = $('.subtab.active', topo); if (at && topo.scrollWidth > topo.clientWidth) { const e0 = at.offsetLeft - topo.offsetLeft, d0 = e0 + at.offsetWidth;
+      if (e0 < topo.scrollLeft) topo.scrollLeft = Math.max(0, e0 - 24); else if (d0 > topo.scrollLeft + topo.clientWidth) topo.scrollLeft = d0 - topo.clientWidth + 24; } }
     // barra inferior (celular): Painel + um botão por sistema ativo + Mais. As abas do sistema aparecem numa faixa no topo.
     const barra = limpar($('#bottombar'));
     // Os botões do meio são os atalhos que a pessoa escolheu (sistemas ou telas); sem escolha, um por sistema.
@@ -360,7 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4e',
+  VERSAO: '4f',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */
