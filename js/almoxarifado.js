@@ -2,6 +2,8 @@
    Também fornece o "editor de peças" usado ao lançar manutenção (peça do estoque, comprada à parte ou que veio na nota).
    Tudo é gravado no servidor (Almoxarifado.gs); quantidade, custo médio e último preço são recalculados lá. */
 const Almox = {
+  UNIDADES: [['un', 'unidade'], ['par', 'par (2 peças)'], ['jogo', 'jogo (conjunto completo)'], ['kit', 'kit'], ['L', 'litro'], ['balde', 'balde'], ['galão', 'galão'], ['m', 'metro'], ['kg', 'quilo'], ['cx', 'caixa']],
+  selUnidade(atual) { return h('select', { 'aria-label': 'Unidade' }, this.UNIDADES.map(([u, t]) => h('option', { value: u, text: u === t ? u : u + ' — ' + t, selected: (atual || 'un') === u ? true : null }))); },
   aba: 'estoque', busca: '', filtro: '', buscaMov: '', tipoMov: '', limiteMov: 150,
 
   // ---------- dados ----------
@@ -82,9 +84,12 @@ const Almox = {
         h('div', {}, h('b', { text: this.moeda(valorTotal) }), h('span', { text: 'em estoque (custo médio)' }))),
       this.soLeitura() ? null : h('div', { class: 'ax-acoes' },
         h('button', { type: 'button', class: 'btn', id: 'axEntrada', text: '＋ Entrada de compra', onclick: () => this.abrirEntrada() }),
+        h('button', { type: 'button', class: 'btn secondary', id: 'axInventario', text: '📋 Lançar estoque atual', title: 'Peças que já estão na prateleira (várias de uma vez)', onclick: () => this.abrirInventario() }),
         h('button', { type: 'button', class: 'btn secondary', id: 'axNova', text: 'Cadastrar peça', onclick: () => this.abrirPeca(null) })));
     const barra = h('div', { class: 'ax-barra' }, busca, h('div', { class: 'ax-filtros', role: 'group', 'aria-label': 'Mostrar' }, filtroBtn('', 'Todas'), filtroBtn('baixo', 'Estoque baixo', baixas.length), filtroBtn('sem', 'Sem estoque', todas.filter(p => this.situacao(p) === 'sem').length)));
-    if (!todas.length) return h('div', {}, topo, h('div', { class: 'card ax-vazio' }, h('h3', { text: 'Nenhuma peça cadastrada ainda' }), h('p', { text: 'Comece pela "Entrada de compra" quando chegar uma nota de peças, ou cadastre as peças que já estão na prateleira com a quantidade de hoje. Peças usadas ao lançar manutenção também entram aqui sozinhas.' })));
+    if (!todas.length) return h('div', {}, topo, h('div', { class: 'card ax-vazio' }, h('h3', { text: 'Nenhuma peça cadastrada ainda' }),
+      h('p', { text: 'Comece lançando o que já está na prateleira: uma linha por peça, com quantas tem hoje. Dá até para colar uma lista do Excel. Depois, cada compra entra pela "Entrada de compra", e as peças usadas na manutenção saem daqui sozinhas.' }),
+      this.soLeitura() ? null : h('button', { type: 'button', class: 'btn', text: '📋 Lançar estoque atual', onclick: () => this.abrirInventario() })));
     const linhas = lista.map(p => {
       const ult = p.ultimoPreco > 0 ? h('div', {}, this.moeda(p.ultimoPreco), h('small', { text: this.dt(p.ultimaCompra) + (p.ultimoFornecedor ? ' · ' + p.ultimoFornecedor : '') })) : h('span', { class: 'ax-dim', text: '—' });
       const acoes = this.soLeitura() ? h('td') : h('td', { class: 'ax-tdacoes' },
@@ -104,7 +109,7 @@ const Almox = {
   rotuloMov(m) {
     if (m.tipo === 'ENTRADA') return m.origem === 'nota' ? 'Veio na nota' : 'Entrada';
     if (m.tipo === 'SAIDA') return m.manutencaoId ? 'Usada em manutenção' : 'Saída';
-    return 'Contagem';
+    return m.origem === 'inventario' ? 'Estoque atual (inventário)' : 'Contagem';
   },
   linhaMov(m, comPeca) {
     const p = this.porId(m.pecaId), q = Number(m.quantidade) || 0, sinal = m.tipo === 'SAIDA' ? -1 : 1, qq = sinal * q;
@@ -159,7 +164,7 @@ const Almox = {
     const nome = h('input', { type: 'text', maxlength: 80, value: v('nome', ''), placeholder: 'Ex.: Filtro de óleo PSL 76' }), codigo = h('input', { type: 'text', maxlength: 30, value: v('codigo', ''), placeholder: 'Opcional' });
     const cat = h('input', { type: 'text', maxlength: 40, value: v('categoria', ''), placeholder: 'Ex.: Filtros, Elétrica, Freio', list: 'dlAxCat' });
     { let dl = document.getElementById('dlAxCat'); if (!dl) { dl = h('datalist', { id: 'dlAxCat' }); document.body.append(dl); } limpar(dl).append(...Array.from(new Set(this.todasPecas().map(x => x.categoria).filter(Boolean))).sort().map(c => h('option', { value: c }))); }
-    const un = h('select', {}, ['un', 'par', 'jogo', 'kit', 'L', 'balde', 'galão', 'm', 'kg', 'cx'].map(u => h('option', { value: u, text: u, selected: v('unidade', 'un') === u ? true : null })));
+    const un = this.selUnidade(v('unidade', 'un'));
     const min = h('input', { type: 'text', inputmode: 'decimal', value: v('estoqueMinimo', '') ? String(v('estoqueMinimo', '')).replace('.', ',') : '', placeholder: 'Ex.: 3' });
     const local = h('input', { type: 'text', maxlength: 60, value: v('localizacao', ''), placeholder: 'Ex.: Prateleira B2' });
     const ini = p ? null : h('input', { type: 'text', inputmode: 'decimal', placeholder: '0' });
@@ -258,6 +263,71 @@ const Almox = {
       if (!itens.length) { mensagem(msg, 'Coloque pelo menos uma peça.'); return; }
       if (rows.some(r => !r.ok) && !(await confirmarCustom('Preço fora do normal', 'Tem peça com valor bem diferente do que costuma custar. Confirma que digitou o valor de UMA unidade?'))) return;
       try { await this.chamar('almoxEntrada', { id: this.novoId('ent'), data: data.value || this.hoje(), fornecedor: forn.value.trim(), notaNum: nota.value.trim(), itens }, ok); md.fechar(); toast(itens.length + (itens.length > 1 ? ' peças entraram' : ' peça entrou') + ' no estoque.'); }
+      catch (e) { mensagem(msg, e.message); }
+    };
+  },
+  /** Estoque que já está na prateleira: uma linha por peça (nova ou já cadastrada), com quantas tem hoje.
+      Aceita colar do Excel: nome, quantidade, unidade, valor de uma (colunas separadas por Tab). */
+  abrirInventario() {
+    this.listas();
+    const linhas = h('div', { class: 'ax-inv-linhas' }), msg = h('div', { class: 'msg' }), ok = h('button', { type: 'button', class: 'btn', text: 'Salvar estoque' }), rows = [], cont = h('span', { class: 'ax-inv-cont' });
+    const contar = () => { const n = rows.filter(r => r.peca.value.trim()).length; cont.textContent = n ? n + (n > 1 ? ' peças na lista' : ' peça na lista') : ''; ok.textContent = n > 1 ? 'Salvar ' + n + ' peças' : 'Salvar estoque'; };
+    const nova = (d, depois) => {
+      d = d || {};
+      const peca = h('input', { type: 'text', maxlength: 80, list: 'dlAxPecas', placeholder: 'Nome da peça', value: d.nome || '', 'aria-label': 'Peça' });
+      const qtd = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Quantas tem', value: d.qtd || '', 'aria-label': 'Quantas tem hoje' });
+      const un = this.selUnidade(d.un || 'un'), min = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Mínimo', value: d.min || '', 'aria-label': 'Estoque mínimo' });
+      const local = h('input', { type: 'text', maxlength: 60, placeholder: 'Onde fica', value: d.local || '', 'aria-label': 'Onde fica' });
+      const vu = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'R$ de UMA (opcional)', value: d.vu || '', 'aria-label': 'Valor de uma unidade' });
+      const info = h('div', { class: 'ax-ed-info' }), x = h('button', { type: 'button', class: 'ax-x', 'aria-label': 'Tirar esta linha', text: '✕' });
+      const r = { peca, qtd, un, min, local, vu, el: null };
+      const pinta = () => { const p = this.porNome(peca.value), q = this.valor(qtd.value); info.className = 'ax-ed-info';
+        if (!peca.value.trim()) info.textContent = '';
+        else if (p) { un.value = this.un(p); un.disabled = true; info.textContent = 'Já cadastrada: o sistema diz ' + this.num(this.qtd(p)) + ' ' + this.un(p) + (qtd.value.trim() && !isNaN(q) ? ' → vai ficar ' + this.num(q) + '.' : '.'); }
+        else { un.disabled = false; info.textContent = 'Peça nova: vai ser cadastrada.'; } contar(); };
+      [peca, qtd].forEach(i => i.addEventListener('input', pinta));
+      // colar uma lista do Excel no nome: vira várias linhas
+      peca.addEventListener('paste', e => { const t = (e.clipboardData || window.clipboardData).getData('text'); if (!/[\t\n]/.test(t)) return; e.preventDefault(); colar(t, r); });
+      vu.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); nova(null, r).peca.focus(); } });
+      r.el = h('div', { class: 'ax-inv-lin' }, peca, qtd, un, min, local, vu, x, info);
+      x.onclick = () => { if (rows.length === 1) { [peca, qtd, min, local, vu].forEach(i => { i.value = ''; }); pinta(); return; } rows.splice(rows.indexOf(r), 1); r.el.remove(); contar(); };
+      if (depois) { rows.splice(rows.indexOf(depois) + 1, 0, r); depois.el.after(r.el); } else { rows.push(r); linhas.append(r.el); }
+      pinta(); return r;
+    };
+    const UNS = this.UNIDADES.map(u => u[0]);
+    const colar = (texto, alvo) => {
+      const ls = texto.replace(/\r/g, '').split('\n').map(l => l.split('\t').map(c => c.trim())).filter(c => c[0]);
+      let ant = alvo;
+      ls.forEach((c, i) => {
+        const qtdTxt = c[1] || '', unTxt = (c[2] || '').toLowerCase(), un = UNS.find(u => u.toLowerCase() === unTxt || (unTxt && u.toLowerCase().startsWith(unTxt.slice(0, 2)))) || 'un';
+        const d = { nome: c[0], qtd: qtdTxt, un, vu: c[3] || '' };
+        if (i === 0 && !alvo.peca.value.trim()) { alvo.peca.value = d.nome; alvo.qtd.value = d.qtd; alvo.un.value = d.un; alvo.vu.value = d.vu; alvo.peca.dispatchEvent(new Event('input')); }
+        else ant = nova(d, ant);
+      });
+      contar(); toast(ls.length + (ls.length > 1 ? ' linhas coladas.' : ' linha colada.') + ' Confira antes de salvar.');
+    };
+    nova();
+    const md = abrirModal('Lançar estoque atual', h('div', { class: 'ax-form' },
+      h('p', { class: 'hint', text: 'Uma linha por peça, com quantas tem HOJE na prateleira. Peça que já está cadastrada fica com a quantidade que você digitar. Tem a lista no Excel? Copie as colunas Nome · Quantidade · Unidade · Valor e cole no primeiro campo.' }),
+      h('div', { class: 'ax-inv-cab' }, ['Peça', 'Quantas tem', 'Unidade', 'Mínimo', 'Onde fica', 'Valor de UMA', ''].map(t => h('span', { text: t }))),
+      linhas, h('div', { class: 'ax-inv-rod' }, h('button', { type: 'button', class: 'btn secondary small', text: '＋ Outra peça', onclick: () => nova(null, rows[rows.length - 1]).peca.focus() }), cont), msg, h('div', { class: 'modal-actions' }, ok)), { largo: true });
+    rows[0].peca.focus();
+    ok.onclick = async () => {
+      const itens = [], vistos = {};
+      for (const r of rows) {
+        const nome = r.peca.value.trim(); if (!nome && !r.qtd.value.trim()) continue;
+        if (nome.length < 2) { mensagem(msg, 'Diga o nome de cada peça.'); return r.peca.focus(); }
+        const q = this.valor(r.qtd.value); if (isNaN(q) || q < 0) { mensagem(msg, 'Diga quantas tem de "' + nome + '" (pode ser 0).'); return r.qtd.focus(); }
+        const k = this.k(nome); if (vistos[k]) { mensagem(msg, '"' + nome + '" está em duas linhas. Deixe uma só com o total.'); return r.peca.focus(); } vistos[k] = 1;
+        const mi = r.min.value.trim() ? this.valor(r.min.value) : 0, v = r.vu.value.trim() ? this.valor(r.vu.value) : '';
+        if (isNaN(mi) || mi < 0) { mensagem(msg, 'Mínimo inválido em "' + nome + '".'); return r.min.focus(); }
+        if (v !== '' && (isNaN(v) || v < 0)) { mensagem(msg, 'Valor inválido em "' + nome + '".'); return r.vu.focus(); }
+        const p = this.porNome(nome);
+        itens.push(Object.assign(p ? { pecaId: p.id } : {}, { nome, quantidade: q, unidade: r.un.value, estoqueMinimo: mi, localizacao: r.local.value.trim(), valorUnit: v }));
+      }
+      if (!itens.length) { mensagem(msg, 'Coloque pelo menos uma peça.'); return rows[0].peca.focus(); }
+      try { const res = await this.chamar('almoxInventario', { id: this.novoId('inv'), itens }, ok); md.fechar();
+        toast('Estoque salvo: ' + itens.length + (itens.length > 1 ? ' peças' : ' peça') + (res.criadas ? ' (' + res.criadas + ' nova' + (res.criadas > 1 ? 's' : '') + ')' : '') + '.'); }
       catch (e) { mensagem(msg, e.message); }
     };
   },
