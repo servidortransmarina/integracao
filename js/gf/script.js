@@ -223,11 +223,14 @@ function validarSaltoKm(placa, novoKm, dataReferencia, isCorrecaoManual = false)
 
   const kmAnterior = v.kmAtual; 
   
-  if (novoKm < kmAnterior && dataReferencia === hojeISO()) {
+  if (novoKm < kmAnterior) {
      if (isCorrecaoManual) {
-         return { alerta: true, msg: `⚠️ CORREÇÃO DE KM\n\nO valor digitado (${fmtKm(novoKm)}) é MENOR que o último KM do painel (${fmtKm(kmAnterior)}).\n\nTem certeza que deseja abaixar o KM do veículo no sistema?` };
+         if (dataReferencia === hojeISO()) return { alerta: true, msg: `⚠️ CORREÇÃO DE KM\n\nO valor digitado (${fmtKm(novoKm)}) é MENOR que o último KM do painel (${fmtKm(kmAnterior)}).\n\nTem certeza que deseja abaixar o KM do veículo no sistema?` };
      } else {
-         return { erro: true, msg: `Bloqueio Retroativo:\nO KM não pode ser menor que o do painel atual (${fmtKm(kmAnterior)}).\n\nSe você digitou errado no passado, use o botão "Atualizar KM" lá no topo do painel do veículo para forçar a correção do erro.` };
+         // Manutenção já feita (nota que chegou depois): o KM do serviço pode ser menor que o de hoje. Só confere se a diferença for grande demais (erro de digitação).
+         // O KM atual do caminhão não baixa: só sobe quando o lançado é maior.
+         if (kmAnterior - novoKm > 30000) return { alerta: true, msg: `⚠️ KM BEM MENOR QUE O ATUAL\n\nO serviço foi lançado com ${fmtKm(novoKm)}, mas o caminhão já está com ${fmtKm(kmAnterior)} (${fmtKm(kmAnterior - novoKm)} a menos).\n\nSe o serviço foi feito há bastante tempo, está certo. Confirma o KM?` };
+         return null;
      }
   }
   
@@ -869,7 +872,7 @@ async function salvarManutencao() {
   closeModal('modalManut');
   // Se for abastecimento sem KM informado (ou 0), mantém 0 e NUNCA puxa o kmAtual do caminhão
   const km = kmInput !== '' ? kmParsed : (isAbastecimento ? (manutOriginal ? manutOriginal.km : 0) : (v ? v.kmAtual : 0));
-  if (v && km > v.kmAtual) v.kmAtual = km; 
+  const kmSubiu = !!(v && km > v.kmAtual); if (kmSubiu) v.kmAtual = km; 
 
   const nomeUsuario = (GF.nome()) + " (em " + dataHoraAtual() + ")";
   
@@ -899,7 +902,7 @@ async function salvarManutencao() {
     await apiPost(editando ? 'updateManutencao' : 'addManutencao', envio);
     for (const ag of agCumpridos) await apiPost('deleteAgendamento', { id: ag.id });
     if (alertaAtivo) await apiPost('deleteAlerta', { id: alertaAtivo.id });
-    if (v && km > v.kmAtual) await apiPost('updateKmVeiculo', { placa, kmAtual: km });
+    if (kmSubiu) await apiPost('updateKmVeiculo', { placa, kmAtual: km });
     sincronizarAlertas(true);
   }, 'Erro manutenção');
 }
