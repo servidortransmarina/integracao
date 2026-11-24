@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#1f4e78">
   <title>Gestão de Ponto | Transmarina</title>
-  <link rel="stylesheet" href="ponto.css?v=4i1">
+  <link rel="stylesheet" href="ponto.css?v=4j">
 </head>
 <body class="embed">
   <div class="modal-overlay" id="modal-login" aria-modal="true" role="dialog">
     <div class="login-card">
-      <div class="login-brand"><img src="../logotrm.png?v=4i1" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Transmarina • Acesso restrito</small></div></div>
+      <div class="login-brand"><img src="../logotrm.png?v=4j" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Transmarina • Acesso restrito</small></div></div>
       <h1 id="auth-titulo">Bem-vindo de volta</h1>
       <p id="auth-subtitulo">Entre com seu usuário e senha para acessar seu painel.</p>
       <section id="auth-painel-login" aria-label="Acessar conta">
@@ -123,7 +123,7 @@
 
   <div class="shell" id="shell" hidden>
     <aside class="sidebar">
-      <div class="brand"><img src="../logotrm.png?v=4i1" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Painel corporativo</small></div></div>
+      <div class="brand"><img src="../logotrm.png?v=4j" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src='logotrm.png'}else{this.style.display='none'}"><div><strong>GESTÃO DE PONTO</strong><small>Painel corporativo</small></div></div>
       <div class="sidebar-label">GERENCIAMENTO</div>
       <nav class="main-nav" aria-label="Menu principal">
         <button class="nav-button active" data-tab="horas"><span class="nav-icon">◷</span> Horas extras</button>
@@ -222,9 +222,9 @@
             <div class="panel"><div class="filter-row mb"><input type="search" id="filtro-capa" placeholder="Buscar colaborador ou responsável…"><input type="month" id="filtro-capa-mes" aria-label="Filtrar mês"></div><div class="table-scroll"><table><thead><tr><th class="check-col"><input id="check-todas-capa" type="checkbox" aria-label="Selecionar todas as visíveis"></th><th>Ocorrência</th><th>Colaborador</th><th>Responsável</th><th>Correção</th><th>Assinado</th></tr></thead><tbody id="tbody-capa"></tbody></table></div></div>
             </div>
             <div class="capa-painel" id="capa-cartoes" hidden>
-            <div class="section-header"><div><h3>Cartões de ponto do mês</h3><p>Todos os funcionários ativos e se o cartão do mês foi assinado. Toque em <strong>Assinado / Não assinado</strong> para trocar; fica salvo na hora.</p></div><div class="actions"><button class="btn subtle" id="cartoes-todos" type="button">Marcar todos como assinados</button><button class="btn primary" id="imprimir-cartoes" type="button">Imprimir lista</button></div></div>
+            <div class="section-header"><div><h3>Cartões de ponto do mês</h3><p>Todos os funcionários ativos e se o cartão do mês foi assinado. Toque em <strong>Assinado / Não assinado</strong> para trocar; fica salvo na hora. Desmarque a caixinha de quem não precisa sair na impressão — o sistema lembra nos próximos meses.</p></div><div class="actions"><button class="btn subtle" id="cartoes-todos" type="button">Marcar todos como assinados</button><button class="btn primary" id="imprimir-cartoes" type="button">Imprimir selecionados (<span id="cartoes-sel">0</span>)</button></div></div>
             <div class="panel"><div class="filter-row mb"><label class="inline-label" for="cartoes-mes">Mês</label><input type="month" id="cartoes-mes" aria-label="Mês dos cartões"><input type="search" id="cartoes-busca" placeholder="Buscar funcionário…"><select id="cartoes-filtro" aria-label="Mostrar"><option value="">Todos</option><option value="NAO">Só não assinados</option><option value="SIM">Só assinados</option></select><span class="pill" id="cartoes-cont">—</span></div>
-              <div class="table-scroll"><table class="cartoes-tab"><thead><tr><th class="num-col">Nº</th><th>Funcionário</th><th>Empresa</th><th>Cartão</th></tr></thead><tbody id="tbody-cartoes"><tr><td colspan="4" class="empty">Escolha o mês.</td></tr></tbody></table></div></div>
+              <div class="table-scroll"><table class="cartoes-tab"><thead><tr><th class="check-col"><input id="check-todos-cartoes" type="checkbox" aria-label="Imprimir todos os visíveis"></th><th class="num-col">Nº</th><th>Funcionário</th><th class="emp-col">Empresa</th><th>Cartão</th></tr></thead><tbody id="tbody-cartoes"><tr><td colspan="5" class="empty">Escolha o mês.</td></tr></tbody></table></div></div>
             </div>
           </div>
 
@@ -341,6 +341,6 @@
       </main>
     </div>
   </div>
-  <script src="ponto.js?v=4i1"></script>
+  <script src="ponto.js?v=4j"></script>
 </body>
 </html>

@@ -9,15 +9,15 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://ajax.googleapis.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://drive.google.com https://drive.usercontent.google.com https://*.googleusercontent.com; worker-src 'self' blob:; connect-src 'self' blob: data: https://www.gstatic.com https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'; object-src 'none'">
 <link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
-<link rel="manifest" href="manifest.json?v=4i1">
-<link rel="preload" as="image" href="logotrm.png?v=4i1" fetchpriority="high">
-<link rel="icon" type="image/png" href="logotrm-192.png?v=4i1">
-<link rel="shortcut icon" type="image/png" href="logotrm-192.png?v=4i1">
-<link rel="apple-touch-icon" href="icons/trm-180.png?v=4i1">
+<link rel="manifest" href="manifest.json?v=4j">
+<link rel="preload" as="image" href="logotrm.png?v=4j" fetchpriority="high">
+<link rel="icon" type="image/png" href="logotrm-192.png?v=4j">
+<link rel="shortcut icon" type="image/png" href="logotrm-192.png?v=4j">
+<link rel="apple-touch-icon" href="icons/trm-180.png?v=4j">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="stylesheet" href="css/gf.css?v=4i1">
-<link rel="stylesheet" href="css/hub.css?v=4i1">
+<link rel="stylesheet" href="css/gf.css?v=4j">
+<link rel="stylesheet" href="css/hub.css?v=4j">
 <style>/* antes do CSS chegar: a abertura já nasce escura (nada de tela branca ou de outra cor) */ .splash{position:fixed;inset:0;z-index:10000;background:#140405}</style>
 </head>
 <body>
@@ -25,7 +25,7 @@
 <div id="splash" class="splash" role="status" aria-label="Abrindo o Portal Transmarina">
   <div class="sp-luz" aria-hidden="true"></div>
   <div class="sp-centro">
-    <div class="sp-logo"><img src="logotrm.png?v=4i1" alt="" decoding="async" onload="this.parentNode.classList.add('pronta')" onerror="this.parentNode.classList.add('sem-img')"><span class="sp-t" aria-hidden="true">TRANSMARINA</span></div>
+    <div class="sp-logo"><img src="logotrm.png?v=4j" alt="" decoding="async" onload="this.parentNode.classList.add('pronta')" onerror="this.parentNode.classList.add('sem-img')"><span class="sp-t" aria-hidden="true">TRANSMARINA</span></div>
     <h1 class="sp-tit"><span>PORTAL</span> <span>TRANSMARINA</span></h1>
     <p class="sp-sub">Tudo em um só lugar</p>
     <div class="sp-barra" aria-hidden="true"><i></i></div>
@@ -36,7 +36,7 @@
 
 <div id="app" class="hub" hidden>
   <aside class="hub-side">
-    <div class="hub-brand"><img src="logotrm.png?v=4i1" alt="Transmarina" class="logo-img"><span class="logo-txt" hidden>TRANSMARINA</span></div>
+    <div class="hub-brand"><img src="logotrm.png?v=4j" alt="Transmarina" class="logo-img"><span class="logo-txt" hidden>TRANSMARINA</span></div>
     <button class="side-toggle" id="sideToggle" type="button" aria-label="Recolher menu lateral" title="Recolher menu">«</button>
     <div id="sideNav"></div>
     <button class="side-user" id="sideUser" type="button"></button>
@@ -257,7 +257,7 @@
       </select>
     </div>
     
-    <div class="manut-aviso" role="note">✍️ <b>Um serviço por lançamento.</b> Trocou pneu e mexeu no motor? Lance os dois separados: assim o histórico, os avisos de troca e o custo por tipo ficam certos.</div>
+    <div class="manut-aviso" role="note">✍️ <b>Cada serviço vira um lançamento.</b> Escreveu "troca de óleo e filtro"? O sistema separa em dois e pede para dividir o valor. Nota da oficina com vários serviços? <button type="button" class="link-btn" id="mVirarNota" onclick="manutParaNota()">Lançar a nota inteira</button></div>
     <div class="field"> 
       <label>Qual serviço ou peça? *</label>
       <input type="text" id="mTipoInput" list="listaServicos" oninput="sugerirClasse()" placeholder="Ex: Alinhamento, Bomba D'água, Pastilha..." onkeypress="if(event.key === 'Enter') document.getElementById('mKm').focus()">
@@ -310,8 +310,13 @@
       </div>
     </div>
     <div class="field">
-      <label>Valor Gasto (R$)</label>
-      <input type="text" inputmode="decimal" id="mValor" placeholder="Ex: 1500,50" onkeypress="if(event.key === 'Enter') document.getElementById('mObs').focus()">
+      <label id="mValorRot">Valor gasto (R$)</label>
+      <input type="text" inputmode="decimal" id="mValor" placeholder="Ex: 1500,50" oninput="manutTotalPecas()" onkeypress="if(event.key === 'Enter') document.getElementById('mObs').focus()">
+    </div>
+    <div class="field" id="mPecasWrap">
+      <label>Peças usadas</label>
+      <div id="mPecas"></div>
+      <div class="manut-total" id="mTotalPecas" hidden></div>
     </div>
     <div class="field">
       <label>Observação</label>
@@ -425,30 +430,32 @@
 <div class="toast" id="toast"></div>
 <div class="loading-overlay" id="loadingOverlay">Carregando dados…</div>
 
-<script src="js/config.js?v=4i1"></script>
-<script src="js/ui.js?v=4i1"></script>
-<script src="js/api.js?v=4i1"></script>
-<script src="js/cripto.js?v=4i1"></script>
-<script src="js/gf/ponte.js?v=4i1"></script>
-<script src="js/gf/script.js?v=4i1"></script>
-<script src="js/gf/pneus.js?v=4i1"></script>
-<script src="js/gf/os.js?v=4i1"></script>
-<script src="js/gf/fleet.js?v=4i1"></script>
-<script src="js/gf/graficos.js?v=4i1"></script>
-<script src="js/auth.js?v=4i1"></script>
-<script src="js/inicio.js?v=4i1"></script>
-<script src="js/perfil.js?v=4i1"></script>
-<script src="js/motoristas.js?v=4i1"></script>
-<script src="js/pontos.js?v=4i1"></script>
-<script src="js/motorista.js?v=4i1"></script>
-<script src="js/escalas-hub.js?v=4i1"></script>
-<script src="js/financeiro-hub.js?v=4i1"></script>
-<script src="js/financeiro-comb.js?v=4i1"></script>
-<script src="js/ajuda.js?v=4i1"></script>
-<script src="js/ponto-hub.js?v=4i1"></script>
-<script src="js/ponto-painel.js?v=4i1"></script>
-<script src="js/usuarios.js?v=4i1"></script>
-<script src="js/pendencias.js?v=4i1"></script>
-<script src="js/app.js?v=4i1"></script>
+<script src="js/config.js?v=4j"></script>
+<script src="js/ui.js?v=4j"></script>
+<script src="js/api.js?v=4j"></script>
+<script src="js/cripto.js?v=4j"></script>
+<script src="js/gf/ponte.js?v=4j"></script>
+<script src="js/servicos.js?v=4j"></script>
+<script src="js/gf/script.js?v=4j"></script>
+<script src="js/gf/pneus.js?v=4j"></script>
+<script src="js/gf/os.js?v=4j"></script>
+<script src="js/gf/fleet.js?v=4j"></script>
+<script src="js/gf/graficos.js?v=4j"></script>
+<script src="js/auth.js?v=4j"></script>
+<script src="js/inicio.js?v=4j"></script>
+<script src="js/perfil.js?v=4j"></script>
+<script src="js/motoristas.js?v=4j"></script>
+<script src="js/pontos.js?v=4j"></script>
+<script src="js/motorista.js?v=4j"></script>
+<script src="js/escalas-hub.js?v=4j"></script>
+<script src="js/financeiro-hub.js?v=4j"></script>
+<script src="js/financeiro-comb.js?v=4j"></script>
+<script src="js/almoxarifado.js?v=4j"></script>
+<script src="js/ajuda.js?v=4j"></script>
+<script src="js/ponto-hub.js?v=4j"></script>
+<script src="js/ponto-painel.js?v=4j"></script>
+<script src="js/usuarios.js?v=4j"></script>
+<script src="js/pendencias.js?v=4j"></script>
+<script src="js/app.js?v=4j"></script>
 </body>
 </html>

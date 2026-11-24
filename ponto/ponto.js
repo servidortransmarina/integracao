@@ -2502,6 +2502,7 @@ function registrarEventos() {
   $('cartoes-busca').addEventListener('input',renderCartoes);
   $('cartoes-filtro').addEventListener('change',renderCartoes);
   $('imprimir-cartoes').addEventListener('click',imprimirCartoes);
+  $('check-todos-cartoes').addEventListener('change',e=>cartoesMarcarImpressao(cartoesVisiveis(),e.target.checked));
   $('cartoes-todos').addEventListener('click',marcarTodosCartoes);
   $('check-todas-capa').addEventListener('change',e=>{
     for(const c of cartasCapaFiltradas().slice(0,250))
@@ -2855,15 +2856,21 @@ function configurarBancoHorasUI(){
 
 /* ===== Cartões de ponto do mês: nome de todos os funcionários e se o cartão foi assinado (lista impressa todo mês) ===== */
 const CARTOES={mes:'',lista:[],carregando:false};
+// Quem NÃO sai na impressão fica guardado neste navegador (costuma ser sempre o mesmo pessoal, mês após mês).
+const CARTOES_FORA_KEY='trm.cartoes.naoImprimir';
+function cartoesFora(){try{return new Set(JSON.parse(localStorage.getItem(CARTOES_FORA_KEY)||'[]'));}catch(_){return new Set();}}
+function cartoesGuardarFora(set){try{localStorage.setItem(CARTOES_FORA_KEY,JSON.stringify([...set]));}catch(_){}}
+function cartaoImprime(c){return !cartoesFora().has(norm(c.nome));}
+function cartoesMarcarImpressao(lista,imprime){const s=cartoesFora();lista.forEach(c=>{imprime?s.delete(norm(c.nome)):s.add(norm(c.nome));});cartoesGuardarFora(s);renderCartoes();}
 const MESES_PT=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 function nomeMesCartoes(m){const [a,n]=String(m).split('-');return n?MESES_PT[Number(n)-1]+'/'+a:'';}
 async function carregarCartoes(){
   const inp=$('cartoes-mes');
   if(!inp.value){const d=new Date();inp.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
   const mes=inp.value;CARTOES.mes=mes;CARTOES.carregando=true;
-  $('tbody-cartoes').innerHTML='<tr><td colspan="4" class="empty">Carregando…</td></tr>';
+  $('tbody-cartoes').innerHTML='<tr><td colspan="5" class="empty">Carregando…</td></tr>';
   try{const r=await api('getCartoes',{mes});if(CARTOES.mes!==mes)return;CARTOES.lista=r.dados||[];}
-  catch(e){$('tbody-cartoes').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message||e)}</td></tr>`;return;}
+  catch(e){$('tbody-cartoes').innerHTML=`<tr><td colspan="5" class="empty">${esc(e.message||e)}</td></tr>`;return;}
   finally{CARTOES.carregando=false;}
   renderCartoes();
 }
@@ -2874,10 +2881,14 @@ function cartoesVisiveis(){
 function renderCartoes(){
   const vis=cartoesVisiveis(),tot=CARTOES.lista.length,ass=CARTOES.lista.filter(c=>c.assinado==='SIM').length;
   $('cartoes-cont').textContent=tot?ass+' de '+tot+' assinados':'—';
-  $('tbody-cartoes').innerHTML=vis.length?vis.map((c,i)=>`<tr${c.inativo?' class="inativo"':''}><td class="num-col">${i+1}</td><td><b>${esc(c.nome)}</b>${c.inativo?' <small class="muted">(não está mais ativo)</small>':''}</td><td>${esc(c.empresa||'—')}</td>
+  const fora=cartoesFora(),sel=CARTOES.lista.filter(c=>!fora.has(norm(c.nome))).length;
+  $('cartoes-sel').textContent=sel;
+  const chk=$('check-todos-cartoes'),visSel=vis.filter(c=>!fora.has(norm(c.nome))).length;chk.checked=!!vis.length&&visSel===vis.length;chk.indeterminate=visSel>0&&visSel<vis.length;
+  $('tbody-cartoes').innerHTML=vis.length?vis.map((c,i)=>`<tr class="${c.inativo?'inativo':''}${fora.has(norm(c.nome))?' fora-impressao':''}"><td class="check-col"><input type="checkbox" class="cartao-imp" data-nome="${esc(c.nome)}" ${fora.has(norm(c.nome))?'':'checked'} aria-label="${esc('Imprimir '+c.nome)}"></td><td class="num-col">${i+1}</td><td><b>${esc(c.nome)}</b>${c.inativo?' <small class="muted">(não está mais ativo)</small>':''}<small class="emp-cel">${esc(c.empresa||'')}</small></td><td class="emp-col">${esc(c.empresa||'—')}</td>
     <td><button type="button" class="cartao-st ${c.assinado==='SIM'?'sim':'nao'}" data-nome="${esc(c.nome)}" aria-pressed="${c.assinado==='SIM'}" title="${c.atualizadoPor?esc('Marcado por '+c.atualizadoPor+' em '+String(c.atualizadoEm).slice(0,16)):''}">${c.assinado==='SIM'?'✓ Assinado':'Não assinado'}</button></td></tr>`).join('')
-    :`<tr><td colspan="4" class="empty">${tot?'Ninguém com esse filtro.':'Nenhum funcionário ativo encontrado. Sincronize com o MobPonto.'}</td></tr>`;
+    :`<tr><td colspan="5" class="empty">${tot?'Ninguém com esse filtro.':'Nenhum funcionário ativo encontrado. Sincronize com o MobPonto.'}</td></tr>`;
   document.querySelectorAll('#tbody-cartoes .cartao-st').forEach(b=>b.addEventListener('click',()=>alternarCartao(b.dataset.nome)));
+  document.querySelectorAll('#tbody-cartoes .cartao-imp').forEach(b=>b.addEventListener('change',()=>{const c=CARTOES.lista.find(x=>x.nome===b.dataset.nome);if(c)cartoesMarcarImpressao([c],b.checked);}));
 }
 async function salvarCartoes(itens){
   try{await api('salvarCartoes',{mes:CARTOES.mes,itens});}
@@ -2900,8 +2911,10 @@ function marcarTodosCartoes(){
 }
 function imprimirCartoes(){
   if(!CARTOES.lista.length)return showMessage('Escolha o mês e aguarde a lista carregar.','Cartões',true);
+  const l=CARTOES.lista.filter(cartaoImprime);
+  if(!l.length)return showMessage('Nenhum funcionário marcado para imprimir. Marque a caixinha ao lado dos nomes.','Cartões',true);
   const win=window.open('','_blank');if(!win)return showMessage('Seu navegador bloqueou a janela de impressão. Libere pop-ups para este site.','Impressão bloqueada',true);
-  const l=CARTOES.lista,ass=l.filter(c=>c.assinado==='SIM').length,titulo='Cartões de ponto · '+nomeMesCartoes(CARTOES.mes);
+  const ass=l.filter(c=>c.assinado==='SIM').length,titulo='Cartões de ponto · '+nomeMesCartoes(CARTOES.mes);
   const linhas=l.map((c,i)=>`<tr><td class="n">${i+1}</td><td>${esc(c.nome)}</td><td class="e">${esc(c.empresa||'')}</td><td class="s ${c.assinado==='SIM'?'sim':'nao'}">${c.assinado==='SIM'?'✓ Assinado':'Não assinado'}</td></tr>`).join('');
   win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
     *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:20px 26px;font-size:11.5px}

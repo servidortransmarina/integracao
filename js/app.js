@@ -7,7 +7,7 @@ const SISTEMAS = [
   { id: 'ponto', chave: 'ponto', nome: 'Ponto', ic: '🕒', perfis: GESTAO_P, titulo: 'Gestão de Ponto' },
   { id: 'financeiro', chave: 'financeiro', nome: 'Financeiro', ic: '💰', perfis: GESTAO_P, titulo: 'Financeiro' },
   { id: 'escalas', chave: 'escalas', nome: 'Escalas', ic: '📅', perfis: GESTAO_P, titulo: 'Escalas' },
-  { id: 'almoxarifado', chave: 'almoxarifado', nome: 'Almoxarifado', ic: '📦', perfis: OFICINA_P, futuro: true }
+  { id: 'almoxarifado', chave: 'almoxarifado', nome: 'Almoxarifado', ic: '📦', perfis: OFICINA_P, titulo: 'Almoxarifado', contador: () => (typeof Almox !== 'undefined' && App.dados && App.dados.pecas ? Almox.baixas().length : 0) }
 ];
 const ABAS = [
   { id: 'inicio', sis: 'painel', nome: 'Painel Transmarina', curto: 'Painel', ic: '🏠', perfis: TODOS_P },
@@ -46,6 +46,9 @@ const ABAS = [
   { id: 'esc-cad', sis: 'escalas', nome: 'Cadastros', curto: 'Cadastros', ic: '👥', perfis: GESTAO_P, esc: 'catalog' },
   { id: 'esc-fin', sis: 'escalas', nome: 'Financeiro da escala', curto: 'Financeiro', ic: '💰', perfis: GESTAO_P, esc: 'finance', visivel: () => (App.sessao.sistemas || []).indexOf('financeiro') >= 0 },
   { id: 'esc-hist', sis: 'escalas', nome: 'Histórico de cargas', curto: 'Histórico', ic: '🗂️', perfis: GESTAO_P, esc: 'history' },
+  { id: 'almox-estoque', sis: 'almoxarifado', nome: 'Estoque', curto: 'Estoque', ic: '📦', perfis: OFICINA_P, hub: () => Almox.tela('estoque'), contador: () => (App.dados && App.dados.pecas ? Almox.baixas().length : 0) },
+  { id: 'almox-mov', sis: 'almoxarifado', nome: 'Movimentações', curto: 'Movimentos', ic: '🔁', perfis: OFICINA_P, hub: () => Almox.tela('mov') },
+  { id: 'almox-precos', sis: 'almoxarifado', nome: 'Preços das peças', curto: 'Preços', ic: '💲', perfis: OFICINA_P, hub: () => Almox.tela('precos') },
   { id: 'podio', sis: 'fleet', nome: 'Pódio', curto: 'Pódio', ic: '🏆', perfis: GESTAO_P, hub: () => Podio.tela() }
 ];
 
@@ -224,7 +227,7 @@ const App = {
   atalhos() {
     const ops = this.opcoesAtalho(), esc = this.atalhosSalvos();
     const val = esc ? esc.map(k => ops.find(o => o.k === k)).filter(Boolean).slice(0, this.ATALHOS_MAX) : [];
-    return val.length ? val : ops.filter(o => o.tipo === 's');
+    return val.length ? val : ops.filter(o => o.tipo === 's').slice(0, this.ATALHOS_MAX);
   },
   configAtalhos() {
     const ops = this.opcoesAtalho(), MAX = this.ATALHOS_MAX, marcados = this.atalhos().map(o => o.k), corpo = h('div', { class: 'atalhos-cfg' });
@@ -386,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4i',
+  VERSAO: '4j',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

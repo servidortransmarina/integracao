@@ -1998,3 +1998,12 @@ body.embed main {padding:16px clamp(10px,2vw,28px) 40px;}
   .capa-abas {display:flex;width:100%;}
   .capa-aba {flex:1;padding:12px 8px;}
 }
+.cartoes-tab tr.fora-impressao td:not(.check-col) {opacity:.45;}
+.cartoes-tab .check-col input {width:20px;height:20px;cursor:pointer;}
+.cartoes-tab .emp-cel {display:none;}
+@media (max-width:700px){
+  .cartoes-tab .num-col,.cartoes-tab .emp-col {display:none;}
+  .cartoes-tab .emp-cel {display:block;color:var(--muted,#6b7280);font-size:11px;margin-top:2px;}
+  .cartoes-tab td,.cartoes-tab th {padding-left:6px;padding-right:6px;}
+  .cartoes-tab .cartao-st {white-space:nowrap;}
+}

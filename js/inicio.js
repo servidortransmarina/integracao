@@ -34,6 +34,9 @@ const Inicio = {
     if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('manutencao') >= 0) { const g = {}; (d.ocorrencias || []).filter(o => String(o.status).toUpperCase() === 'ABERTA').forEach(o => { (g[o.placa] = g[o.placa] || []).push(o); });
       Object.keys(g).forEach(pl => { const n = g[pl].length; add({ nivel: g[pl].some(o => o.prioridade === 'ALTA') ? 'bad' : 'warn', sis: 'frota', ic: '📣', t: pl + ': ' + n + (n > 1 ? ' ocorrências do motorista' : ' ocorrência do motorista'), p: g[pl].slice(0, 3).map(o => o.item).join(', ') + (n > 3 ? ' e mais ' + (n - 3) : '') + '.', origem: 'Ocorrência', quando: Date.now(), ordem: 3, k: 'oc:' + pl + ':' + n, acao: () => irParaVeiculo(pl) }); }); }
     if (S.pontoPerfil) { PontoPainel.garantir(); if (PontoPainel.item) add(Object.assign({}, PontoPainel.item)); }
+    if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('almoxarifado') >= 0 && typeof Almox !== 'undefined' && Array.isArray(d.pecas)) {
+      const bx = Almox.baixas(); if (bx.length) { const sem = bx.filter(p => Almox.situacao(p) === 'sem').length;
+        add({ nivel: sem ? 'bad' : 'warn', sis: 'almox', ic: '📦', t: bx.length + (bx.length > 1 ? ' peças com estoque baixo' : ' peça com estoque baixo'), p: bx.slice(0, 4).map(p => p.nome + ': ' + Almox.num(Almox.qtd(p)) + ' ' + Almox.un(p)).join(' · ') + (bx.length > 4 ? '…' : ''), origem: 'Almoxarifado', quando: Date.now(), ordem: 2, k: 'almox:baixo', acao: () => { Almox.filtro = 'baixo'; App.abrirAba('almox-estoque'); } }); } }
     (d.notificacoes || []).forEach(n => add({ nivel: 'info', sis: 'portal', ic: this.icAviso(n), t: n.titulo, p: n.texto, origem: 'Aviso', quando: n.criadoEm, ordem: 5, k: 'nt:' + (n.id || n.titulo), acao: () => this.abrirAviso(n) }));
     if (S.perfil !== 'motorista' && (S.sistemas || []).indexOf('manutencao') >= 0) {      // só quem tem o sistema Manutenção vê os alertas dele
       const hoje = hojeLocal();
@@ -101,7 +104,7 @@ const Inicio = {
     return h('div', { class: 'grupo' }, cab, corpo);
   },
   coluna(titulo, chavePrefixo, itens, vazio) {
-    const SIS = { frota: ['🔧', 'Manutenção'], fleet: ['🚛', 'Fleet'], ponto: ['🕒', 'Ponto'], portal: ['🏠', 'Geral (cadastros, cupons e avisos)'] }, col = h('div', { class: 'col' }, h('div', { class: 'sec-t', text: titulo }));
+    const SIS = { frota: ['🔧', 'Manutenção'], almox: ['📦', 'Almoxarifado'], fleet: ['🚛', 'Fleet'], ponto: ['🕒', 'Ponto'], portal: ['🏠', 'Geral (cadastros, cupons e avisos)'] }, col = h('div', { class: 'col' }, h('div', { class: 'sec-t', text: titulo }));
     const ordem = Object.keys(SIS).filter(k => itens.some(i => i.sis === k));
     if (!ordem.length) col.append(h('div', { class: 'vazio-ok', text: vazio }));
     ordem.forEach(k => col.append(this.cartao(chavePrefixo + k, SIS[k][0], SIS[k][1], itens.filter(i => i.sis === k))));
