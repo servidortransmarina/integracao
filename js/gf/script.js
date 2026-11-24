@@ -119,7 +119,8 @@ function normalizarDadosDaPlanilha(raw) {
     id: String(a.id), placa: String(a.placa).trim().toUpperCase(), tipo: String(a.tipo || '').trim(),
     descricao: a.descricao || a['descrição'] || a['Descricao'] || a['Descrição'] || a['descriçao'] || a['Descriçao'] || '',
     dataPrevista: a.dataPrevista ? formatarDataPlanilhaParaISO(a.dataPrevista) : '', valor: Number(a.valor) || 0, observacao: a.observacao || '', criadoEm: a.criadoEm ? formatarDataPlanilhaParaISO(a.criadoEm) : '', criadoEmTxt: String(a.criadoEm || ''), criadoPor: String(a.criadoPor || ''), alteradoEm: String(a.alteradoEm || ''), nome: a.nome || a['Nome'] || a.responsavel || '',
-    classe: String(a.classe || '').toLowerCase(), criticidade: String(a.criticidade || '').toLowerCase()
+    classe: String(a.classe || '').toLowerCase(), criticidade: String(a.criticidade || '').toLowerCase(),
+    lote: String(a.lote || ''), pecas: Array.isArray(a.pecas) ? a.pecas : parseJsonSeguro(a.pecas, [])
   }));
   const pendentes = [];
 
@@ -488,7 +489,7 @@ function renderDetalhe() {
       </div>
       ${(typeof App !== 'undefined' && App.precisaHistorico && App.precisaHistorico('')) ? `<div class="hist-mais"><button class="btn small secondary" type="button" onclick="App.pedirHistorico('', true)">Carregar histórico anterior a ${fmtData(App.hist.inicio)}</button></div>` : ''}
     </div>
-    ${(isAdmin && agends.length) ? `<div class="card"><h2>Agendadas</h2><div class="tabela-responsiva"><table><thead><tr><th>Tipo</th><th>Previsão</th><th>Valor</th><th>Obs</th><th>Ações</th></tr></thead><tbody>${agends.map(g => `<tr title="👤 Registrado por: ${g.nome || 'Não identificado'}"><td>${nomeManutencao(g)}</td><td>${g.dataPrevista ? fmtData(g.dataPrevista) : '-'}</td><td>${g.valor ? fmtMoeda(g.valor) : '-'}</td><td>${g.observacao || '-'}</td><td><button class="btn success small" onclick="resolverAgendamento('${g.id}')">Resolvido</button> <button class="btn secondary small" onclick="editarAgendamento('${g.id}')">Editar</button> ${isAdmin ? `<button class="btn danger small" onclick="cancelarAgendamento('${g.id}')">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+    ${(isAdmin && agends.length) ? `<div class="card"><h2>Agendadas</h2><div class="tabela-responsiva"><table><thead><tr><th>Tipo</th><th>Previsão</th><th>Valor</th><th>Obs</th><th>Ações</th></tr></thead><tbody>${agends.map(g => `<tr title="👤 Registrado por: ${g.nome || 'Não identificado'}"><td>${nomeManutencao(g)}${resumoPecasAg(g)}</td><td>${g.dataPrevista ? fmtData(g.dataPrevista) : '-'}</td><td>${g.valor ? fmtMoeda(g.valor) : '-'}</td><td>${g.observacao || '-'}</td><td><button class="btn success small" onclick="resolverAgendamento('${g.id}')">Resolvido</button> <button class="btn secondary small" onclick="editarAgendamento('${g.id}')">Editar</button> ${isAdmin ? `<button class="btn danger small" onclick="cancelarAgendamento('${g.id}')">Cancelar</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
   `;
 }
 
@@ -662,21 +663,27 @@ function abrirModalManut(placa, manut, modo) {
   // Peças usadas (almoxarifado): na edição volta o que já foi lançado; o campo valor passa a ser só o do serviço
   manutAbast = !!(manut && manut.tipo === 'abastecimento');
   const pecasIni = manut && !manutAbast && typeof Almox !== 'undefined' ? Almox.linhasDaManut(manut.id) : [];
-  manutEditorPecas = typeof Almox !== 'undefined' ? Almox.editorPecas({ linhas: pecasIni, aoMudar: manutTotalPecas }) : null;
-  limpar(document.getElementById('mPecas')); if (manutEditorPecas) document.getElementById('mPecas').append(manutEditorPecas.el);
+  montarEditorPecasManut(pecasIni); manutAgResolvendo = null;
   if (manut && Number(manut.valorPecas) > 0) { const vs = Math.max(0, Number(manut.valor) - Number(manut.valorPecas)); document.getElementById('mValor').value = vs > 0 ? vs.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''; }
   document.getElementById('mVirarNota').hidden = !!manut;
   onModoChange(); const infoEdicao = document.getElementById('infoEdicao'); infoEdicao.textContent = manut ? ("👤 Última alteração: " + (manut.nome || "Não identificado")) : ("👤 Lançando como: " + (GF.nome())); openModal('modalManut');
 }
-let manutEditorPecas = null, manutAbast = false;
+let manutEditorPecas = null, manutAbast = false, manutAgResolvendo = null;
+/** Editor de peças do lançamento: em "Agendar" vira a lista de peças necessárias (não mexe no estoque, só avisa o que falta comprar). */
+function montarEditorPecasManut(linhas) {
+  manutEditorPecas = typeof Almox !== 'undefined' ? Almox.editorPecas({ linhas: linhas || [], aoMudar: manutTotalPecas, planejar: () => document.getElementById('mModo').value === 'agendar' }) : null;
+  limpar(document.getElementById('mPecas')); if (manutEditorPecas) document.getElementById('mPecas').append(manutEditorPecas.el);
+}
 /** Com peças lançadas, o valor digitado é o do serviço e o total (serviço + peças) aparece embaixo. */
 function manutTotalPecas() {
   const ag = document.getElementById('mModo').value === 'agendar', wrap = document.getElementById('mPecasWrap'), tot = document.getElementById('mTotalPecas'), rot = document.getElementById('mValorRot');
   if (!wrap) return;
-  wrap.hidden = ag || manutAbast || !manutEditorPecas;
+  wrap.hidden = manutAbast || !manutEditorPecas;
+  if (manutEditorPecas) manutEditorPecas.atualizar();
+  wrap.querySelector('label').textContent = ag ? 'Peças necessárias' : 'Peças usadas';
   const n = !wrap.hidden && manutEditorPecas ? manutEditorPecas.quantas() : 0, custo = n ? manutEditorPecas.custo() : 0, serv = parseNumeroBR(document.getElementById('mValor').value) || 0;
-  rot.textContent = n ? 'Valor do serviço / mão de obra (R$)' : 'Valor gasto (R$)';
-  tot.hidden = !n; if (n) tot.textContent = 'Total da manutenção: ' + fmtMoeda(serv + custo) + (custo ? ' (serviço ' + fmtMoeda(serv) + ' + peças ' + fmtMoeda(custo) + ')' : '');
+  rot.textContent = n ? (ag ? 'Valor previsto do serviço / mão de obra (R$)' : 'Valor do serviço / mão de obra (R$)') : (ag ? 'Valor previsto (R$)' : 'Valor gasto (R$)');
+  tot.hidden = !n || (ag && !custo); if (n) tot.textContent = (ag ? 'Previsão total: ' : 'Total da manutenção: ') + fmtMoeda(serv + custo) + (custo ? ' (serviço ' + fmtMoeda(serv) + ' + peças ' + fmtMoeda(custo) + ')' : '');
 }
 /** "Lançar a nota inteira": leva o que já foi digitado para a tela da nota com vários serviços. */
 function manutParaNota(itens) {
@@ -736,7 +743,7 @@ function abrirNotaServicos(op) {
     const valor = inp({ inputmode: 'decimal', placeholder: 'valor', value: l.valor ? Number(l.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '', 'aria-label': 'Valor deste serviço' });
     const classe = h('select', { 'aria-label': 'Tipo de manutenção' }, Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
     const leitura = h('div', { class: 'nt-leitura' }), x = h('button', { type: 'button', class: 'ax-x', title: 'Tirar este serviço', 'aria-label': 'Tirar este serviço', text: '✕' });
-    const ed = typeof Almox !== 'undefined' ? Almox.editorPecas({ linhas: l.pecas || [], aoMudar: () => r.pintar() }) : null;
+    const ed = typeof Almox !== 'undefined' ? Almox.editorPecas({ linhas: l.pecas || [], aoMudar: () => r.pintar(), planejar: () => ehAg() }) : null;
     const pecasBox = h('div', { class: 'nt-pecas' }, ed ? ed.el : null);
     const r = { serv, valor, classe, ed, el: null, mexeuClasse: false,
       ler: () => Servicos.ler(serv.value),
@@ -748,7 +755,7 @@ function abrirNotaServicos(op) {
         else if (lr.itens[0] && lr.itens[0].tipo === 'abastecimento') { leitura.classList.add('ruim'); leitura.textContent = 'Abastecimento não entra na nota de serviços.'; }
         else if (lr.itens[0]) { const it = lr.itens[0], rast = TIPOS_RASTREADOS.includes(it.tipo); leitura.textContent = rast ? '✓ ' + it.nome + ' — zera o aviso de troca' : '→ ' + it.nome; if (rast) leitura.classList.add('ok');
           if (!r.mexeuClasse) classe.value = rast ? 'PREV' : (classe.value === 'PREV' ? 'CORR-PL' : classe.value); }
-        pecasBox.hidden = ehAg() || !ed;
+        pecasBox.hidden = !ed; if (ed) ed.atualizar();
         if (ed && ed.quantas()) { const c = ed.custo(); if (c) leitura.append(h('span', { class: 'nt-pc', text: ' · peças somam ' + fmtMoeda(c) })); }
       } };
     classe.value = 'CORR-PL'; classe.onchange = () => { r.mexeuClasse = true; };
@@ -784,7 +791,7 @@ function abrirNotaServicos(op) {
       const it = lr.itens[0]; if (it.tipo === 'abastecimento') { mensagem(msg, 'Abastecimento não entra na nota de serviços.'); return r.serv.focus(); }
       const vv = parseNumeroBR(r.valor.value); if (r.valor.value.trim() && (isNaN(vv) || vv < 0)) { mensagem(msg, 'Valor inválido em "' + t + '".'); return r.valor.focus(); }
       const item = { tipo: it.tipo, descricao: it.descricao, valor: r.valor.value.trim() ? vv : 0, classe: r.classe.value };
-      if (!ag && r.ed && r.ed.quantas()) { const ped = r.ed.obter(); if (ped.erro) { mensagem(msg, ped.erro); if (ped.campo) ped.campo.focus(); return; } item.pecas = ped.linhas; }
+      if (r.ed && r.ed.quantas()) { const ped = r.ed.obter(); if (ped.erro) { mensagem(msg, ped.erro); if (ped.campo) ped.campo.focus(); return; } item.pecas = ped.linhas; }
       itens.push(item);
     }
     const tot = parse(total.value), soma = Math.round(itens.reduce((t, i) => t + i.valor, 0) * 100) / 100;
@@ -843,7 +850,7 @@ async function salvarManutencao() {
   const tipoFinal = tt.tipo, descricaoFinal = tt.descricao;
   // Peças usadas (só manutenção realizada)
   let pecas = null, custoPecas = 0;
-  if (modo !== 'agendar' && tipoFinal !== 'abastecimento' && manutEditorPecas) {
+  if (tipoFinal !== 'abastecimento' && manutEditorPecas) {
     const ped = manutEditorPecas.obter(); if (ped.erro) { toast(ped.erro, true); if (ped.campo) ped.campo.focus(); return; }
     if (manutEditorPecas.precoSuspeito() && !(await confirmarCustom('Preço de peça fora do normal', 'Tem peça com valor bem diferente do que costuma custar. Confirma que digitou o valor de UMA unidade?'))) return;
     pecas = ped.linhas; custoPecas = manutEditorPecas.custo();
@@ -878,7 +885,7 @@ async function salvarManutencao() {
   
   if (modo === 'agendar') {
     const agOriginal = editando ? db.agendamentos.find(a => a.id === manutEditId) : null;
-    const ag = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, dataPrevista, valor, observacao, criadoEm: agOriginal ? agOriginal.criadoEm : hojeISO(), nome: nomeUsuario, classe: document.getElementById('mClasse').value, criticidade: document.getElementById('mCrit').value };
+    const ag = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, dataPrevista, valor, observacao, criadoEm: agOriginal ? agOriginal.criadoEm : hojeISO(), nome: nomeUsuario, classe: document.getElementById('mClasse').value, criticidade: document.getElementById('mCrit').value, pecas: pecas || [], lote: agOriginal ? agOriginal.lote || '' : '' };
     if (editando) { const idx = db.agendamentos.findIndex(a => a.id === manutEditId); if (idx >= 0) db.agendamentos[idx] = ag; } else { db.agendamentos.push(ag); }
     salvarCache(); renderTelaAtual(); toast(editando ? 'Agendamento atualizado...' : 'Agendamento salvo...');
     execBackground(async () => { try { await apiPost(editando ? 'updateAgendamento' : 'addAgendamento', ag); } catch(e) { if(editando){ await apiPost('deleteAgendamento', { id: ag.id }); await apiPost('addAgendamento', ag); } else throw e; } }, 'Erro agendamento');
@@ -889,7 +896,7 @@ async function salvarManutencao() {
     lote: manutOriginal ? manutOriginal.lote || '' : '', oficina: manutOriginal ? manutOriginal.oficina || '' : '', notaNum: manutOriginal ? manutOriginal.notaNum || '' : '' };
   const envio = pecas ? Object.assign({}, registro, { valor, pecas }) : registro;      // com peças, o servidor soma o custo delas ao valor do serviço
   
-  const agCumpridos = db.agendamentos.filter(a => a.placa === placa && normPeca(a.tipo === 'outro' ? a.descricao : a.tipo) === normPeca(tipoFinal === 'outro' ? descricaoFinal : tipoFinal));
+  const agCumpridos = db.agendamentos.filter(a => a.placa === placa && (a.id === manutAgResolvendo || normPeca(a.tipo === 'outro' ? a.descricao : a.tipo) === normPeca(tipoFinal === 'outro' ? descricaoFinal : tipoFinal)));
   
   if (editando) { const idx = db.manutencoes.findIndex(m => m.id === manutEditId); if (idx >= 0) db.manutencoes[idx] = registro; } else { db.manutencoes.push(registro); }
   db.agendamentos = db.agendamentos.filter(a => !agCumpridos.includes(a));
@@ -910,6 +917,17 @@ async function salvarManutencao() {
 
 async function resolverAgendamento(id) {
   const ag = db.agendamentos.find(a => a.id === id); if (!ag) return;
+  // Com peças previstas: abre o lançamento preenchido para confirmar KM, valor e de onde saíram as peças (aí sim saem do estoque)
+  if (ag.pecas && ag.pecas.length) {
+    abrirModalManut(ag.placa, null, 'realizada');
+    const g = id => document.getElementById(id);
+    g('manutTitle').textContent = 'Concluir agendamento — ' + ag.placa; g('mModo').disabled = true; g('mVirarNota').hidden = true;
+    g('mTipoInput').value = ag.tipo === 'outro' ? ag.descricao : (TIPOS[ag.tipo] || ag.tipo); g('mValor').value = ag.valor ? Number(ag.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''; g('mObs').value = ag.observacao || '';
+    { const sel = g('mClasse'); sel.value = classeDe(ag); sel.dataset.mexeu = '1'; }
+    montarEditorPecasManut(ag.pecas.map(p => Object.assign({}, p, { origem: p.origem === 'nota' ? 'nota' : p.origem === 'compra' ? 'compra' : 'estoque' })));
+    manutAgResolvendo = ag.id; manutTotalPecas(); g('infoEdicao').textContent = '🔩 Confira as peças: as do estoque saem do almoxarifado ao salvar.'; g('mKm').focus();
+    return;
+  }
   const v = db.veiculos.find(x => x.placa === ag.placa);
   let kmInformado = await pedirKmCustom('Registrar KM', `Manutenção: ${ag.descricao || nomeTipo(ag.tipo)}\n\nInforme o KM ATUAL do veículo ${ag.placa} no momento desta troca:`, v ? v.kmAtual : '');
   if (kmInformado === null) return; 
@@ -945,6 +963,7 @@ function editarAgendamento(id) {
   veiculoSel = ag.placa; manutEditId = ag.id; resolverAlertaId = null; resolverAgendamentoId = null;
   document.getElementById('manutTitle').textContent = 'Editar agendamento — ' + ag.placa; document.getElementById('mModo').value = 'agendar'; document.getElementById('mModo').disabled = true;
   document.getElementById('mTipoInput').value = ag.tipo === 'outro' ? ag.descricao : TIPOS[ag.tipo]; document.getElementById('mKm').value = ''; document.getElementById('mData').value = hojeISO(); document.getElementById('mDataPrevista').value = ag.dataPrevista || ''; document.getElementById('mValor').value = ag.valor || ''; document.getElementById('mObs').value = ag.observacao || '';
+  manutAbast = false; montarEditorPecasManut(ag.pecas || []); manutAgResolvendo = null; document.getElementById('mVirarNota').hidden = true;
   onModoChange(); const infoEdicao = document.getElementById('infoEdicao'); infoEdicao.textContent = "👤 Agendado por: " + (ag.nome || "Não identificado"); openModal('modalManut');
 }
 async function excluirManutencao(id) {
@@ -1458,12 +1477,23 @@ function montarCardAlerta(a) {
   return `<div class="alert-card ${grp}" title="${escAttr(dicaAlerta(a, grp))}"><div class="alert-info"><div class="alert-title">${placaClicavel(a.placa)} ${nomeTipo(a.tipo)}</div><div class="alert-sub">Km: ${km}</div>${grp === 'resolvido' ? '' : `<div class="alert-crit">${chipCrit('alerta', a, 'alerta')}${tagClasse('PREV')}${tagOsItem('alerta', a.id)}</div>`}</div><div class="alert-actions">${btn}</div></div>`;
 }
 
+/** Peças previstas no agendamento, com o que falta comprar (estoque de agora). */
+function resumoPecasAg(ag) {
+  const ps = ag && Array.isArray(ag.pecas) ? ag.pecas : []; if (!ps.length) return '';
+  const tem = typeof Almox !== 'undefined';
+  const itens = ps.map(p => { const pc = tem ? (p.pecaId ? Almox.porId(p.pecaId) : Almox.porNome(p.nome)) : null, q = Number(p.qtd) || 1, nome = (pc ? pc.nome : p.nome) + (q !== 1 ? ' ×' + q.toLocaleString('pt-BR') : '');
+    if (p.origem === 'compra') return { t: nome + ' (comprar)', falta: true };
+    if (p.origem === 'nota') return { t: nome + ' (vem na nota)', falta: false };
+    const falta = pc ? q > Almox.qtd(pc) : true; return { t: nome + (falta ? ' (falta no estoque)' : ' ✓'), falta }; });
+  const n = itens.filter(i => i.falta).length;
+  return `<div class="ag-pecas${n ? ' falta' : ''}">🔩 ${escHtml(itens.map(i => i.t).join(' · '))}</div>`;
+}
 function montarCardAgAtrasado(ag) { 
-    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card atrasado" title="${escAttr(dicaAgendamento(ag, 'Atrasado'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub" style="color:var(--danger); font-weight:bold;">⚠️ Atrasado: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div>${resumoPecasAg(ag)}<div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function montarCardAgPendente(ag) { 
-    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div><div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
+    return `<div class="alert-card pendente" title="${escAttr(dicaAgendamento(ag, 'Pendente'))}"><div class="alert-info"><div class="alert-title">${placaClicavel(ag.placa)} ${(ag.tipo === 'outro' && ag.descricao) ? ag.descricao : nomeTipo(ag.tipo)}</div><div class="alert-sub">Agendado para: ${ag.dataPrevista ? fmtData(ag.dataPrevista) : '-'}</div>${resumoPecasAg(ag)}<div class="quem-quando">👤 ${escHtml(quemQuando(ag, 'Programado'))}</div><div class="alert-crit">${chipCrit('agend', ag, 'agend')}${tagClasse(classeDe(ag))}${tagOsItem('agend', ag.id)}</div></div><div class="alert-actions"><button class="btn small secondary" onclick="iniciarAnaliseAgendamento('${ag.id}')">Em andamento</button><button class="btn small" onclick="resolverAgendamento('${ag.id}')">Resolvido</button><button class="btn small secondary" onclick="editarAgendamento('${ag.id}')">Editar</button></div></div>`; 
 }
 
 function renderAlertas() {

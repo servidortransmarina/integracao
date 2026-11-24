@@ -9,6 +9,8 @@ const GF = {
 function limparTextoGF(v) {
   if (typeof v === 'string') return v.replace(/[<>]/g, '').replace(/["`]/g, '”').replace(/'/g, '’').replace(/\\/g, '/');
   if (Array.isArray(v)) return v.map(limparTextoGF);
-  if (v && typeof v === 'object') { const o = {}; for (const k in v) o[k] = limparTextoGF(v[k]); return o; }
+  if (v && typeof v === 'object') { const o = {}; for (const k in v) { let x = v[k];
+      if (k === 'pecas' && typeof x === 'string' && x.charAt(0) === '[') { try { x = JSON.parse(x); } catch (e) { x = []; } }     // lista de peças do agendamento: lê antes de limpar as aspas
+      o[k] = limparTextoGF(x); } return o; }
   return v;
 }

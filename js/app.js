@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4j',
+  VERSAO: '4k',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

@@ -1086,3 +1086,5 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 .ax-tab th.ax-n{text-align:right}
 
 .ax-barra select{width:auto;flex:0 0 auto}
+.ax-ed-info.falta{color:#a15c00;font-weight:600}
+.ag-pecas{font-size:12px;color:#065f46;margin-top:3px}.ag-pecas.falta{color:#a15c00;font-weight:600}

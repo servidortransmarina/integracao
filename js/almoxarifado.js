@@ -273,9 +273,11 @@ const Almox = {
      Devolve { el, custo(), quantas(), obter() → {linhas} ou {erro, campo}, precoSuspeito() }. */
   editorPecas(op) {
     op = op || {}; this.listas();
+    // planejar: peças previstas num agendamento — não exige estoque nem preço, só avisa o que falta comprar
+    const plano = () => typeof op.planejar === 'function' ? !!op.planejar() : !!op.planejar;
     const caixa = h('div', { class: 'ax-ed' }), lista = h('div', { class: 'ax-ed-lista' }), rows = [];
     const mudou = () => { if (op.aoMudar) op.aoMudar(); };
-    const ORIG = [['estoque', 'Do estoque'], ['compra', 'Comprei à parte'], ['nota', 'Veio na nota']];
+    const ORIG = [['estoque', 'Do estoque', 'Do estoque'], ['compra', 'Comprei à parte', 'Vou comprar'], ['nota', 'Veio na nota', 'Vem na nota']];
     const add = (l) => {
       l = l || {};
       const p0 = l.pecaId ? this.porId(l.pecaId) : null;
@@ -287,7 +289,8 @@ const Almox = {
       const forn = h('input', { type: 'text', maxlength: 60, list: 'dlAxForn', placeholder: 'Ex.: Autopeças Sul', value: l.fornecedor && origem === 'compra' ? l.fornecedor : '', 'aria-label': 'Onde comprou' });
       const vu = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'R$ de UMA', value: l.valorUnit ? String(l.valorUnit).replace('.', ',') : '', 'aria-label': 'Valor de uma unidade' });
       const info = h('div', { class: 'ax-ed-info' }), aviso = h('div', { class: 'ax-aviso', hidden: true });
-      const fCompra = h('div', { class: 'ax-ed-compra' }, h('label', {}, 'Comprou quantas?', comp), h('label', { class: 'ax-ed-forn' }, 'Onde comprou', forn), h('label', {}, 'Valor de UMA unidade', vu));
+      const rotC = h('span'), rotF = h('span'), rotV = h('span'), rotQ = h('span');
+      const fCompra = h('div', { class: 'ax-ed-compra' }, h('label', {}, rotC, comp), h('label', { class: 'ax-ed-forn' }, rotF, forn), h('label', {}, rotV, vu));
       const x = h('button', { type: 'button', class: 'ax-x', 'aria-label': 'Tirar esta peça', title: 'Tirar esta peça', text: '✕' });
       const r = {
         peca, qtd, el: null,
@@ -297,35 +300,40 @@ const Almox = {
         suspeito: false
       };
       const pinta = () => {
-        $$('button', seg).forEach(b => { const on = b.dataset.v === origem; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+        const pl = plano();
+        rotQ.textContent = pl ? 'Precisa' : 'Usou'; rotC.textContent = pl ? 'Comprar quantas?' : 'Comprou quantas?'; rotF.textContent = pl ? 'Onde comprar' : 'Onde comprou'; rotV.textContent = pl ? 'Valor previsto de UMA' : 'Valor de UMA unidade';
+        $$('button', seg).forEach(b => { const on = b.dataset.v === origem; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); b.textContent = ORIG.find(o => o[0] === b.dataset.v)[pl ? 2 : 1]; });
         fCompra.hidden = origem === 'estoque'; fCompra.querySelector('.ax-ed-forn').hidden = origem === 'nota';
         const p = r.p(), q = r.q(); limpar(info); info.className = 'ax-ed-info';
         if (origem === 'estoque') {
           if (!peca.value.trim()) info.textContent = 'Escolha a peça da lista do almoxarifado.';
           else if (!p) { info.textContent = 'Essa peça não está no almoxarifado. Se comprou agora, escolha "Comprei à parte".'; info.classList.add('ruim'); }
-          else { const tem = this.qtd(p); info.textContent = 'No estoque: ' + this.num(tem) + ' ' + this.un(p) + (Number(p.custoUnit) > 0 ? ' · custo ' + this.moeda(p.custoUnit) + ' cada' : ''); if (q > tem) { info.textContent += ' — não dá ' + this.num(q) + '.'; info.classList.add('ruim'); } }
+          else { const tem = this.qtd(p); info.textContent = 'No estoque: ' + this.num(tem) + ' ' + this.un(p) + (Number(p.custoUnit) > 0 ? ' · custo ' + this.moeda(p.custoUnit) + ' cada' : '');
+            if (q > tem) { if (pl) { info.textContent += ' — falta ' + this.num(q - Math.max(0, tem)) + ', precisa comprar.'; info.classList.add('falta'); } else { info.textContent += ' — não dá ' + this.num(q) + '.'; info.classList.add('ruim'); } }
+            else if (pl) info.textContent += ' — dá para o serviço.'; }
           r.suspeito = false; this.mostrarAviso(aviso, null);
         } else {
           const c = q > 0 && r.v() > 0 ? q * r.v() : 0, sobra = r.comp() > q ? r.comp() - q : 0;
-          info.textContent = (c ? 'Peças: ' + this.moeda(c) + (origem === 'nota' ? ' (já está no valor do serviço, não soma de novo)' : ' (soma no valor da manutenção)') : '') + (sobra ? (c ? ' · ' : '') + 'sobra ' + this.num(sobra) + ' para o estoque' : '');
+          info.textContent = (c ? (pl ? 'Previsto: ' : 'Peças: ') + this.moeda(c) + (origem === 'nota' ? ' (já está no valor do serviço, não soma de novo)' : ' (soma no valor da manutenção)') : '') + (sobra ? (c ? ' · ' : '') + 'sobra ' + this.num(sobra) + ' para o estoque' : '');
           if (!p && peca.value.trim().length > 1) info.textContent += (info.textContent ? ' · ' : '') + 'peça nova: vai para o almoxarifado';
           const ck = p && r.v() > 0 ? this.checarPreco(p, r.v(), q) : null; r.suspeito = !!ck; this.mostrarAviso(aviso, ck, vu, () => { pinta(); mudou(); });
         }
       };
       ORIG.forEach(([v, t]) => seg.append(h('button', { type: 'button', role: 'radio', dataset: { v }, text: t, onclick: () => { origem = v; pinta(); mudou(); } })));
       [peca, qtd, comp, forn, vu].forEach(i => i.addEventListener('input', () => { pinta(); mudou(); }));
-      r.el = h('div', { class: 'ax-ed-lin' }, h('div', { class: 'ax-ed-l1' }, peca, h('label', { class: 'ax-ed-q' }, 'Usou', qtd), x), seg, fCompra, info, aviso);
+      r.el = h('div', { class: 'ax-ed-lin' }, h('div', { class: 'ax-ed-l1' }, peca, h('label', { class: 'ax-ed-q' }, rotQ, qtd), x), seg, fCompra, info, aviso);
       x.onclick = () => { rows.splice(rows.indexOf(r), 1); r.el.remove(); pinta(); mudou(); botao(); };
-      rows.push(r); lista.append(r.el); pinta(); botao();
+      r.pinta = pinta; rows.push(r); lista.append(r.el); pinta(); botao();
       return r;
     };
     const btnAdd = h('button', { type: 'button', class: 'btn secondary small ax-ed-add', onclick: () => { const r = add(); mudou(); r.peca.focus(); } });
-    const botao = () => { btnAdd.textContent = rows.length ? '＋ Outra peça' : '🔩 Usou peças? Adicionar'; caixa.classList.toggle('vazio', !rows.length); };
+    const botao = () => { btnAdd.textContent = rows.length ? '＋ Outra peça' : (plano() ? '🔩 Vai precisar de peças? Adicionar' : '🔩 Usou peças? Adicionar'); caixa.classList.toggle('vazio', !rows.length); };
     caixa.append(lista, btnAdd);
     (op.linhas || []).forEach(l => add(l)); botao();
     return {
       el: caixa,
       quantas: () => rows.length,
+      atualizar: () => { rows.forEach(r => r.pinta()); botao(); },
       custo: () => this.r2(rows.reduce((t, r) => t + r.custo(), 0)),
       precoSuspeito: () => rows.some(r => r.suspeito),
       obter: () => {
@@ -336,10 +344,11 @@ const Almox = {
           if (!(q > 0)) return { erro: 'Quantidade de "' + nome + '" inválida.', campo: r.qtd };
           if (o === 'estoque') {
             if (!p) return { erro: '"' + nome + '" não está no almoxarifado. Escolha da lista ou marque "Comprei à parte".', campo: r.peca };
-            if (q > this.qtd(p)) return { erro: 'O estoque de ' + p.nome + ' tem só ' + this.num(this.qtd(p)) + ' ' + this.un(p) + '.', campo: r.qtd };
+            if (!plano() && q > this.qtd(p)) return { erro: 'O estoque de ' + p.nome + ' tem só ' + this.num(this.qtd(p)) + ' ' + this.un(p) + '.', campo: r.qtd };
             out.push({ pecaId: p.id, nome: p.nome, qtd: q, origem: o });
           } else {
             const v = r.v(), c = r.comp();
+            if (plano() && isNaN(v)) { out.push(Object.assign(p ? { pecaId: p.id, nome: p.nome } : { nome }, { qtd: q, origem: o, valorUnit: '', qtdComprada: c || q, fornecedor: o === 'compra' ? r.el.querySelector('.ax-ed-forn input').value.trim() : '' })); continue; }
             if (isNaN(v) || v < 0 || !String(v).length) return { erro: 'Diga o valor de UMA unidade de "' + nome + '".', campo: r.peca };
             if (c && c < q) return { erro: 'Comprou menos do que usou em "' + nome + '"?', campo: r.qtd };
             const forn = o === 'compra' ? r.el.querySelector('.ax-ed-forn input').value.trim() : '';
