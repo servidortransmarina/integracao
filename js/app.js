@@ -23,6 +23,8 @@ const ABAS = [
   { id: 'historico', sis: 'fleet', nome: 'Histórico', curto: 'Histórico', ic: '🗂️', perfis: ['motorista'], hub: () => Motorista.historico() },
   { id: 'escala', sis: 'fleet', nome: 'Escalas', curto: 'Escalas', ic: '📅', perfis: ['motorista'], hub: () => Motorista.escala() },
   { id: 'ocorrencias', sis: 'fleet', nome: 'Ocorrências', curto: 'Ocorrências', ic: '⚠️', perfis: GESTAO_P, hub: () => Motorista.gestaoOcorrencias() },
+  { id: 'fleet-abast', sis: 'fleet', nome: 'Abastecimentos', curto: 'Abastecimentos', ic: '⛽', perfis: GESTAO_P, hub: () => Motorista.gestaoLanc('abast') },
+  { id: 'fleet-manut', sis: 'fleet', nome: 'Manutenções', curto: 'Manutenções', ic: '🔧', perfis: GESTAO_P, hub: () => Motorista.gestaoLanc('manut'), contador: () => ((App.dados && App.dados.manutMotorista) || []).filter(x => x.status === 'PENDENTE').length },
   { id: 'motoristas', sis: 'fleet', nome: 'Motoristas', curto: 'Motoristas', ic: '👥', perfis: GESTAO_P, hub: () => Motoristas.render() },
   { id: 'ponto-horas', sis: 'ponto', nome: 'Horas extras', curto: 'Horas', ic: '⏱️', perfis: TODOS_P, ponto: 'horas' },
   { id: 'ponto-folgas', sis: 'ponto', nome: 'Controle de folgas', curto: 'Folgas', ic: '🗓️', perfis: TODOS_P, ponto: 'folgas' },
@@ -389,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4n',
+  VERSAO: '4o',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

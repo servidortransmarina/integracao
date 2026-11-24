@@ -396,20 +396,20 @@ const Motorista = {
 
   /* ---------- HISTÓRICO ---------- */
   filtroHist: 'tudo',
-  historico() {
-    const d = this.d(), ev = [];
-    (d.checklists || []).forEach(c => ev.push({ t: 'checklist', ts: String(c.data).slice(0, 10) + ' ' + (c.hora || ''), el: () => this.linhaCheck(c) }));
+  historico(fonte) {
+    const d = fonte || this.d(), ev = [], gest = !!fonte, gestor = gest && ['master', 'admin'].indexOf(this.d().perfil) >= 0 && !App.sessao.chefe;
+    (d.checklists || []).forEach(c => ev.push({ t: 'checklist', ts: String(c.data).slice(0, 10) + ' ' + (c.hora || ''), el: () => gest ? this.linhaCheckGestao(c, gestor) : this.linhaCheck(c) }));
     (d.abastecimentos || []).forEach(a => ev.push({ t: 'abastecimento', ts: String(a.data).slice(0, 10) + ' ' + (a.hora || ''), el: () => this.linhaAbast(a) }));
     (d.ocorrencias || []).forEach(o => ev.push({ t: 'ocorrencia', ts: String(o.dataAbertura).slice(0, 10) + ' 99', el: () => this.linhaOc(o) }));
-    (d.manutMotorista || []).forEach(x => ev.push({ t: 'ocorrencia', ts: String(x.criadoEm), el: () => this.linhaManut(x) }));
+    (d.manutMotorista || []).forEach(x => ev.push({ t: 'manutencao', ts: String(x.criadoEm), el: () => gest ? this.linhaManutGestao(x, false) : this.linhaManut(x) }));
     (d.pontos || []).forEach(p => ev.push({ t: 'pontos', ts: String(p.dataHora), el: () => h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: p.descricao || p.evento }), h('small', { text: this.dia(p.dataHora) })), h('b', { class: Number(p.pontos) < 0 ? 'neg' : 'pos', text: (Number(p.pontos) > 0 ? '+' : '') + p.pontos + ' pts' })) }));
     ev.sort((a, b) => b.ts.localeCompare(a.ts));
     const corpo = h('div', { class: 'card' }), chips = h('div', { class: 'chips' }), pinta = () => {
-      limpar(corpo); const l = ev.filter(e => this.filtroHist === 'tudo' || e.t === this.filtroHist).slice(0, 120);
-      if (!l.length) corpo.append(h('div', { class: 'empty', text: 'Nada por aqui ainda. Comece pelo checklist do dia! ✅' })); l.forEach(e => corpo.append(e.el()));
+      limpar(corpo); const l = ev.filter(e => this.filtroHist === 'tudo' || e.t === this.filtroHist).slice(0, gest ? 300 : 120);
+      if (!l.length) corpo.append(h('div', { class: 'empty', text: gest ? 'Nada deste tipo para este motorista.' : 'Nada por aqui ainda. Comece pelo checklist do dia! ✅' })); l.forEach(e => corpo.append(e.el()));
       $$('button', chips).forEach(b => b.classList.toggle('on', b.dataset.f === this.filtroHist));
     };
-    [['tudo', 'Tudo'], ['checklist', 'Checklists'], ['abastecimento', 'Abastecimentos'], ['ocorrencia', 'Ocorrências'], ['pontos', 'Pontos']].forEach(([f, t]) => chips.append(h('button', { type: 'button', class: 'chip', dataset: { f }, text: t, onclick: () => { this.filtroHist = f; pinta(); } })));
+    [['tudo', 'Tudo'], ['checklist', 'Checklists'], ['abastecimento', 'Abastecimentos'], ['manutencao', 'Manutenções'], ['ocorrencia', 'Defeitos e ocorrências'], ['pontos', 'Pontos']].filter(([f]) => f === 'tudo' || ev.some(e => e.t === f)).forEach(([f, t]) => chips.append(h('button', { type: 'button', class: 'chip', dataset: { f }, text: t, onclick: () => { this.filtroHist = f; pinta(); } })));
     pinta(); return h('div', {}, chips, corpo);
   },
   STC: { OK: ['✅ tudo certo', 'green'], ATENCAO: ['⚠️ com atenção', 'amber'], CRITICO: ['❌ itens ruins', 'red'] },
@@ -582,7 +582,61 @@ const Motorista = {
     return h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos · avalie: boa vale ponto cheio, meia boca vale menos, ruim vale 0' }), grade);
   },
   /** Ocorrências: lista geral ou por caminhão, filtro por situação; Resolvido e Reabrir. */
-  filtroOc: { placa: '', st: 'pendentes' },
+  filtroOc: { placa: '', st: 'pendentes', origem: '' },
+  /** Gestão: o mesmo histórico que o motorista vê, de um motorista escolhido (checklists, abastecimentos, manutenções, defeitos e pontos). */
+  historicoDe(m) {
+    const d = this.d(), id = String(m.id), meu = x => String(x.motoristaId) === id;
+    const fonte = { checklists: (d.checklists || []).filter(meu), abastecimentos: (d.abastecimentos || []).filter(a => a.origem === 'motorista' && meu(a)),
+      ocorrencias: (d.ocorrencias || []).filter(meu), manutMotorista: (d.manutMotorista || []).filter(meu), pontos: (d.pontos || []).filter(meu) };
+    this.filtroHist = 'tudo';
+    abrirModal('Histórico — ' + nomeBonito(m.nome), h('div', { class: 'hist-gestao' }, h('p', { class: 'hint', text: 'Tudo o que ' + primeiroNome(m.nome) + ' lançou nos últimos 6 meses.' }), this.historico(fonte)), { largo: true });
+  },
+  linhaCheckGestao(c, gestor) {
+    const s = this.statusCheck(c);
+    return h('div', { class: 'hist-lin click', onclick: () => this.abrirCheckGestao(c, gestor) }, h('div', {}, h('b', { text: (c.tipo === 'DIARIO' ? 'Diário' : 'Semanal') + ' · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' })), h('span', { class: 'badge ' + s[1], text: s[0] }));
+  },
+  linhaAbastGestao(a) {
+    const ST = { provisorio: ['⏳ aguardando fatura', 'amber'], conferido: ['✅ conferido', 'green'], expirado: ['sem fatura', 'gray'] }, s = ST[a.status] || [a.status, 'gray'];
+    const l = Number(a.litros) || 0, v = Number(a.valor) || 0;
+    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: a.placa + ' · ' + (a.produto || 'Diesel') + ' · ' + this.nomeMot(a.motoristaId) }),
+      h('small', { text: [this.dia(a.data) + (a.hora ? ' ' + String(a.hora).slice(0, 5) : ''), l ? l.toLocaleString('pt-BR') + ' L' : '', fmtMoeda(v), l && v ? fmtMoeda(v / l) + '/L' : '', Number(a.km) > 0 ? Number(a.km).toLocaleString('pt-BR') + ' km' : ''].filter(Boolean).join(' · ') })),
+      h('span', { class: 'badge ' + s[1], text: s[0] }));
+  },
+  linhaManutGestao(x, comNome = true) {
+    const ST = { PENDENTE: ['⏳ aguardando aprovação', 'amber'], APROVADA: ['✅ aprovada', 'green'], RECUSADA: ['recusada', 'red'] }, st = ST[x.status] || [x.status, 'gray'];
+    const gestor = ['master', 'admin'].indexOf(this.d().perfil) >= 0 && !App.sessao.chefe;
+    const bt = (t, f) => h('button', { type: 'button', class: 'btn small secondary', text: t, onclick: e => { e.stopPropagation(); f(); } });
+    return h('div', { class: 'hist-lin' }, h('div', {}, h('b', { text: x.placa + ' · ' + x.servico + (comNome ? ' · ' + (nomeBonito(x.motoristaNome) || this.nomeMot(x.motoristaId)) : '') }),
+      h('small', { text: [this.dia(x.data), Number(x.km) > 0 ? Number(x.km).toLocaleString('pt-BR') + ' km' : '', Number(x.valor) > 0 ? fmtMoeda(Number(x.valor)) : '', x.local || '', x.status !== 'PENDENTE' && x.decididoPor ? (x.status === 'APROVADA' ? 'aprovada' : 'recusada') + ' por ' + x.decididoPor : '', x.status === 'RECUSADA' && x.motivo ? 'Motivo: ' + x.motivo : ''].filter(Boolean).join(' · ') })),
+      h('div', { class: 'hist-acoes' }, x.nota ? bt('🧾 Nota', () => verNota(x.nota, x.servico)) : null, x.garantia ? bt('🛡️ Garantia', () => verNota(x.garantia, x.servico, 'Garantia')) : null,
+        x.status === 'PENDENTE' && gestor ? h('button', { type: 'button', class: 'btn small', text: 'Conferir', onclick: e => { e.stopPropagation(); $$('.overlay.show').forEach(o => o.remove()); abrirAprovarManut(x.id); } }) : null,
+        h('span', { class: 'badge ' + st[1], text: st[0] })));
+  },
+  filtroLanc: { abast: { placa: '', st: 'todos', mot: '' }, manut: { placa: '', st: 'pendentes', mot: '' } },
+  /** Gestão: abastecimentos e manutenções lançados pelos motoristas, separados por caminhão e situação (igual à tela de Ocorrências). */
+  gestaoLanc(tipo) {
+    const d = this.d(), f = this.filtroLanc[tipo], ab = tipo === 'abast', aba = ab ? 'fleet-abast' : 'fleet-manut', refaz = () => App.abrirAba(aba);
+    const todas = (ab ? (d.abastecimentos || []).filter(a => a.origem === 'motorista') : (d.manutMotorista || []).slice())
+      .sort((a, b) => (String(b.data).slice(0, 10) + String(b.criadoEm)).localeCompare(String(a.data).slice(0, 10) + String(a.criadoEm)));
+    const ST = ab ? { todos: ['Todos', () => true], aguardando: ['Aguardando fatura', a => a.status === 'provisorio'], conferidos: ['Conferidos', a => a.status === 'conferido'], semfatura: ['Sem fatura', a => a.status === 'expirado'] }
+      : { pendentes: ['Pendentes', x => x.status === 'PENDENTE'], aprovadas: ['Aprovadas', x => x.status === 'APROVADA'], recusadas: ['Recusadas', x => x.status === 'RECUSADA'], todas: ['Todas', () => true] };
+    if (!ST[f.st]) f.st = Object.keys(ST)[0];
+    const atencao = x => ab ? x.status === 'provisorio' : x.status === 'PENDENTE';
+    const placas = Array.from(new Set(todas.map(x => x.placa))).sort(), n = p => todas.filter(x => (!p || x.placa === p) && atencao(x)).length;
+    const chip = (rot, ativo, k, clique) => h('button', { class: 'chip' + (ativo ? ' active' : ''), type: 'button', onclick: clique }, rot, k ? h('span', { class: 'n', text: String(k) }) : null);
+    const chipsPl = h('div', { class: 'chips oc-chips' }, chip('Geral', !f.placa, n(''), () => { f.placa = ''; refaz(); }), ...placas.map(p => chip(p, f.placa === p, n(p), () => { f.placa = p; refaz(); })));
+    const chipsSt = h('div', { class: 'oc-st' }, ...Object.keys(ST).map(k => h('button', { type: 'button', class: 'oc-op' + (f.st === k ? ' on' : ''), text: ST[k][0], onclick: () => { f.st = k; refaz(); } })));
+    const mids = Array.from(new Set(todas.map(x => String(x.motoristaId)))).filter(Boolean).map(id => ({ id, nome: this.nomeMot(id) !== '-' ? this.nomeMot(id) : nomeBonito((todas.find(x => String(x.motoristaId) === id) || {}).motoristaNome || id) })).sort((a, b) => a.nome.localeCompare(b.nome));
+    const selMot = h('select', { class: 'lanc-mot', 'aria-label': 'Motorista', onchange: e => { f.mot = e.target.value; refaz(); } }, h('option', { value: '', text: 'Todos os motoristas' }), mids.map(m => h('option', { value: m.id, text: m.nome, selected: f.mot === m.id ? true : null })));
+    const l = todas.filter(x => (!f.placa || x.placa === f.placa) && (!f.mot || String(x.motoristaId) === f.mot) && ST[f.st][1](x));
+    const tot = ab ? l.reduce((t, a) => t + (Number(a.valor) || 0), 0) : l.reduce((t, x) => t + (Number(x.valor) || 0), 0), lit = ab ? l.reduce((t, a) => t + (Number(a.litros) || 0), 0) : 0;
+    const cx = h('div', { class: 'card' }, h('h2', { text: (ab ? 'Abastecimentos dos motoristas' : 'Manutenções dos motoristas') + (f.placa ? ' · ' + f.placa : '') }), chipsPl, h('div', { class: 'lanc-barra' }, chipsSt, selMot),
+      l.length ? h('p', { class: 'hint lanc-tot', text: l.length + (l.length > 1 ? ' lançamentos' : ' lançamento') + (ab ? ' · ' + lit.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' L' : '') + (tot ? ' · ' + fmtMoeda(tot) : '') }) : null);
+    if (!l.length) cx.append(h('div', { class: 'empty', text: ab ? 'Nenhum abastecimento com esse filtro.' : (f.st === 'pendentes' ? 'Nenhuma manutenção aguardando aprovação. ✅' : 'Nada com esse filtro.') }));
+    l.slice(0, 200).forEach(x => cx.append(ab ? this.linhaAbastGestao(x) : this.linhaManutGestao(x)));
+    if (l.length > 200) cx.append(h('p', { class: 'hint', text: 'Mostrando os 200 mais recentes. Use os filtros para achar os outros.' }));
+    return cx;
+  },
   gestaoOcorrencias() {
     const todas = (this.d().ocorrencias || []).slice().sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura)));
     const f = this.filtroOc, ST = { pendentes: o => o.status === 'ABERTA', aguardando: o => o.status === 'AGUARDANDO', resolvidas: o => o.status === 'RESOLVIDA' || o.status === 'DESCARTADA', todas: () => true };
@@ -595,8 +649,9 @@ const Motorista = {
     const nAg = todas.filter(o => o.status === 'AGUARDANDO').length;
     const chipsSt = h('div', { class: 'oc-st' }, ...[['pendentes', 'Pendentes'], ['aguardando', 'Aguardando aprovação'], ['resolvidas', 'Resolvidas'], ['todas', 'Todas']].filter(([k]) => k !== 'aguardando' || nAg)
       .map(([k, t]) => h('button', { type: 'button', class: 'oc-op' + (f.st === k ? ' on' : ''), text: t, onclick: () => { f.st = k; refaz(); } })));
-    const l = todas.filter(o => (!f.placa || o.placa === f.placa) && ST[f.st](o)).slice(0, 150);
-    const cx = h('div', { class: 'card' }, h('h2', { text: 'Ocorrências' + (f.placa ? ' · ' + f.placa : '') }), chipsPl, chipsSt);
+    const selOrig = h('select', { class: 'lanc-mot', 'aria-label': 'De onde veio', onchange: e => { f.origem = e.target.value; refaz(); } }, [['', 'Checklist e defeitos relatados'], ['checklist', 'Só do checklist'], ['relato', 'Só defeitos relatados']].map(([v, t]) => h('option', { value: v, text: t, selected: (f.origem || '') === v ? true : null })));
+    const l = todas.filter(o => (!f.placa || o.placa === f.placa) && ST[f.st](o) && (!f.origem || (f.origem === 'relato' ? o.origem === 'relato' : o.origem !== 'relato'))).slice(0, 150);
+    const cx = h('div', { class: 'card' }, h('h2', { text: 'Ocorrências' + (f.placa ? ' · ' + f.placa : '') }), chipsPl, h('div', { class: 'lanc-barra' }, chipsSt, selOrig));
     if (!l.length) cx.append(h('div', { class: 'empty', text: f.st === 'pendentes' ? 'Nenhuma ocorrência pendente' + (f.placa ? ' neste caminhão' : '') + '. ✅' : 'Nada por aqui.' }));
     const acao = async (nome, o, ok) => { try { await API.chamar(nome, { id: o.id }); toast(ok); App.recarregar(true); } catch (e) { toast(e.message, true); } };
     l.forEach(o => {
