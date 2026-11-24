@@ -610,10 +610,19 @@ function escolherSubaba(sub) {
   APP.subaba=sub;
   document.querySelectorAll('.subnav-btn').forEach(b=>b.classList.toggle('active',b.dataset.sub===sub));
   document.querySelectorAll('.subpage').forEach(p=>p.classList.toggle('active',p.id==='sub-'+sub));
-  if(sub==='capa')renderCapa();
+  if(sub==='capa')escolherCapaAba(APP.capaAba||'cartas');
   if(sub==='relatorios')renderRelatorios();
   if(sub==='resumo')renderResumoBanco();
   if(sub==='banco')ebAoAbrir();
+}
+
+// Dentro de "Capa e impressão": aba Cartas (capa das cartas) e aba Cartões do mês.
+function escolherCapaAba(aba) {
+  APP.capaAba=aba;
+  document.querySelectorAll('.capa-aba').forEach(b=>{const on=b.dataset.capa===aba;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});
+  $('capa-cartas').hidden=aba!=='cartas';
+  $('capa-cartoes').hidden=aba!=='cartoes';
+  if(aba==='cartas')renderCapa(); else carregarCartoes();
 }
 
 // Administração de contas — leitura e decisões sempre validadas no Apps Script.
@@ -2487,7 +2496,13 @@ function registrarEventos() {
   $('form-carta').addEventListener('submit',e=>{e.preventDefault();if(APP.cartaEditando)comBotaoCarregando($('btn-salvar-carta'),()=>salvarCarta(e),'Salvando alterações…');else salvarCarta(e);});
   ['filtro-cartas','filtro-cartas-status','filtro-cartas-mes'].forEach(id=>$(id).addEventListener(id==='filtro-cartas'?'input':'change',renderCartas));
   $('limpar-filtro-cartas').addEventListener('click',()=>{$('filtro-cartas').value='';$('filtro-cartas-status').value='';$('filtro-cartas-mes').value='';renderCartas();});
+  document.querySelectorAll('.capa-aba').forEach(b=>b.addEventListener('click',()=>escolherCapaAba(b.dataset.capa)));
   ['filtro-capa','filtro-capa-mes'].forEach(id=>$(id).addEventListener(id==='filtro-capa'?'input':'change',renderCapa));
+  $('cartoes-mes').addEventListener('change',()=>carregarCartoes());
+  $('cartoes-busca').addEventListener('input',renderCartoes);
+  $('cartoes-filtro').addEventListener('change',renderCartoes);
+  $('imprimir-cartoes').addEventListener('click',imprimirCartoes);
+  $('cartoes-todos').addEventListener('click',marcarTodosCartoes);
   $('check-todas-capa').addEventListener('change',e=>{
     for(const c of cartasCapaFiltradas().slice(0,250))
       if(e.target.checked)APP.selecionadas.add(c.id);else APP.selecionadas.delete(c.id);
@@ -2835,4 +2850,67 @@ function configurarBancoHorasUI(){
   $('eb-carregar').addEventListener('click',()=>comBotaoCarregando($('eb-carregar'),ebCarregar,'Carregando extratos...'));
   $('eb-csv').addEventListener('click',()=>{try{ebCSV();}catch(e){showMessage(e.message,'Exportação',true);}});
   $('eb-imprimir').addEventListener('click',()=>{try{ebImprimir();}catch(e){showMessage(e.message,'Impressão',true);}});
+}
+
+
+/* ===== Cartões de ponto do mês: nome de todos os funcionários e se o cartão foi assinado (lista impressa todo mês) ===== */
+const CARTOES={mes:'',lista:[],carregando:false};
+const MESES_PT=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function nomeMesCartoes(m){const [a,n]=String(m).split('-');return n?MESES_PT[Number(n)-1]+'/'+a:'';}
+async function carregarCartoes(){
+  const inp=$('cartoes-mes');
+  if(!inp.value){const d=new Date();inp.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+  const mes=inp.value;CARTOES.mes=mes;CARTOES.carregando=true;
+  $('tbody-cartoes').innerHTML='<tr><td colspan="4" class="empty">Carregando…</td></tr>';
+  try{const r=await api('getCartoes',{mes});if(CARTOES.mes!==mes)return;CARTOES.lista=r.dados||[];}
+  catch(e){$('tbody-cartoes').innerHTML=`<tr><td colspan="4" class="empty">${esc(e.message||e)}</td></tr>`;return;}
+  finally{CARTOES.carregando=false;}
+  renderCartoes();
+}
+function cartoesVisiveis(){
+  const q=norm($('cartoes-busca').value||''),f=$('cartoes-filtro').value;
+  return CARTOES.lista.filter(c=>(!q||norm(c.nome).includes(q)||norm(c.empresa).includes(q))&&(!f||c.assinado===f));
+}
+function renderCartoes(){
+  const vis=cartoesVisiveis(),tot=CARTOES.lista.length,ass=CARTOES.lista.filter(c=>c.assinado==='SIM').length;
+  $('cartoes-cont').textContent=tot?ass+' de '+tot+' assinados':'—';
+  $('tbody-cartoes').innerHTML=vis.length?vis.map((c,i)=>`<tr${c.inativo?' class="inativo"':''}><td class="num-col">${i+1}</td><td><b>${esc(c.nome)}</b>${c.inativo?' <small class="muted">(não está mais ativo)</small>':''}</td><td>${esc(c.empresa||'—')}</td>
+    <td><button type="button" class="cartao-st ${c.assinado==='SIM'?'sim':'nao'}" data-nome="${esc(c.nome)}" aria-pressed="${c.assinado==='SIM'}" title="${c.atualizadoPor?esc('Marcado por '+c.atualizadoPor+' em '+String(c.atualizadoEm).slice(0,16)):''}">${c.assinado==='SIM'?'✓ Assinado':'Não assinado'}</button></td></tr>`).join('')
+    :`<tr><td colspan="4" class="empty">${tot?'Ninguém com esse filtro.':'Nenhum funcionário ativo encontrado. Sincronize com o MobPonto.'}</td></tr>`;
+  document.querySelectorAll('#tbody-cartoes .cartao-st').forEach(b=>b.addEventListener('click',()=>alternarCartao(b.dataset.nome)));
+}
+async function salvarCartoes(itens){
+  try{await api('salvarCartoes',{mes:CARTOES.mes,itens});}
+  catch(e){showMessage(e.message||String(e),'Não salvou',true);await carregarCartoes();}
+}
+function alternarCartao(nome){
+  const c=CARTOES.lista.find(x=>x.nome===nome);if(!c)return;
+  c.assinado=c.assinado==='SIM'?'NAO':'SIM';renderCartoes();      // a tela muda na hora; o servidor grava em seguida
+  salvarCartoes([{nome:c.nome,empresa:c.empresa,assinado:c.assinado}]);
+}
+function marcarTodosCartoes(){
+  const pend=cartoesVisiveis().filter(c=>c.assinado!=='SIM');
+  if(!pend.length)return showMessage('Todos os funcionários visíveis já estão como assinados.','Cartões');
+  // confirmação em dois toques (sem janela do navegador): o botão pede para tocar de novo
+  const b=$('cartoes-todos');
+  if(!b.dataset.confirma){b.dataset.confirma='1';b.textContent='Toque de novo: marcar '+pend.length+' como assinados';b.classList.add('primary');
+    clearTimeout(CARTOES.tConf);CARTOES.tConf=setTimeout(()=>{delete b.dataset.confirma;b.textContent='Marcar todos como assinados';b.classList.remove('primary');},4000);return;}
+  clearTimeout(CARTOES.tConf);delete b.dataset.confirma;b.textContent='Marcar todos como assinados';b.classList.remove('primary');
+  pend.forEach(c=>{c.assinado='SIM';});renderCartoes();salvarCartoes(pend.map(c=>({nome:c.nome,empresa:c.empresa,assinado:'SIM'})));
+}
+function imprimirCartoes(){
+  if(!CARTOES.lista.length)return showMessage('Escolha o mês e aguarde a lista carregar.','Cartões',true);
+  const win=window.open('','_blank');if(!win)return showMessage('Seu navegador bloqueou a janela de impressão. Libere pop-ups para este site.','Impressão bloqueada',true);
+  const l=CARTOES.lista,ass=l.filter(c=>c.assinado==='SIM').length,titulo='Cartões de ponto · '+nomeMesCartoes(CARTOES.mes);
+  const linhas=l.map((c,i)=>`<tr><td class="n">${i+1}</td><td>${esc(c.nome)}</td><td class="e">${esc(c.empresa||'')}</td><td class="s ${c.assinado==='SIM'?'sim':'nao'}">${c.assinado==='SIM'?'✓ Assinado':'Não assinado'}</td></tr>`).join('');
+  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
+    *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;padding:20px 26px;font-size:11.5px}
+    header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px;margin-bottom:8px}h1{font-size:17px;margin:0}header p{margin:0;font-size:11px;color:#444}
+    table{width:100%;border-collapse:collapse}th{text-align:left;font-size:9.5px;text-transform:uppercase;border-bottom:1.5px solid #111;padding:3px 5px}td{padding:3px 5px;border-bottom:1px solid #ddd}tr{break-inside:avoid}
+    .n{width:30px;color:#666;text-align:right}.e{color:#555;font-size:10.5px}.s{width:96px;font-weight:bold}.s.nao{color:#b91c1c}.s.sim{color:#166534}
+    @page{size:A4;margin:9mm}@media print{body{padding:0}}</style></head><body>
+    <header><h1>${esc(titulo)}</h1><p>${ass} de ${l.length} assinados · impresso em ${esc(new Date().toLocaleDateString('pt-BR'))}</p></header>
+    <table><thead><tr><th class="n">Nº</th><th>Funcionário</th><th>Empresa</th><th>Cartão</th></tr></thead><tbody>${linhas}</tbody></table>
+    <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+  win.document.close();
 }

@@ -25,7 +25,7 @@ const API = {
     'checklistDetalhe', 'rankingPontos', 'listarUsuarios', 'listarPendenciasPlaca', 'getPrevisao', 'escCarregar', 'escHistorico', 'escDadosCarregar', 'escDadosVersoes', 'escVerificarLimpeza',
     'financeiroRotaCarregar', 'financeiroRotaResumo', 'financeiroRotaVersoes', 'financeiroLojaCarregar', 'financeiroLojaResumo', 'combCarregar', 'combResumo'],
   CHEFE_PONTO: ['getDadosADM', 'getPendentesADM', 'getAcoesCartasADM', 'getAssinaturasResponsaveisADM', 'getDadosEncarregado', 'getSaldoHoras', 'getBancoHorasHistorico', 'getBancoCompleto',
-    'getOpcoesExtratoBanco', 'getExtratosBanco', 'estadoCapturaBancoCompleto', 'relatorioBancoHoras', 'getFuncionarios', 'getFolgas', 'estadoSincronizacaoMob'],
+    'getOpcoesExtratoBanco', 'getExtratosBanco', 'estadoCapturaBancoCompleto', 'relatorioBancoHoras', 'getFuncionarios', 'getFolgas', 'estadoSincronizacaoMob', 'getCartoes'],
   soLeitura(action, data) {
     if (typeof App === 'undefined' || !(App.sessao && App.sessao.chefe)) return false;
     return action === 'ponto' ? this.CHEFE_PONTO.indexOf(data && data.acao) < 0 : this.CHEFE_LEITURA.indexOf(action) < 0;

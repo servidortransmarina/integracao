@@ -1979,3 +1979,22 @@ body.embed main {padding:16px clamp(10px,2vw,28px) 40px;}
 .linhas-svg{width:100%;min-width:520px;height:auto;display:block}
 .linhas-legenda{display:flex;flex-wrap:wrap;gap:16px;margin-top:8px;font-size:13px;font-weight:600}
 .linhas-legenda i{display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+/* Cartões do mês */
+.cartoes-tab .num-col{width:44px;color:var(--muted,#6b7280);text-align:right}
+.cartao-st{border:1px solid #f0c3c3;background:#fff5f5;color:#b91c1c;border-radius:999px;padding:6px 14px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;min-width:130px;min-height:34px}
+.cartao-st.sim{border-color:#bfe3cc;background:#ecfdf3;color:#166534}
+.cartao-st:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
+.cartoes-tab tr.inativo td{color:#9ca3af}
+#sub-cartoes .filter-row{align-items:center;flex-wrap:wrap}
+
+/* Abas internas de "Capa e impressão": Cartas | Cartões do mês */
+.capa-abas {display:inline-flex;gap:4px;padding:4px;margin:0 0 16px;background:#e8eef3;border-radius:12px;}
+.capa-aba {border:0;background:transparent;color:#35506a;font:inherit;font-weight:700;font-size:14px;padding:9px 18px;border-radius:9px;cursor:pointer;touch-action:manipulation;}
+.capa-aba:hover {color:#173a57;}
+.capa-aba.active {background:#fff;color:#173a57;box-shadow:0 1px 3px rgba(23,58,87,.18);}
+.capa-aba:focus-visible {outline:2px solid #173a57;outline-offset:2px;}
+@media (max-width:700px){
+  .capa-abas {display:flex;width:100%;}
+  .capa-aba {flex:1;padding:12px 8px;}
+}
