@@ -6,19 +6,63 @@ const Motorista = {
     const sel = h('select', { 'aria-label': 'Caminhão' }, h('option', { value: '', text: 'Escolha o caminhão…' }), ...(this.d().veiculos || []).map(v => h('option', { value: v.placa, text: v.placa + (v.modelo ? ' — ' + v.modelo : '') })));
     sel.value = def || ''; return sel;
   },
+  /** Caminhão do formulário, do jeito mais simples para o motorista: mostra a placa grande do caminhão de hoje e um botão
+      bem visível "Não está com este caminhão? Trocar caminhão". Sem caminhão definido, já abre a lista para ele tocar. */
+  caminhaoCampo(sel) {
+    const d = this.d(), esc = d.escalaHoje, box = h('div', { class: 'cam-campo' }), veic = p => (d.veiculos || []).find(v => v.placa === p) || {};
+    let escolhendo = !sel.value, filtro = '';
+    sel.hidden = true; sel.tabIndex = -1;
+    const escolher = p => { sel.value = p; sel.dispatchEvent(new Event('change')); escolhendo = false; pinta(); const b = $('.cam-trocar', box); if (b) b.focus(); };
+    const pinta = () => {
+      limpar(box); box.append(sel);
+      if (sel.value && !escolhendo) {
+        const v = veic(sel.value), origem = esc && esc.placa === sel.value ? (esc.origem === 'escala' ? 'Você está escalado com ele hoje' : 'Seu caminhão fixo') : 'Você escolheu este caminhão';
+        box.append(h('div', { class: 'cam-atual' }, placaHtmlEl(sel.value), h('div', { class: 'cam-info' }, h('b', { text: v.modelo || 'Caminhão' }), h('small', { text: origem }))),
+          h('button', { type: 'button', class: 'cam-trocar', onclick: () => { escolhendo = true; filtro = ''; pinta(); const i = $('.cam-busca', box); if (i) i.focus(); } }, h('span', { text: 'Não está com este caminhão?' }), h('b', { text: '🔄 Trocar caminhão' })));
+        return;
+      }
+      const lista = h('div', { class: 'cam-lista', role: 'list' });
+      const preencher = () => { limpar(lista); const f = filtro.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const vs = (d.veiculos || []).filter(v => !f || v.placa.replace(/[^A-Z0-9]/g, '').indexOf(f) >= 0 || String(v.modelo || '').toUpperCase().indexOf(filtro.toUpperCase()) >= 0);
+        vs.forEach(v => lista.append(h('button', { type: 'button', role: 'listitem', class: 'cam-op' + (v.placa === sel.value ? ' on' : ''), onclick: () => escolher(v.placa) }, h('b', { text: v.placa }), h('small', { text: v.modelo || '' }))));
+        if (!vs.length) lista.append(h('p', { class: 'hint', text: 'Nenhum caminhão com essa placa.' })); };
+      const busca = h('input', { type: 'search', class: 'cam-busca', placeholder: 'Digite a placa para achar mais rápido', autocomplete: 'off', 'aria-label': 'Procurar caminhão pela placa', oninput: e => { filtro = e.target.value; preencher(); } });
+      preencher();
+      box.append(h('div', { class: 'cam-esc-tit', text: sel.value ? 'Com qual caminhão você está?' : 'Qual caminhão você está usando hoje?' }), busca, lista,
+        sel.value ? h('button', { type: 'button', class: 'btn-link cam-cancela', text: 'Voltar: continuo com o ' + sel.value, onclick: () => { escolhendo = false; pinta(); } }) : null);
+    };
+    sel._pintar = () => { escolhendo = !sel.value; pinta(); };      // quando o valor muda por código (rascunho)
+    pinta(); return box;
+  },
   numero(v) { return parseFloat(String(v).replace(',', '.')); },
   dia(iso) { return iso ? fmtData(String(iso).slice(0, 10)) : '-'; },
   nomeMot(id) { const m = (this.d().motoristas || []).find(x => String(x.id) === String(id)); return m ? nomeBonito(m.nome) : '-'; },
 
   /* ---------- CHECKLIST ---------- */
   /* ---------- fotos do checklist: reduz no aparelho e envia na hora, em segundo plano ---------- */
+  /** Reduz a foto no celular antes de enviar. No iPhone, cada canvas que fica na memória pesa: depois de dezenas de fotos
+      o Safari passa a devolver imagem PRETA. Por isso o canvas é liberado na hora e a foto é conferida (preta = tenta de novo / avisa). */
   async reduzirFoto(arquivo, max = 1280, qual = 0.7) {
+    const desenhar = async (fonte, w0, h0) => {
+      const k = Math.min(1, max / Math.max(w0, h0)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w0 * k)); c.height = Math.max(1, Math.round(h0 * k));
+      const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(fonte, 0, 0, c.width, c.height);
+      // amostra 12×12: imagem toda preta (ou vazia) = o navegador não conseguiu desenhar
+      const a = document.createElement('canvas'); a.width = a.height = 12; const ax = a.getContext('2d'); ax.drawImage(c, 0, 0, 12, 12);
+      const px = ax.getImageData(0, 0, 12, 12).data; let soma = 0, max2 = 0; for (let i = 0; i < px.length; i += 4) { const l = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11; soma += l; if (l > max2) max2 = l; }
+      a.width = a.height = 0;
+      const url = (soma / 144 < 4 && max2 < 12) ? null : c.toDataURL('image/jpeg', qual);
+      c.width = c.height = 0;                 // libera a memória do canvas na hora
+      return url;
+    };
     const url = URL.createObjectURL(arquivo);
     try {
-      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Não consegui abrir a foto.')); i.src = url; });
-      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
-      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', qual);
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Não consegui abrir a foto. Tire de novo.')); i.src = url; });
+      try { if (img.decode) await img.decode(); } catch (e) { /* já carregou */ }
+      let dados = await desenhar(img, img.naturalWidth, img.naturalHeight);
+      if (!dados && window.createImageBitmap) { try { const bmp = await createImageBitmap(arquivo); dados = await desenhar(bmp, bmp.width, bmp.height); if (bmp.close) bmp.close(); } catch (e) { /* segue para o aviso */ } }
+      if (!dados) throw new Error('A foto saiu preta. Tire de novo; se continuar, feche o app e abra de novo (o que você já fez fica salvo).');
+      return dados;
     } finally { URL.revokeObjectURL(url); }
   },
   filaFotos: { ativos: 0, espera: [] },
@@ -68,43 +112,69 @@ const Motorista = {
         if (f) caixa.append(miniatura(f, () => { guardar(null); pinta(); mudou(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
       pinta(); return caixa;
     };
+    const so = !!cfg.soSlots;     // checklist diário: só as fotos fixas (painel e frente)
     const el = h('div', { class: 'card ck-cat' }, h('h3', { text: 'FOTOS DO CAMINHÃO' }), h('small', { class: 'hint', text: 'Tire as fotos agora, com a câmera do celular. Elas são enviadas enquanto você responde o checklist.' }),
-      h('div', { class: 'sec-t', text: 'Carroceria (mínimo ' + cfg.carroceriaMin + ': frente, trás e as duas laterais)' }), gridCar, contador,
-      h('div', { class: 'sec-t', text: 'Pneus (uma foto de cada)' }),
-      h('div', { class: 'ckf-pneus' }, ...(cfg.pneus || []).map((n, i) => slot(n, f => { pneu[n] = f; }, () => pneu[n], 'pneu', 'p' + (i + 1)))),
-      h('div', { class: 'sec-t', text: 'Dentro da cabine (mostre a limpeza)' }), slot('Cabine por dentro', f => { cab.v = f; }, () => cab.v, 'cabine', 'k'));
+      so ? null : h('div', { class: 'sec-t', text: 'Carroceria (mínimo ' + cfg.carroceriaMin + ': frente, trás e as duas laterais)' }), so ? null : gridCar, so ? null : contador,
+      h('div', { class: 'sec-t', text: so ? 'Duas fotos (obrigatórias)' : 'Pneus (uma foto de cada)' }),
+      h('div', { class: 'ckf-pneus' }, ...(cfg.pneus || []).map((n, i) => slot(n, f => { pneu[n] = f; }, () => pneu[n], so ? 'item' : 'pneu', (so ? 'd' : 'p') + (i + 1)))),
+      so ? null : h('div', { class: 'sec-t', text: 'Dentro da cabine (mostre a limpeza)' }), so ? null : slot('Cabine por dentro', f => { cab.v = f; }, () => cab.v, 'cabine', 'k'));
     pintaCar();
     const todas = () => car.concat((cfg.pneus || []).map(n => pneu[n]).filter(Boolean), cab.v ? [cab.v] : []);
     const salva = id => ({ tipo: 'salva', dados: urlFotoDrive(id, 400), estado: 'ok', id, pronta: Promise.resolve() });
     return { el, todas,
       /** Volta as fotos de um checklist que ficou pela metade (já estão no Drive). */
       restaurar(f) { if (!f) return; (f.c || []).forEach(id => car.push(salva(id))); Object.keys(f.p || {}).forEach(n => { if ((cfg.pneus || []).indexOf(n) >= 0) pneu[n] = salva(f.p[n]); }); if (f.k) cab.v = salva(f.k);
-        pintaCar(); $$('.ckf-slot', el).forEach(x => x.remove()); const pz = $('.ckf-pneus', el); limpar(pz); (cfg.pneus || []).forEach((n, i) => pz.append(slot(n, f2 => { pneu[n] = f2; }, () => pneu[n], 'pneu', 'p' + (i + 1))));
-        el.append(slot('Cabine por dentro', f2 => { cab.v = f2; }, () => cab.v, 'cabine', 'k')); },
+        pintaCar(); $$('.ckf-slot', el).forEach(x => x.remove()); const pz = $('.ckf-pneus', el); limpar(pz); (cfg.pneus || []).forEach((n, i) => pz.append(slot(n, f2 => { pneu[n] = f2; }, () => pneu[n], so ? 'item' : 'pneu', (so ? 'd' : 'p') + (i + 1))));
+        if (!so) el.append(slot('Cabine por dentro', f2 => { cab.v = f2; }, () => cab.v, 'cabine', 'k')); },
       ids() { const ok = f => f && f.estado === 'ok' && f.id ? f.id : ''; const p = {}; (cfg.pneus || []).forEach(n => { if (ok(pneu[n])) p[n] = pneu[n].id; }); return { c: car.map(ok).filter(Boolean), p, k: ok(cab.v) }; },
       falta() {
         if (car.length < cfg.carroceriaMin) return 'Tire mais ' + (cfg.carroceriaMin - car.length) + ' foto(s) da carroceria.';
         const sem = (cfg.pneus || []).find(n => !pneu[n]); if (sem) return 'Falta a foto de: ' + sem + '.';
-        if (!cab.v) return 'Falta a foto de dentro da cabine.'; return '';
+        if (!so && !cab.v) return 'Falta a foto de dentro da cabine.'; return '';
       },
       async esperar() { await Promise.all(todas().map(f => f.estado === 'enviando' ? f.pronta : null)); const ruim = todas().find(f => f.estado !== 'ok'); if (ruim) throw new Error(ruim.erro || 'Uma foto não foi enviada. Toque nela para tentar de novo.'); },
-      valor() { const pn = {}; (cfg.pneus || []).forEach(n => { pn[n] = pneu[n].id; }); return { carroceria: car.map(f => f.id), pneus: pn, cabine: cab.v.id }; } };
+      valor() { const pn = {}; (cfg.pneus || []).forEach(n => { pn[n] = pneu[n].id; }); return { carroceria: car.map(f => f.id), pneus: pn, cabine: cab.v ? cab.v.id : '' }; } };
   },
 
   temRascunho() {
-    let a = null; try { a = JSON.parse(localStorage.getItem('trm.ckrasc.' + (App.sessao && App.sessao.usuario)) || 'null'); } catch (e) { /* ok */ }
+    let a = null; try { const u = 'trm.ckrasc.' + (App.sessao && App.sessao.usuario); a = JSON.parse(localStorage.getItem(u + '.d') || 'null') || JSON.parse(localStorage.getItem(u) || 'null'); } catch (e) { /* ok */ }
     const r = (a && a.dia === Motorista.hoje()) ? a : this.d().rascunhoChecklist; return !!(r && Object.keys(r.resp || {}).length);
+  },
+  /** Qual checklist: DIÁRIO (rápido, todo dia escalado) ou SEMANAL (completo, 1 por semana; vale também como o diário do dia). */
+  situacaoCk() {
+    const d = this.d(), hoje = Motorista.hoje(), mod = d.checklistModelo || {}, seg = mod.semanaInicio || hoje, meus = (d.checklists || []).filter(c => c.aprovacao !== 'REJEITADO');
+    return { hojeFeito: meus.some(c => String(c.data).slice(0, 10) === hoje), semanaFeita: meus.some(c => c.tipo !== 'DIARIO' && String(c.data).slice(0, 10) >= seg) };
   },
   checklist() {
     const d = this.d(), mod = d.checklistModelo; if (!mod) return h('div', { class: 'card soon' }, 'Checklist indisponível. Atualize a página.');
+    if (!mod.diario) return this.checklistForm('SEMANAL');
+    const st = this.situacaoCk(), val = mod.valores || { semanal: 54, diario: 10 };
+    if (!this.tipoCk) {      // abre no que ficou pela metade; senão no diário (ou no semanal, se o diário de hoje já foi)
+      const u = 'trm.ckrasc.' + (App.sessao && App.sessao.usuario), hj = Motorista.hoje(), le = k => { try { const r = JSON.parse(localStorage.getItem(k) || 'null'); return r && r.dia === hj && Object.keys(r.resp || {}).length ? r : null; } catch (e) { return null; } };
+      const sv = d.rascunhoChecklist && Object.keys(d.rascunhoChecklist.resp || {}).length ? d.rascunhoChecklist : null;
+      this.tipoCk = le(u) || (sv && (sv.tipo || 'SEMANAL') === 'SEMANAL' && !le(u + '.d')) ? 'SEMANAL' : (st.hojeFeito && !st.semanaFeita ? 'SEMANAL' : 'DIARIO');
+    }
+    const op = (tipo, emoji, tit, sub, estado, cls) => h('button', { type: 'button', role: 'radio', 'aria-checked': this.tipoCk === tipo ? 'true' : 'false', class: 'ck-tipo' + (this.tipoCk === tipo ? ' on' : ''), onclick: () => { if (this.tipoCk === tipo) return; this.tipoCk = tipo; App.abrirAba('checklists'); } },
+      h('span', { class: 'ck-tipo-em', text: emoji }), h('span', { class: 'ck-tipo-tx' }, h('b', { text: tit }), h('small', { text: sub })), h('span', { class: 'ck-tipo-st ' + cls, text: estado }));
+    const sel = h('div', { class: 'card ck-tipos' }, h('h2', { text: 'Qual checklist você vai fazer?' }),
+      h('div', { class: 'ck-tipo-lista', role: 'radiogroup', 'aria-label': 'Tipo de checklist' },
+        op('DIARIO', '⚡', 'Diário · rápido', '12 itens e 2 fotos · uns 2 minutos · vale até ' + this.fmtPts(val.diario) + ' pts', st.hojeFeito ? '✅ feito hoje' : 'fazer hoje', st.hojeFeito ? 'ok' : 'falta'),
+        op('SEMANAL', '🗂️', 'Semanal · completo', 'Todos os itens e fotos · 1 por semana · vale até ' + this.fmtPts(val.semanal) + ' pts (e já conta como o de hoje)', st.semanaFeita ? '✅ feito esta semana' : 'falta esta semana', st.semanaFeita ? 'ok' : 'falta')),
+      !st.semanaFeita && this.tipoCk === 'DIARIO' ? h('p', { class: 'ck-tipo-dica', text: 'Ainda falta o semanal desta semana. Se tiver tempo hoje, faça o completo: ele já vale como o diário.' }) : null);
+    const f = this.checklistForm(this.tipoCk); f.prepend(sel); return f;
+  },
+  checklistForm(tipo) {
+    const d = this.d(), mod0 = d.checklistModelo;
+    const mod = tipo === 'DIARIO' ? Object.assign({}, mod0, { categorias: [{ cat: 'ANTES DE SAIR', itens: mod0.diario.itens }], quantidades: [], obrigatorios: [], semFotoItem: true,
+      fotos: { carroceriaMin: 0, carroceriaMax: 0, pneus: mod0.diario.fotos, cabineItem: '', soSlots: true } }) : mod0;
     const esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : ''), km = h('input', { type: 'number', inputmode: 'numeric', min: 1, placeholder: 'KM atual do painel' });
     const resp = {}, qtd = {}, obs = {}, linhas = {}, fotoItem = {}, ctl = {}, obrig = mod.obrigatorios || [], dicas = mod.dicas || {};
     // ---- rascunho: tudo o que foi respondido fica guardado (no celular na hora e no servidor a cada pausa); sair no meio não perde nada ----
-    const chave = 'trm.ckrasc.' + (App.sessao && App.sessao.usuario), hoje0 = Motorista.hoje();
-    const lerLocal = () => { try { const r = JSON.parse(localStorage.getItem(chave) || 'null'); return r && r.dia === hoje0 ? r : null; } catch (e) { return null; } };
-    const rascunho = (() => { const a = lerLocal(), b = d.rascunhoChecklist; if (b) b.dia = hoje0; if (!a) return b || null; if (!b) return a; return String(a.salvoEm || '') >= String(b.salvoEm || '') ? a : b; })();
+    const chave = 'trm.ckrasc.' + (App.sessao && App.sessao.usuario) + (tipo === 'DIARIO' ? '.d' : ''), hoje0 = Motorista.hoje(), doTipo = r => r && (r.tipo || 'SEMANAL') === tipo ? r : null;
+    const lerLocal = () => { try { const r = JSON.parse(localStorage.getItem(chave) || 'null'); return r && r.dia === hoje0 ? doTipo(r) : null; } catch (e) { return null; } };
+    const rascunho = (() => { const a = lerLocal(), b = doTipo(d.rascunhoChecklist); if (b) b.dia = hoje0; if (!a) return b || null; if (!b) return a; return String(a.salvoEm || '') >= String(b.salvoEm || '') ? a : b; })();
     let pronto = false, tServ = null;
-    const montarRasc = () => ({ dia: hoje0, salvoEm: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace('T', ' '), placa: placa.value, km: km.value, resp, obs, qtd, outro: outroTx.value, outroSt: outroSt.v,
+    const montarRasc = () => ({ tipo, dia: hoje0, salvoEm: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace('T', ' '), placa: placa.value, km: km.value, resp, obs, qtd, outro: outroTx.value, outroSt: outroSt.v,
       fotos: Object.assign(fotosCx.ids(), { i: Object.keys(fotoItem).reduce((o, n) => { if (fotoItem[n].estado === 'ok' && fotoItem[n].id) o[n] = fotoItem[n].id; return o; }, {}) }) });
     const enviarServ = () => { clearTimeout(tServ); tServ = null; const r = montarRasc(); API.chamar('salvarRascunhoChecklist', { rascunho: r }, { fundo: true }).catch(() => {}); };
     const mudou = () => { if (!pronto) return; try { localStorage.setItem(chave, JSON.stringify(montarRasc())); } catch (e) { /* sem armazenamento: o servidor guarda */ } clearTimeout(tServ); tServ = setTimeout(enviarServ, 6000); };
@@ -113,9 +183,9 @@ const Motorista = {
     const apagarRasc = () => { clearTimeout(tServ); tServ = null; Motorista._ckFlush = null; try { localStorage.removeItem(chave); } catch (e) { /* ok */ } };
     // foto de cada item (opcional): itens que já têm foto no cartão de fotos (pneus e cabine) não pedem de novo
     const jaTemFoto = (mod.fotos && mod.fotos.pneus || []).concat(mod.fotos && mod.fotos.cabineItem ? [mod.fotos.cabineItem] : []);
-    const comFotoPropria = mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
+    const comFotoPropria = mod.semFotoItem ? [] : mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
     const naPode = mod.naPode || [], naCam = () => ((mod.naoAplica || {})[placa.value] || []);
-    const pintaCont = () => { const l = comFotoPropria.filter(n => naCam().indexOf(n) < 0 && resp[n] !== 'na'), n = l.filter(x => fotoItem[x]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + l.length + ' · cada foto boa vale pontos'; };
+    const pintaCont = () => { if (mod.semFotoItem) { contFotos.textContent = ''; return; } const l = comFotoPropria.filter(n => naCam().indexOf(n) < 0 && resp[n] !== 'na'), n = l.filter(x => fotoItem[x]).length; contFotos.textContent = '📷 Fotos dos itens: ' + n + ' de ' + l.length + ' · cada foto boa vale pontos'; };
     const botaoFoto = nome => {
       const ob = obrig.indexOf(nome) >= 0;
       const inp = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true }), bt = h('button', { type: 'button', class: 'ck-foto' + (ob ? ' obrig' : ''), 'aria-label': 'Foto de ' + nome + (ob ? ' (obrigatória)' : ''), title: ob ? 'Foto obrigatória' : 'Foto (opcional)' });
@@ -126,7 +196,7 @@ const Motorista = {
       bt.onclick = () => { const f = fotoItem[nome]; if (f && f.estado === 'erro') { this.enviarFoto(f, () => placa.value); return; } inp.click(); };
       pinta(); return h('span', { class: 'ck-foto-cx' }, bt, inp);
     };
-    const feitoHoje = (d.checklists || []).some(c => String(c.data).slice(0, 10) === Motorista.hoje());
+    const feitoHoje = (d.checklists || []).some(c => String(c.data).slice(0, 10) === Motorista.hoje() && (c.tipo || 'SEMANAL') === tipo && c.aprovacao !== 'REJEITADO');
     let total = 0; const prog = h('span', { class: 'ck-prog' });
     const atualizarProg = () => { const vis = Object.keys(linhas).filter(n => !linhas[n].hidden); total = vis.length; prog.textContent = vis.filter(n => resp[n]).length + ' de ' + total + ' itens'; };
     // itens que o caminhão não tem (confirmados pela gestão) somem do checklist dele
@@ -140,8 +210,8 @@ const Motorista = {
       resp[nome] = cod; $$('.ck-op', linha).forEach(b => b.classList.toggle('on', b.classList.contains(cod))); area.hidden = cod === 'ok'; linha.classList.remove('falta'); atualizarProg(); mudou();
       if (cod !== 'ok' && pronto) area.querySelector('input').focus(); } }, ic);
     const raiz = h('div', { class: 'ck' },
-      h('div', { class: 'card' }, h('h2', { text: 'Checklist do dia' }), feitoHoje ? h('div', { class: 'ck-aviso', text: '✅ Você já enviou um checklist hoje. Só envie outro se trocou de caminhão.' }) : null,
-        h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'KM atual' }), km)),
+      h('div', { class: 'card' }, h('h2', { text: tipo === 'DIARIO' ? 'Checklist diário (antes de sair)' : 'Checklist semanal (completo)' }), feitoHoje ? h('div', { class: 'ck-aviso', text: '✅ Você já enviou este checklist hoje. Só envie outro se trocou de caminhão.' }) : null,
+        h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), this.caminhaoCampo(placa)), h('div', { class: 'field' }, h('label', { text: 'KM atual' }), km),
         h('div', { class: 'ck-leg' }, h('span', { class: 'ok' }, h('i', { text: '✓' }), 'Ok: funcionando bem'), h('span', { class: 'warn' }, h('i', { text: '!' }), 'Atenção: algo estranho ou gasto'), h('span', { class: 'bad' }, h('i', { text: '✕' }), 'Ruim: defeito (a oficina é avisada)'),
           h('button', { class: 'btn small secondary', type: 'button', text: '? Como fazer', onclick: () => Ajuda.abrir('checklist') })), h('small', { class: 'ck-imp-leg', text: '⛔ item impeditivo: marcado como Ruim, o caminhão fica bloqueado na hora e a oficina é avisada.' }), contFotos));
     mod.categorias.forEach(c => {
@@ -152,7 +222,7 @@ const Motorista = {
         const ob = obrig.indexOf(nome) >= 0, linha = h('div', { class: 'ck-lin' + (ob ? ' obrig' : '') }); linhas[nome] = linha;
         const imp = (mod.impeditivos || []).indexOf(nome) >= 0;
         linha.append(h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome' }, ob ? '🧯 ' : null, nome, imp ? h('span', { class: 'ck-imp', title: 'Item impeditivo: Ruim aqui bloqueia o caminhão na hora', 'aria-label': 'item impeditivo', text: '⛔' }) : null, ob ? h('span', { class: 'ck-obr', text: 'obrigatório' }) : null),
-          jaTemFoto.indexOf(nome) < 0 ? botaoFoto(nome) : h('span', { class: 'ck-foto-cx vazio' }),
+          jaTemFoto.indexOf(nome) < 0 && !mod.semFotoItem ? botaoFoto(nome) : h('span', { class: 'ck-foto-cx vazio' }),
           h('span', { class: 'ck-ops' }, botao(nome, 'ok', '✓', 'Ok', linha, area), botao(nome, 'warn', '!', 'Atenção', linha, area), botao(nome, 'bad', '✕', 'Ruim', linha, area))), ...(dicas[nome] ? [h('div', { class: 'ck-dica', text: dicas[nome] })] : []),
           ...(naPode.indexOf(nome) >= 0 ? [h('button', { type: 'button', class: 'ck-na', 'aria-pressed': 'false', text: 'não tem neste caminhão', onclick: () => marcarNA(nome, linha, area, resp[nome] !== 'na') })] : []), area);
         ctl[nome] = { linha, area };
@@ -184,8 +254,9 @@ const Motorista = {
         const fi = Object.keys(fotoItem).map(n => fotoItem[n]); await Promise.all(fi.map(f => f.estado === 'enviando' ? f.pronta : null));
         const fotos = fotosCx.valor(); fotos.itens = {}; Object.keys(fotoItem).forEach(n => { if (fotoItem[n].estado === 'ok' && fotoItem[n].id) fotos.itens[n] = fotoItem[n].id; });
         env.textContent = 'Enviando…';
-        const r = await API.chamar('enviarChecklist', { placa: placa.value, km: k, itens, fotos, outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
+        const r = await API.chamar('enviarChecklist', { tipo, placa: placa.value, km: k, itens, fotos, outro: outroTx.value.trim() ? { descricao: outroTx.value.trim(), status: outroSt.v } : null });
         apagarRasc(); App.recarregar(true);
+        (d.checklists = d.checklists || []).push({ id: r.id, tipo: r.tipo || tipo, data: Motorista.hoje(), aprovacao: 'PENDENTE', placa: placa.value, protocolo: r.protocolo });   // o seletor já mostra "feito" sem esperar
         const m = abrirModal(r.bloqueado ? 'Caminhão BLOQUEADO 🔴' : 'Checklist enviado ✅', h('div', { class: 'ck-ok' }, h('p', {}, h('b', { text: r.protocolo })),
           r.bloqueado ? h('div', { class: 'ck-bloq' }, h('b', { text: 'Não saia com este caminhão.' }), h('span', { text: ' Você marcou como ruim: ' + (r.impeditivos || []).join(', ') + '. A oficina e a gestão já foram avisadas.' })) : null,
           h('p', { text: 'Enviado para aprovação da gestão.' }), h('p', { class: 'hint', text: 'Os pontos entram assim que o checklist for aprovado.' }),
@@ -193,13 +264,13 @@ const Motorista = {
       } catch (e) { mensagem(msg, e.message); env.disabled = false; env.textContent = 'Enviar checklist'; }
     };
     atualizarProg(); pintaCont();
-    raiz.append(outroCx, fotosCx.el, eq, h('div', { class: 'ck-rodape' }, prog, msg, env));
+    raiz.append(...[outroCx, fotosCx.el, mod.quantidades.length ? eq : null, h('div', { class: 'ck-rodape' }, prog, msg, env)].filter(Boolean));
     placa.addEventListener('change', () => { aplicarNA(); mudou(); }); km.addEventListener('input', () => mudou()); aplicarNA();
     // ---- continua de onde parou ----
     const n0 = rascunho ? Object.keys(rascunho.resp || {}).length : 0, f0 = rascunho && rascunho.fotos || {};
     const temFoto = (f0.c || []).length || Object.keys(f0.p || {}).length || f0.k || Object.keys(f0.i || {}).length;
     if (rascunho && (n0 || temFoto || rascunho.km)) {
-      if (rascunho.placa && [...placa.options].some(o => o.value === rascunho.placa)) placa.value = rascunho.placa;
+      if (rascunho.placa && [...placa.options].some(o => o.value === rascunho.placa)) { placa.value = rascunho.placa; if (placa._pintar) placa._pintar(); }
       if (rascunho.km) km.value = rascunho.km;
       aplicarNA();
       Object.keys(rascunho.resp || {}).forEach(n => { const c = ctl[n]; if (!c || c.linha.hidden) return; if (rascunho.resp[n] === 'na') { if ($('.ck-na', c.linha)) marcarNA(n, c.linha, c.area, true); return; } const b = $('.ck-op.' + rascunho.resp[n], c.linha); if (b) b.click(); });
@@ -234,7 +305,7 @@ const Motorista = {
     };
     const ult = (d.abastecimentos || []).slice().sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 5);
     return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Lançar abastecimento' }),
-      h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'Data' }), data), h('div', { class: 'field' }, h('label', { text: 'Hora (opcional)' }), hora)),
+      h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), this.caminhaoCampo(placa)), h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Data' }), data), h('div', { class: 'field' }, h('label', { text: 'Hora (opcional)' }), hora)),
       h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Produto' }), prod), h('div', { class: 'field' }, h('label', { text: 'KM' }), km), h('div', { class: 'field' }, h('label', { text: 'Litros' }), lit), h('div', { class: 'field' }, h('label', { text: 'Valor total' }), val)),
       unit, msg, h('div', { class: 'modal-actions' }, env), h('small', { class: 'hint', text: 'Quando a fatura do posto chegar, o sistema confere e você ganha pontos.' })),
       ult.length ? h('div', { class: 'card' }, h('h2', { text: 'Últimos lançamentos' }), ...ult.map(a => this.linhaAbast(a))) : null);
@@ -257,7 +328,7 @@ const Motorista = {
     };
     const meus = (d.ocorrencias || []).filter(o => o.origem === 'relato').sort((a, b) => String(b.dataAbertura).localeCompare(String(a.dataAbertura))).slice(0, 10);
     return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Relatar defeito' }), h('p', { class: 'hint', text: 'Para algo errado no caminhão sem precisar fazer o checklist. Vai direto para a oficina.' }),
-      h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), placa), h('div', { class: 'field' }, h('label', { text: 'O que é' }), item), h('div', { class: 'field' }, h('label', { text: 'KM' }), km)),
+      h('div', { class: 'field' }, h('label', { text: 'Caminhão' }), this.caminhaoCampo(placa)), h('div', { class: 'row' }, h('div', { class: 'field' }, h('label', { text: 'O que é' }), item), h('div', { class: 'field' }, h('label', { text: 'KM' }), km)),
       h('div', { class: 'field' }, h('label', { text: 'Descreva' }), desc), h('div', { class: 'field' }, h('label', { text: 'Gravidade' }), seg), linhaParado, msg, h('div', { class: 'modal-actions' }, env)),
       meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus relatos' }), ...meus.map(o => this.linhaOc(o))) : null);
   },
@@ -307,7 +378,7 @@ const Motorista = {
     const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
     return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Lançar manutenção' }), lista,
       h('p', { class: 'hint', text: 'Fez algum serviço no caminhão na rua (engraxamento, lâmpada, borracharia…)? Lance aqui. Ele só entra no histórico do caminhão depois que a gestão aprovar.' }),
-      h('div', { class: 'row' }, campo('Caminhão', placa), campo('Data', data)), campo('O que foi feito', serv),
+      campo('Caminhão', this.caminhaoCampo(placa)), campo('Data', data), campo('O que foi feito', serv),
       h('div', { class: 'row' }, campo('KM', km), campo('Valor', val)), campo('Onde foi feito', local), campo('Observação', obs),
       campo('Nota / recibo', caixa), campoGar, msg, h('div', { class: 'modal-actions' }, env)),
       meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus lançamentos' }), ...meus.map(x => this.linhaManut(x))) : null);
@@ -350,17 +421,21 @@ const Motorista = {
   },
   fmtPts(v) { return (Math.round((Number(v) || 0) * 100) / 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); },
   /** Mesma conta do servidor (_pontosChecklist_), para a gestão ver os pontos enquanto avalia as fotos. */
-  calcPontos(c, itens, aval, na, R, rec, cfg) {
+  calcPontos(c, itens, aval, na, R, rec, det) {     // mesma conta do servidor (_pontosChecklist_)
     let f = null; try { f = JSON.parse(c.fotos || 'null'); } catch (e) { f = null; } f = f || {};
-    const g = id => aval[id] || 'boa', vale = (id, cheio, meia) => g(id) === 'boa' ? cheio : g(id) === 'meia' ? (rec ? 0 : meia) : 0, min = (cfg && cfg.carroceriaMin) || 4;
-    const nItens = itens.filter(i => ['ok', 'warn', 'bad'].indexOf(i.status) >= 0 && String(i.quantidade) === '' && !/^Outro:/.test(i.item) && na.indexOf(i.item) < 0).length;
+    const P = det.pesos || { item: 0.5, itemFoto: 0.5, obrig: 1, extra: 0.5 }, cfg = det.fotosCfg || { carroceriaMin: 4, pneus: [], cabineItem: '' }, diario = c.tipo === 'DIARIO', qtds = det.qtds || [];
+    const g = id => aval[id] || 'boa', vale = (id, cheio, meia) => g(id) === 'boa' ? cheio : g(id) === 'meia' ? (rec ? 0 : meia) : 0, min = diario ? 0 : cfg.carroceriaMin;
+    const resp = itens.filter(i => ['ok', 'warn', 'bad'].indexOf(i.status) >= 0 && qtds.indexOf(i.item) < 0 && !/^Outro:/.test(i.item) && na.indexOf(i.item) < 0);
     const car = f.c || [], obrig = car.slice(0, min).concat(Object.values(f.p || {}), f.k ? [f.k] : []), extras = car.slice(min), fi = Object.keys(f.i || {}).filter(n => na.indexOf(n) < 0).map(n => f.i[n]);
-    const t = nItens * R.item + obrig.reduce((a, id) => a + vale(id, R.obrig, R.obrig / 2), 0) + extras.reduce((a, id) => a + vale(id, R.extra, R.extra), 0) + fi.reduce((a, id) => a + vale(id, R.itemFoto, R.itemFoto), 0);
-    return { total: Math.round(t * 100) / 100, nItens, nFotos: obrig.length + extras.length + fi.length };
+    const comFoto = diario ? [] : resp.filter(i => (cfg.pneus || []).indexOf(i.item) < 0 && i.item !== cfg.cabineItem), nObrig = diario ? (det.diarioFotos || []).length : cfg.carroceriaMin + (cfg.pneus || []).length + 1;
+    const max = resp.length * P.item + comFoto.length * P.itemFoto + nObrig * P.obrig;
+    const nota = resp.length * P.item + fi.reduce((a, id) => a + vale(id, P.itemFoto, P.itemFoto), 0) + obrig.reduce((a, id) => a + vale(id, P.obrig, P.obrig / 2), 0) + extras.reduce((a, id) => a + vale(id, P.extra, P.extra), 0);
+    const frac = max ? Math.min(1, nota / max) : 0;
+    return { total: Math.round(frac * (diario ? R.diario : R.semanal) * 100) / 100, pct: Math.round(frac * 100) };
   },
   linhaCheck(c) {
     const s = this.statusCheck(c), itens = (this.d().checklistItens || []).filter(i => String(i.checklistId) === String(c.id));
-    return h('div', { class: 'hist-lin click', onclick: () => this.detalheCheck(c, itens) }, h('div', {}, h('b', { text: 'Checklist · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + (c.aprovacao === 'REJEITADO' && c.obsAprov ? ' · ' + c.obsAprov : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }));
+    return h('div', { class: 'hist-lin click', onclick: () => this.detalheCheck(c, itens) }, h('div', {}, h('b', { text: (c.tipo === 'DIARIO' ? 'Diário' : 'Semanal') + ' · ' + c.placa }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.protocolo + (c.aprovacao === 'REJEITADO' && c.obsAprov ? ' · ' + c.obsAprov : '') })), h('span', { class: 'badge ' + s[1], text: s[0] }));
   },
   detalheCheck(c, itens) {
     const ruins = itens.filter(i => i.status !== 'ok' && i.status), cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + c.placa + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'),
@@ -376,7 +451,7 @@ const Motorista = {
     if (!f) return h('div', { class: 'hint', text: 'Este checklist não tem fotos (foi enviado antes da exigência).' });
     const th = (id, tam) => 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + tam;
     const itens = []; (f.c || []).forEach((id, i) => itens.push({ id, leg: 'Carroceria ' + (i + 1) })); Object.keys(f.p || {}).forEach(n => itens.push({ id: f.p[n], leg: n })); if (f.k) itens.push({ id: f.k, leg: 'Cabine' }); Object.keys(f.i || {}).forEach(n => itens.push({ id: f.i[n], leg: n }));
-    const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg + (av[x.id] === 'meia' ? ' · meia boca' : av[x.id] === 'ruim' ? ' · ruim' : '') }));
+    const foto = (x, i) => h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy', onerror: e => { const i = e.target; if (!i.dataset.tentou) { i.dataset.tentou = 1; i.src = 'https://lh3.googleusercontent.com/d/' + x.id + '=w320'; } } }), h('small', { text: x.leg + (av[x.id] === 'meia' ? ' · meia boca' : av[x.id] === 'ruim' ? ' · ruim' : '') }));
     const g = h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos' }));
     const lista = h('div', { class: 'ckf-grid' }); itens.forEach((x, i) => lista.append(foto(x, i)));
     g.append(lista); return g;
@@ -429,13 +504,13 @@ const Motorista = {
     const np = l.filter(pend).length, cx = h('div', { class: 'card' }, h('h2', { text: 'Checklists enviados' }), np && gestor ? h('div', { class: 'aviso-aprov', text: np + (np > 1 ? ' checklists aguardam' : ' checklist aguarda') + ' sua aprovação' }) : null);
     if (!l.length) cx.append(h('div', { class: 'empty', text: 'Nenhum checklist enviado ainda.' }));
     l.forEach(c => { const s = this.statusCheck(c);
-      cx.append(h('div', { class: 'hist-lin click', onclick: () => this.abrirCheckGestao(c, gestor) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
+      cx.append(h('div', { class: 'hist-lin click', onclick: () => this.abrirCheckGestao(c, gestor) }, h('div', {}, h('b', { text: c.placa + ' · ' + this.nomeMot(c.motoristaId) }), h('small', { text: (c.tipo === 'DIARIO' ? 'Diário' : 'Semanal') + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' })), h('span', { class: 'badge ' + s[1], text: s[0] }))); });
     return cx;
   },
   /** Abre o checklist com itens, ocorrências e fotos; admin/master aprovam ou devolvem. */
   async abrirCheckGestao(c, gestor) {
     const st = this.statusCheck(c), cx = h('div', {}, h('p', {}, h('b', { text: c.protocolo }), ' · ' + this.nomeMot(c.motoristaId) + ' · ' + this.dia(c.data) + ' ' + (c.hora || '') + ' · ' + Number(c.km).toLocaleString('pt-BR') + ' km'),
-      h('p', {}, h('span', { class: 'badge ' + st[1], text: st[0] }), ' ' + c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' + (c.pontos !== '' && c.pontos != null && c.aprovacao === 'APROVADO' ? ' · ' + this.fmtPts(c.pontos) + ' pts' : '')));
+      h('p', {}, h('span', { class: 'badge tipo', text: c.tipo === 'DIARIO' ? 'Diário' : 'Semanal' }), ' ', h('span', { class: 'badge ' + st[1], text: st[0] }), ' ' + c.totalOk + ' ok · ' + c.totalWarn + ' atenção · ' + c.totalBad + ' ruins' + (c.pontos !== '' && c.pontos != null && c.aprovacao === 'APROVADO' ? ' · ' + this.fmtPts(c.pontos) + ' pts' : '')));
     const m = abrirModal('Checklist · ' + c.placa, cx), corpo = h('div', {}, h('div', { class: 'hint', text: 'Carregando…' })); cx.append(corpo);
     let det; try { det = await API.chamar('checklistDetalhe', { id: c.id }, { mudo: true }); } catch (e) { corpo.textContent = e.message; return; }
     corpo.textContent = '';
@@ -462,8 +537,8 @@ const Motorista = {
     if (!ocs.length && !imp.length) corpo.append(h('div', { class: 'empty', text: 'Nenhum problema relatado.' }));
     // ---- itens que o caminhão não tem: o motorista marca "não tem", a gestão confirma (some dos próximos checklists) ----
     const naMot = (det.itens || []).filter(i => i.status === 'na').map(i => i.item), naSel = new Set((det.naoAplica || []).concat(naMot)), naPode = det.naPode || [];
-    const R = det.regras || { item: 0.5, itemFoto: 0.5, obrig: 1, extra: 0.5 }, aval = {}, ptsEl = h('b');
-    const recalc = () => { const p = this.calcPontos(c, det.itens || [], aval, Array.from(naSel), R, det.recorrente, det.fotosCfg); ptsEl.textContent = this.fmtPts(p.total) + ' pontos'; return p; };
+    const R = det.regras || { semanal: 54, diario: 10 }, aval = {}, ptsEl = h('b');
+    const recalc = () => { const p = this.calcPontos(c, det.itens || [], aval, Array.from(naSel), R, det.recorrente, det); ptsEl.textContent = this.fmtPts(p.total) + ' pontos (' + p.pct + '% do perfeito)'; return p; };
     if (gestor && (decide || naSel.size)) {
       const chips = h('div', { class: 'na-chips' }), pinta = () => { limpar(chips); Array.from(naSel).sort().forEach(n => chips.append(h('span', { class: 'na-chip' + (naMot.indexOf(n) >= 0 && (det.naoAplica || []).indexOf(n) < 0 ? ' novo' : '') }, n,
         decide ? h('button', { type: 'button', 'aria-label': 'Tirar ' + n, text: '×', onclick: () => { naSel.delete(n); pinta(); recalc(); } }) : null))); if (!naSel.size) chips.append(h('span', { class: 'hint', text: 'Nenhum. Todos os itens se aplicam a este caminhão.' })); };
@@ -484,7 +559,7 @@ const Motorista = {
           const r = await API.chamar('decidirChecklist', { id: c.id, decisao, motivo: mot.value, resolvidas: ocs.filter(o => escolha[o.id] === 'resolvido').map(o => o.id), naoAplica: Array.from(naSel), fotosAval: aval });
           // a tela muda na hora; os dados completos chegam em segundo plano
           c.aprovacao = decisao === 'aprovar' ? 'APROVADO' : 'REJEITADO'; c.aprovadoPor = (App.sessao && App.sessao.nome) || ''; c.obsAprov = mot.value; if (r && r.calculo) c.pontos = r.calculo.total;
-          m.fechar(); toast(decisao === 'aprovar' ? 'Checklist aprovado' + (r && r.pontos ? ' · +' + this.fmtPts(r.pontos) + ' pts para o motorista' : '') : 'Checklist devolvido ao motorista'); App.abrirAba(App.aba); App.recarregar(true);
+          m.fechar(); toast(decisao === 'aprovar' ? 'Checklist aprovado' + (r && r.pontos ? ' · +' + this.fmtPts(r.pontos) + ' pts para o motorista' : r && r.motivoZero ? '. Sem pontos: ' + r.motivoZero : '') : 'Checklist devolvido ao motorista'); App.abrirAba(App.aba); App.recarregar(true);
         } catch (e) { mensagem(msg, e.message); ok.disabled = no.disabled = false; } };
       ok.onclick = () => enviar('aprovar'); no.onclick = () => enviar('devolver');
       corpo.append(resumo, mot, msg, h('div', { class: 'modal-actions' }, no, ok));
@@ -501,7 +576,7 @@ const Motorista = {
       const seg = h('div', { class: 'aval-seg', role: 'radiogroup', 'aria-label': 'Avaliar ' + x.leg }), card = h('div', { class: 'ckf-aval' });
       const pinta = () => { const v = aval[x.id] || 'boa'; card.dataset.g = v; $$('button', seg).forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); }); };
       [['boa', 'Boa'], ['meia', 'Meia'], ['ruim', 'Ruim']].forEach(([v, t]) => seg.append(h('button', { type: 'button', role: 'radio', dataset: { v }, text: t, onclick: () => { if (v === 'boa') delete aval[x.id]; else aval[x.id] = v; pinta(); recalc(); } })));
-      card.append(h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy' }), h('small', { text: x.leg })), seg);
+      card.append(h('button', { class: 'ckf-gal', type: 'button', title: 'Ampliar: ' + x.leg, onclick: () => Visor.abrir(itens.map(y => ({ src: th(y.id, 1600), leg: y.leg })), i) }, h('img', { src: th(x.id, 320), alt: x.leg, loading: 'lazy', onerror: e => { const i = e.target; if (!i.dataset.tentou) { i.dataset.tentou = 1; i.src = 'https://lh3.googleusercontent.com/d/' + x.id + '=w320'; } } }), h('small', { text: x.leg })), seg);
       pinta(); grade.append(card);
     });
     return h('div', { class: 'ckf-galeria' }, h('div', { class: 'sec-t', text: 'Fotos · avalie: boa vale ponto cheio, meia boca vale menos, ruim vale 0' }), grade);
@@ -537,8 +612,9 @@ const Motorista = {
     const d = this.d(), e = d.escalaHoje, feito = (d.checklists || []).some(c => String(c.data).slice(0, 10) === Motorista.hoje());
     const cx = h('div', { class: 'card hoje' }, h('h2', { text: 'Seu caminhão hoje' }));
     if (!e) { cx.append(h('div', { class: 'empty', text: 'Você ainda não está escalado para hoje. Fale com a gestão.' })); return cx; }
-    cx.append(h('div', { class: 'hoje-linha' }, placaHtmlEl(e.placa), h('div', {}, h('b', { text: e.modelo || 'Caminhão' }), h('small', { text: e.origem === 'escala' ? 'Escalado para hoje' + (e.turno ? ' · ' + e.turno : '') : 'Caminhão fixo (sem escala lançada)' }))),
-      feito ? h('div', { class: 'ck-aviso', text: '✅ Checklist de hoje enviado.' }) : h('button', { class: 'btn', type: 'button', text: this.temRascunho() ? 'Continuar o checklist (salvo pela metade)' : 'Fazer o checklist agora', onclick: () => App.abrirAba('checklists') }));
+    cx.append(...[h('div', { class: 'hoje-linha' }, placaHtmlEl(e.placa), h('div', {}, h('b', { text: e.modelo || 'Caminhão' }), h('small', { text: e.origem === 'escala' ? 'Escalado para hoje' + (e.turno ? ' · ' + e.turno : '') : 'Caminhão fixo (sem escala lançada)' }))),
+      feito ? h('div', { class: 'ck-aviso', text: '✅ Checklist de hoje enviado.' }) : h('button', { class: 'btn', type: 'button', text: this.temRascunho() ? 'Continuar o checklist (salvo pela metade)' : 'Fazer o checklist de hoje', onclick: () => App.abrirAba('checklists') }),
+      (() => { const st = this.situacaoCk(); return d.checklistModelo && d.checklistModelo.diario && !st.semanaFeita ? h('button', { class: 'ck-semana-falta', type: 'button', onclick: () => { this.tipoCk = 'SEMANAL'; App.abrirAba('checklists'); } }, '🗂️ Falta o checklist semanal desta semana', h('small', { text: 'Toque para fazer (já vale como o de hoje)' })) : null; })()].filter(Boolean));
     return cx;
   }
 };

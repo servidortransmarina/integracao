@@ -56,7 +56,11 @@ const Motoristas = {
     const edit = !!m, v = k => (m && m[k]) || '';
     const nome = h('input', { type: 'text', value: v('nome'), autocomplete: 'off' }), mat = h('input', { type: 'text', value: v('matricula'), maxlength: '20' });
     const cpf = h('input', { type: 'text', inputmode: 'numeric', maxlength: '14', placeholder: '000.000.000-00', autocomplete: 'off' });
-    const tel = h('input', { type: 'tel', value: v('telefone'), maxlength: '20' }), placa = h('input', { type: 'text', value: v('placaFixa'), maxlength: '8', placeholder: 'ABC1D23' });
+    const tel = h('input', { type: 'tel', value: v('telefone'), maxlength: '20' }), placa = (() => {     // só caminhões da frota própria (cadastrados no sistema), para não digitar placa errada
+      const atual = v('placaFixa'), frota = ((App.dados && App.dados.veiculos) || []).map(x => x.placa).filter(Boolean).sort();
+      const sel = h('select', { 'aria-label': 'Placa fixa' }, h('option', { value: '', text: 'Sem placa fixa (segue a escala)' }), frota.map(p => h('option', { value: p, text: p })));
+      if (atual && frota.indexOf(atual) < 0) sel.append(h('option', { value: atual, text: atual + ' (não está na frota)' }));
+      sel.value = atual || ''; return sel; })();
     const vinc = h('select', {}, ['Frota própria', 'Terceirizado', 'Agregado'].map(o => h('option', { value: o, selected: o === (v('vinculo') || 'Frota própria') ? true : null }, o)));
     const stat = h('select', {}, ['Ativo', 'Inativo'].map(o => h('option', { value: o, selected: o === (v('status') || 'Ativo') ? true : null }, o)));
     const msg = h('div', { class: 'msg' }), salvar = h('button', { class: 'btn', type: 'submit', text: edit ? 'Salvar' : 'Cadastrar' });

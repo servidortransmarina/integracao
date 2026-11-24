@@ -65,11 +65,12 @@ function primeiroNome(n) { const p = String(n || '').trim().split(/\s+/)[0].toLo
 const Hub = {
   ir(id) { App.abrirAba(id); },
   /** Chamado sempre que App.dados muda: prepara o db do GF e sincroniza alertas automáticos. */
-  aposDados() {
+  aposDados(semSync) {
     if (App.sessao.perfil === 'motorista') return;
     db = normalizarDadosDaPlanilha(limparTextoGF(App.dados));
     db.veiculos.forEach(v => garantirLimites(v.placa));
-    try { sincronizarAlertas(true); } catch (e) { console.error(e); }
+    // depois de um patch (resposta de uma gravação) não sincroniza alertas: a sincronização grava, a gravação devolve patch… e a tela ficaria se redesenhando sozinha
+    if (!semSync) { try { sincronizarAlertas(true); } catch (e) { console.error(e); } }
   },
   contarAtencao() { try { return db.alertas.filter(a => a.status !== 'resolvido' && grupoAlerta(a) === 'atrasado').length + ocorrenciasAbertas().length; } catch (e) { return 0; } }   // atrasados + ocorrências dos motoristas pendentes
 };
@@ -103,7 +104,7 @@ const App = {
         // Pessoa preenchendo algo: atualiza números e menus, mas não redesenha a tela por baixo dela.
         if (ocupado()) {
           this.sessao.perfil = d.perfil || this.sessao.perfil; this.juntarHistorico(); Hub.aposDados(); this.montarNavegacao(); Online.atualizar(d);
-          const quandoLivre = n => { if (this.dados !== d || !this.sessao) return; if (ocupado() && n < 600) { setTimeout(() => quandoLivre(n + 1), 200); return; } this.abrirAba(this.abaValida(this.aba)); };
+          const quandoLivre = n => { if (this.dados !== d || !this.sessao) return; if (ocupado() && n < 600) { setTimeout(() => quandoLivre(n + 1), 200); return; } const y = window.scrollY; this.abrirAba(this.abaValida(this.aba)); if (y) window.scrollTo(0, y); };
           setTimeout(() => quandoLivre(0), 200); return;
         }
         await this.aplicarDados(); }).catch(() => {}).finally(() => { this._recFundo = null; });
@@ -114,12 +115,33 @@ const App = {
       return; }
     setLoading(false); await this.aplicarDados();
   },
+  /** Junta as linhas que o servidor devolveu (patch) em App.dados e redesenha logo depois da ação (sem esperar o getBootstrap). */
+  aplicarPatch(p) {
+    const D = this.dados; if (!D || !p || !p.tabelas) return;
+    Object.keys(p.tabelas).forEach(k => {
+      const t = p.tabelas[k];
+      if (t.cheia) { if (k !== 'manutencoes') D[k] = t.linhas; return; }     // manutenções: a lista do navegador tem o histórico juntado; o recarregamento cuida
+      const arr = D[k] || (D[k] = []);
+      t.linhas.forEach(row => { const i = arr.findIndex(x => String(x[t.chave]) === String(row[t.chave])); if (i >= 0) arr[i] = row; else arr.push(row); });
+    });
+    if (p.statusFrota) D.statusFrota = p.statusFrota;
+    clearTimeout(this._tPatch);
+    this._tPatch = setTimeout(() => {      // várias chamadas seguidas: redesenha uma vez só
+      const ocupado = () => { const a = document.activeElement; return !!$('.overlay.show') || !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('#hubConteudo, #gfRoot')); };
+      // espera as outras gravações da fila: o GF já mostrou o que a pessoa lançou e ainda não está em App.dados
+      const vez = n => { if (!this.sessao) return; if ((ocupado() || API._frente > 0) && n < 300) { this._tPatch = setTimeout(() => vez(n + 1), 150); return; }
+        Hub.aposDados(true); this.montarNavegacao();
+        const ab = ABAS.find(x => x.id === this.aba); if (ab && (ab.esc || ab.fin || ab.ponto)) return;     // telas em quadro (Ponto, Escalas, Financeiro) não dependem destas tabelas
+        const y = window.scrollY; this.abrirAba(this.abaValida(this.aba)); window.scrollTo(0, y); };
+      vez(0);
+    }, 30);
+  },
   async aplicarDados() {
     this.sessao.perfil = this.dados.perfil || this.sessao.perfil;
     this.juntarHistorico();
     Hub.aposDados(); this.montarUsuario(); this.montarNavegacao();
     if (this.sessao.perfil === 'master') await Usuarios.contarPendentes();
-    this.abrirAba(this.abaValida(this.aba));
+    const y = window.scrollY; this.abrirAba(this.abaValida(this.aba)); if (y) window.scrollTo(0, y);     // recarregar em segundo plano não joga a tela para o topo
     Online.atualizar(this.dados);
     // depois de abrir: completa os últimos 12 meses em segundo plano, sem travar a tela
     if (this.hist && !this.hist.fundo) { this.hist.fundo = true; setTimeout(() => this.pedirHistorico(this.isoMenos(365)), 2500); }
@@ -364,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4g',
+  VERSAO: '4h',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

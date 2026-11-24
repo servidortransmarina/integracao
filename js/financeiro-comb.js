@@ -297,7 +297,7 @@ const Comb = {
     const busca = h('input', { id: 'cbBusca', class: 'cb-in', placeholder: 'Buscar nome ou placa', value: this.busca, oninput: e => { this.busca = e.target.value; this.render(); } });
     const filtro = h('div', { class: 'cb-postos' }, [['', 'Todos'], ['AGREGADO', 'Agregados'], ['FROTA', 'Frota própria']].map(([v, t]) => h('button', { type: 'button', class: 'cb-posto' + (this.grupoCad === v ? ' on' : ''), onclick: () => { this.grupoCad = v; this.render(); } }, h('b', { text: t }), h('small', { text: String(d.cadastro.filter(c => !v || c.grupo === v).length) }))));
     const tab = h('div', { class: 'cb-tab' }, h('table', { class: 'cb-cad' }, h('thead', {}, h('tr', {}, h('th', { text: 'Motorista' }), h('th', { text: 'Placa' }), h('th', { text: 'Grupo' }), h('th', { text: 'Situação' }), so ? null : h('th', {}))),
-      h('tbody', {}, lista.map(c => h('tr', { class: c.ativo === 'NAO' ? 'inativo' : '' }, h('td', { class: 'nm', text: c.nome }), h('td', { class: 'pl', text: c.placa }), h('td', { text: c.grupo === 'FROTA' ? 'Frota própria' : 'Agregado' }), h('td', { text: c.ativo === 'NAO' ? 'Inativo' : 'Ativo' }),
+      h('tbody', {}, lista.map(c => h('tr', { class: c.ativo === 'NAO' ? 'inativo' : '' }, h('td', { class: 'nm' }, c.nome, c.daEscala ? h('small', { class: 'cb-esc', title: 'Quem mais rodou com o caminhão nos últimos 30 dias, pela escala' + (c.nomeCadastro ? ' (no cadastro: ' + c.nomeCadastro + ')' : ''), text: ' · pela escala' }) : null), h('td', { class: 'pl', text: c.placa }), h('td', { text: c.grupo === 'FROTA' ? 'Frota própria' : 'Agregado' }), h('td', { text: c.ativo === 'NAO' ? 'Inativo' : 'Ativo' }),
         so ? null : h('td', { class: 'n' }, h('button', { class: 'btn-link', type: 'button', text: 'Editar', onclick: () => this.editarCad(c) })))))));
     return h('div', { class: 'cb-cadastro' },
       h('div', { class: 'cb-cad-cab' }, h('h3', { text: 'Motoristas e placas' }), busca, filtro, so ? null : h('button', { class: 'btn', type: 'button', text: '+ Cadastrar', onclick: () => this.editarCad() })),
@@ -307,7 +307,7 @@ const Comb = {
         h('section', { class: 'cb-box' }, h('h4', { text: 'Importar planilha antiga' }), h('p', { class: 'hint', text: 'Traz motoristas, placas e as faturas da FATURA_POSTO (.xlsm). Cada pagamento só pode ser importado uma vez.' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Escolher arquivo', onclick: () => this.importar() }))));
   },
   editarCad(c) {
-    const nome = h('input', { maxlength: 60, value: c ? c.nome : '' }), placa = h('input', { maxlength: 12, value: c ? c.placa : '', style: 'text-transform:uppercase' });
+    const nome = h('input', { maxlength: 60, value: c ? (c.nomeCadastro || c.nome) : '' }), placa = h('input', { maxlength: 12, value: c ? c.placa : '', style: 'text-transform:uppercase' });
     const grupo = h('select', {}, h('option', { value: 'AGREGADO', text: 'Agregado (descontado dele)', selected: c && c.grupo === 'AGREGADO' ? true : null }), h('option', { value: 'FROTA', text: 'Frota própria', selected: c && c.grupo === 'FROTA' ? true : null }));
     const ativo = h('input', { type: 'checkbox', checked: !c || c.ativo !== 'NAO' ? true : null }), msg = h('div', { class: 'msg' });
     const m = abrirModal(c ? 'Editar cadastro' : 'Cadastrar motorista/placa', h('div', {}, campo('Motorista', nome), campo('Placa', placa), campo('Grupo', grupo), h('label', { class: 'cb-todos' }, ativo, ' Ativo (aparece no lançamento)'), msg,

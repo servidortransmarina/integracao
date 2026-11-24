@@ -91,8 +91,16 @@ const Visor = {
     if (!fotos || !fotos.length) return;
     let at = i || 0, x0 = null;
     const img = h('img', { class: 'vs-img', alt: '' }), leg = h('div', { class: 'vs-leg' }), cont = h('span', { class: 'vs-cont' }), carregando = h('div', { class: 'vs-carr', text: 'Carregando…' });
-    const ir = n => { at = (n + fotos.length) % fotos.length; carregando.hidden = false; img.classList.remove('ok'); img.src = fotos[at].src; img.alt = fotos[at].leg || ''; leg.textContent = fotos[at].leg || ''; cont.textContent = (at + 1) + ' / ' + fotos.length; };
-    img.onload = () => { carregando.hidden = true; img.classList.add('ok'); }; img.onerror = () => { carregando.textContent = 'Não consegui abrir esta foto.'; };
+    const ir = n => { at = (n + fotos.length) % fotos.length; carregando.hidden = false; carregando.textContent = 'Carregando…'; img.classList.remove('ok'); tentativas = alternativas(fotos[at].src); img.src = fotos[at].src; img.alt = fotos[at].leg || ''; leg.textContent = fotos[at].leg || ''; cont.textContent = (at + 1) + ' / ' + fotos.length; };
+    // foto do Drive: se a miniatura grande falhar, tenta outros endereços do próprio Google antes de desistir
+    const alternativas = src => { const m = String(src).match(/[?&]id=([A-Za-z0-9_-]{15,})/) || String(src).match(/\/d\/([A-Za-z0-9_-]{15,})/); if (!m) return [];
+      const id = m[1]; return ['https://lh3.googleusercontent.com/d/' + id + '=w1600', 'https://drive.google.com/thumbnail?id=' + id + '&sz=w800', 'https://drive.google.com/uc?export=view&id=' + id]; };
+    let tentativas = [];
+    img.onload = () => { carregando.hidden = true; img.classList.add('ok'); };
+    img.onerror = () => {
+      if (tentativas.length) { img.src = tentativas.shift(); return; }
+      limpar(carregando).append('Não consegui abrir esta foto aqui. ', (() => { const m = String(fotos[at].src).match(/[?&]id=([A-Za-z0-9_-]{15,})/); return m ? h('a', { href: 'https://drive.google.com/file/d/' + m[1] + '/view', target: '_blank', rel: 'noopener', text: 'Abrir no Drive' }) : ''; })());
+    };
     const fechar = () => { ov.remove(); window.removeEventListener('keydown', tecla, true); };
     // captura antes do modal de baixo: Esc fecha só o visor, não a janela do checklist
     const tecla = e => { if (!['Escape', 'ArrowRight', 'ArrowLeft'].includes(e.key)) return; e.stopImmediatePropagation(); e.preventDefault(); if (e.key === 'Escape') fechar(); else ir(at + (e.key === 'ArrowRight' ? 1 : -1)); };

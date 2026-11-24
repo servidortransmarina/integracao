@@ -27,7 +27,7 @@ const API = {
   CHEFE_PONTO: ['getDadosADM', 'getPendentesADM', 'getAcoesCartasADM', 'getAssinaturasResponsaveisADM', 'getDadosEncarregado', 'getSaldoHoras', 'getBancoHorasHistorico', 'getBancoCompleto',
     'getOpcoesExtratoBanco', 'getExtratosBanco', 'estadoCapturaBancoCompleto', 'relatorioBancoHoras', 'getFuncionarios', 'getFolgas', 'estadoSincronizacaoMob'],
   soLeitura(action, data) {
-    if (!(window.App && App.sessao && App.sessao.chefe)) return false;
+    if (typeof App === 'undefined' || !(App.sessao && App.sessao.chefe)) return false;
     return action === 'ponto' ? this.CHEFE_PONTO.indexOf(data && data.acao) < 0 : this.CHEFE_LEITURA.indexOf(action) < 0;
   },
   chamar(action, data, opc) {
@@ -58,6 +58,8 @@ const API = {
       if (/^Sess[ãa]o/.test(msg) && !(opc && opc.semExpirar) && this.aoExpirar) this.aoExpirar();
       const er = new Error(msg); if (r && r.codigo) er.codigo = r.codigo; throw er;
     }
+    // o servidor devolveu o que mudou: a tela se atualiza na hora (o recarregamento completo continua em segundo plano)
+    if (r.patch && typeof App !== 'undefined' && App.dados && App.aplicarPatch) { try { App.aplicarPatch(r.patch); } catch (e) { console.error(e); } }
     return r;
   }
 };

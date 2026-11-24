@@ -1189,7 +1189,13 @@ function dicaAlerta(a, grp) {
 }
 function dicaAgendamento(ag, rot) { return `👤 ${rot} — ${quemQuando(ag, 'Programado')}`; }
 /** Quem lançou/programou e quando (e a última alteração, se houve). Registros antigos não têm a hora: mostra só o nome. */
+/** O GF antigo gravava a data junto do nome: "João Paulo (em 10/11 às 16:12)". Separa as duas coisas. */
+function separarNomeData(nome) {
+  const t = String(nome || ''), m = t.match(/^(.*?)\s*\(em\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)(?:\s+(?:às|as)\s+(\d{1,2}:\d{2}))?\)\s*$/i);
+  return m ? { nome: m[1].trim(), quando: m[2] + (m[3] ? ' às ' + m[3] : '') } : { nome: t, quando: '' };
+}
 function quemQuando(r, verbo) {
+  const nd = separarNomeData(r.nome); r = Object.assign({}, r, { nome: nd.nome });
   const cr = String(r.criadoEmTxt || ''), alt = String(r.alteradoEm || ''), temHora = x => /\d{2}:\d{2}/.test(x);
   if (r.criadoPor) {
     let t = verbo + ' por ' + r.criadoPor + (cr ? ' em ' + fmtQuando(cr) : '');
@@ -1197,7 +1203,7 @@ function quemQuando(r, verbo) {
     return t;
   }
   if (alt) return 'Último registro por ' + (r.nome || 'não identificado') + ' em ' + fmtQuando(alt);
-  return (r.nome ? 'Registrado por ' + r.nome : 'Sem autor registrado') + (cr && temHora(cr) ? ' em ' + fmtQuando(cr) : cr ? ' em ' + fmtData(cr.slice(0, 10)) : ' (data não registrada)');
+  return (r.nome ? 'Registrado por ' + r.nome : 'Sem autor registrado') + (cr && temHora(cr) ? ' em ' + fmtQuando(cr) : nd.quando ? ' em ' + nd.quando : cr ? ' em ' + fmtData(cr.slice(0, 10)) : ' (sem data registrada)');
 }
 /** Ocorrências abertas pelos motoristas (checklist) para este caminhão, no mesmo estilo dos cards de alerta. */
 /* Ocorrências dos motoristas (checklist aprovado ou defeito relatado) que estão pendentes: entram no GF como pendência. */
@@ -1242,7 +1248,7 @@ function backlogP4(placa) {
 async function revogarBloqueioGF(placa) {
   const motivo = await pedirTextoCustom('Revogar bloqueio de ' + placa, 'O checklist bloqueou o caminhão. Por que ele pode rodar? (fica registrado)');
   if (motivo === null) return; if (String(motivo).trim().length < 3) return toast('Escreva o motivo.', true);
-  try { await apiPost('revogarBloqueio', { placa, motivo: String(motivo).trim() }); toast(placa + ' liberado.'); await App.recarregar(true); renderTelaAtual(); }
+  try { await apiPost('revogarBloqueio', { placa, motivo: String(motivo).trim() }); toast(placa + ' liberado.'); App.recarregar(true); }
   catch (e) { toast(e.message, true); }
 }
 function alternarParado(placa) {

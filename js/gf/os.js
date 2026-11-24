@@ -54,7 +54,7 @@ function cartaoOS(o) {
   if (aberta) {
     if (p.prazo == null) prazo = `<div class="os-prazo ok">Sem prazo rígido · fazer na próxima parada</div>`;
     else { const atr = p.resta < 0, perto = !atr && p.pct >= 75;
-      prazo = `<div class="os-prazo ${atr ? 'atrasada' : perto ? 'perto' : 'ok'}"><div class="os-barra"><i style="width:${p.pct.toFixed(0)}%"></i></div>
+      prazo = `<div class="os-prazo ${atr ? 'atrasada' : perto ? 'perto' : 'ok'}"><div class="os-sla-barra"><i style="width:${p.pct.toFixed(0)}%"></i></div>
         <span>${p.pausado ? '⏸️ Prazo pausado (aguardando peça há ' + tempoTxt(p.compras) + ') · ' : ''}${atr ? '⏰ Atrasada ' + tempoTxt(-p.resta) : 'Faltam ' + tempoTxt(p.resta)} · prazo ${tempoTxt(p.prazo)} (${o.oficina === 'terceira' ? 'terceira' : 'interna'})</span></div>`; }
     if (!p.triado) prazo += `<div class="os-tri ${p.triResta < 0 ? 'atrasada' : ''}">⏱️ Triagem: ${p.triResta < 0 ? 'atrasada ' + tempoTxt(-p.triResta) : 'classificar em até ' + tempoTxt(p.triResta)} — confira o tipo e a criticidade</div>`;
   } else prazo = `<div class="os-prazo fim">${o.status === 'CONCLUIDA' ? '✅ Concluída' : '✖️ Cancelada'} em ${fmtQuando(o.concluidaEm)}${o.concluidaPor ? ' por ' + escHtml(o.concluidaPor) : ''} · ${tempoTxt(p.usado)} de oficina${Number(o.compraMin) > 0 ? ' · ' + tempoTxt(o.compraMin) + ' aguardando peça' : ''}${o.status === 'CONCLUIDA' && Number(o.valor) > 0 ? ' · ' + fmtMoeda(Number(o.valor)) : ''}${o.motivo ? ' — ' + escHtml(o.motivo) : ''}</div>`;
@@ -149,6 +149,6 @@ async function osGerarDosItens(escolhidos, tipoOS, prestador, obs) {
     return { placa: pl, criticidade: pior, tipo, oficina: tipoOS === 'externa' ? 'terceira' : 'interna', prestador, obs, itens: l.map(i => ({ ref: i.ref, id: i.refId, nome: i.nome.replace(/ \(agendado\)$/, ''), crit: i.crit, classe: i.classe })) }; });
   if (!ordens.length) return {};
   const r = await apiPost('criarOS', { ordens }); const nums = {};
-  ((r && r.os) || []).forEach(o => { nums[o.placa] = o.numero; App.dados.os = (App.dados.os || []).concat([o]); });
+  ((r && r.os) || []).forEach(o => { nums[o.placa] = o.numero; const l = App.dados.os || (App.dados.os = []), i = l.findIndex(x => x.id === o.id); if (i >= 0) l[i] = o; else l.push(o); });     // o patch da resposta pode já ter trazido
   return nums;
 }
