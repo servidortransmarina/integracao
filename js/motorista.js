@@ -600,7 +600,7 @@ const Motorista = {
     if (!l.length) cx.append(h('div', { class: 'empty', text: f.st === 'pendentes' ? 'Nenhuma ocorrência pendente' + (f.placa ? ' neste caminhão' : '') + '. ✅' : 'Nada por aqui.' }));
     const acao = async (nome, o, ok) => { try { await API.chamar(nome, { id: o.id }); toast(ok); App.recarregar(true); } catch (e) { toast(e.message, true); } };
     l.forEach(o => {
-      const st = String(o.status).toUpperCase(), btn = !pode ? null : st === 'ABERTA' ? h('button', { class: 'btn small', type: 'button', text: 'Resolvido', onclick: () => acao('resolverOcorrencia', o, 'Marcada como resolvida.') })
+      const st = String(o.status).toUpperCase(), btn = !pode ? null : st === 'ABERTA' ? h('button', { class: 'btn small', type: 'button', text: 'Resolvido', onclick: () => abrirResolverOcorrencia(o, () => App.recarregar(true)) })
         : (st === 'RESOLVIDA' || st === 'DESCARTADA') ? h('button', { class: 'btn small secondary', type: 'button', text: 'Reabrir', onclick: () => acao('reabrirOcorrencia', o, 'Reaberta: voltou para pendente no GF.') }) : null;
       cx.append(this.linhaOc(o, btn, !f.placa));
     });

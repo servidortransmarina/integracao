@@ -703,13 +703,12 @@ function abrirNotaServicos(op) {
   op = op || {}; atualizarDatalistServicos();
   const placa = op.placa, v = db.veiculos.find(x => x.placa === placa);
   const oficinas = Array.from(new Set(db.manutencoes.map(m => m.oficina).filter(Boolean))).sort();
-  { let dl = document.getElementById('dlOficinas'); if (!dl) { dl = h('datalist', { id: 'dlOficinas' }); document.body.append(dl); } limpar(dl).append(...oficinas.map(o => h('option', { value: o }))); }
-  const inp = (a) => h('input', Object.assign({ type: 'text' }, a));
+  const inp = (a) => h('input', Object.assign({ type: 'text', autocomplete: 'off', spellcheck: 'false', name: 'nt_' + Math.random().toString(36).slice(2, 8) }, a));
   const modo = h('select', { 'aria-label': 'Situação' }, h('option', { value: 'realizada', text: 'Serviços já feitos' }), h('option', { value: 'agendar', text: 'Agendar (orçamento aprovado)' }));
   modo.value = op.modo === 'agendar' ? 'agendar' : 'realizada';
   const data = inp({ type: 'date', value: op.data || hojeISO() }), dataPrev = inp({ type: 'date', value: op.dataPrevista || '' });
   const km = inp({ inputmode: 'numeric', placeholder: v && v.kmAtual ? 'Atual: ' + Number(v.kmAtual).toLocaleString('pt-BR') : 'Ex: 450.000', value: op.km || '' });
-  const oficina = inp({ maxlength: 60, list: 'dlOficinas', placeholder: 'Ex.: Oficina do Zé', value: op.oficina || '' }), notaNum = inp({ maxlength: 30, placeholder: 'Opcional', value: op.notaNum || '' });
+  const oficina = inp({ maxlength: 60, placeholder: 'Ex.: Oficina do Zé', value: op.oficina || '' }), notaNum = inp({ maxlength: 30, placeholder: 'Opcional', value: op.notaNum || '' });
   const total = inp({ inputmode: 'decimal', placeholder: 'Ex: 1.850,00', value: op.total ? Number(op.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' });
   const crit = h('select', { 'aria-label': 'Criticidade' }, Object.keys(CRITS).map(k => h('option', { value: k, text: CRITS[k].ic + ' ' + CRITS[k].t })));
   crit.value = op.criticidade || 'P3';
@@ -774,7 +773,7 @@ function abrirNotaServicos(op) {
   [total, modo].forEach(e => e.addEventListener(e === modo ? 'change' : 'input', atualizar));
   const corpo = h('div', { class: 'nt' },
     op.aviso ? h('div', { class: 'manut-aviso', role: 'note', text: '✂️ ' + op.aviso }) : null,
-    h('div', { class: 'nt-cab' }, campo('Situação', modo), fData, fPrev, fKm, fCrit, campo('Oficina / onde foi feito', oficina), campo('Nº da nota', notaNum), campo('Total da nota (R$)', total, 'nt-total')),
+    h('div', { class: 'nt-cab' }, campo('Situação', modo), fData, fPrev, fKm, fCrit, campo('Oficina / onde foi feito', typeof Almox !== 'undefined' ? Almox.ac(oficina, () => oficinas) : oficina), campo('Nº da nota', notaNum), campo('Total da nota (R$)', total, 'nt-total')),
     h('div', { class: 'nt-tit' }, h('b', { text: 'Serviços da nota' }), h('small', { text: 'Um por linha, com o valor de cada um.' })),
     lista, h('button', { type: 'button', class: 'btn secondary small', text: '＋ Outro serviço', onclick: () => { novaLinha(null, rows[rows.length - 1]).serv.focus(); atualizar(); } }),
     rodape, campo('Observação', obs), msg, h('div', { class: 'modal-actions' }, salvar));
@@ -1325,11 +1324,50 @@ function alterarAlerta(id, status) {
   a.status = status; a.dataAnalise = status === 'analise' ? hojeISO() : null; a.classificadoPor = quemEQuando(); salvarCache(); renderTelaAtual(); execBackground(async () => { await apiPost('updateAlerta', { id, status, dataAnalise: a.dataAnalise, dataResolucao: null, classificadoPor: a.classificadoPor }); }, 'Erro alerta');
 }
 function resolverOcorrenciaGF(id) {
-  const d = App.dados, o = (d.ocorrencias || []).find(x => x.id === id); if (!o) return;
-  const antes = { status: o.status, resolvidoEm: o.resolvidoEm, resolvidoPor: o.resolvidoPor };
-  o.status = 'RESOLVIDA'; o.resolvidoEm = hojeLocal() + ' ' + new Date().toTimeString().slice(0, 8); o.resolvidoPor = GF.nome();
-  renderTelaAtual(); toast('Ocorrência resolvida: foi para Resolvido.');
-  execBackground(async () => { try { await apiPost('resolverOcorrencia', { id }); } catch (e) { Object.assign(o, antes); renderTelaAtual(); throw e; } }, 'Não foi possível marcar a ocorrência como resolvida');
+  const o = ((App.dados || {}).ocorrencias || []).find(x => x.id === id); if (!o) return;
+  abrirResolverOcorrencia(o, () => renderTelaAtual());
+}
+/** Resolver ocorrência do motorista: pergunta o que foi feito e se usou peças. Com peças (ou valor), vira manutenção no histórico
+    do caminhão e as peças saem do estoque; sem nada, só marca como resolvida. Usado no GF e na tela de Ocorrências do Fleet. */
+function abrirResolverOcorrencia(o, depois) {
+  const feito = h('input', { type: 'text', maxlength: 120, list: 'listaServicos', placeholder: 'Ex.: troquei a lâmpada do farol', 'aria-label': 'O que foi feito' });
+  const valor = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Opcional', 'aria-label': 'Valor do serviço' });
+  const v = (db.veiculos || []).find(x => x.placa === o.placa), km = h('input', { type: 'text', inputmode: 'numeric', placeholder: v && v.kmAtual ? 'Atual: ' + Number(v.kmAtual).toLocaleString('pt-BR') : 'Opcional', 'aria-label': 'KM' });
+  const aviso = h('div', { class: 'oc-res-aviso' }), msg = h('div', { class: 'msg' }), ok = h('button', { type: 'button', class: 'btn', text: '✅ Resolver' });
+  const ed = typeof Almox !== 'undefined' ? Almox.editorPecas({ aoMudar: () => pintar() }) : null;
+  const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
+  const pintar = () => { const n = ed ? ed.quantas() : 0, val = parseNumeroBR(valor.value) || 0, custo = ed ? ed.custo() : 0;
+    aviso.textContent = n || val ? '🧾 Vai para o histórico do ' + o.placa + ' como manutenção' + (val + custo ? ' (' + fmtMoeda(val + custo) + (custo ? ', com ' + fmtMoeda(custo) + ' em peças' : '') + ')' : '') + '.' : 'Sem peças e sem valor: só marca a ocorrência como resolvida.';
+    ok.textContent = n || val ? '✅ Resolver e lançar no histórico' : '✅ Resolver'; };
+  valor.addEventListener('input', pintar); atualizarDatalistServicos();
+  const corpo = h('div', { class: 'oc-res' },
+    h('p', { class: 'oc-res-item' }, h('b', { text: o.item || 'Ocorrência' }), o.descricao ? ' — ' + o.descricao : ''),
+    campo('O que foi feito?', feito), h('div', { class: 'field' }, h('label', { text: 'Usou peças?' }), ed ? ed.el : h('p', { class: 'hint', text: 'Almoxarifado indisponível.' })),
+    h('div', { class: 'row' }, campo('Valor do serviço / mão de obra (R$)', valor), campo('KM', km)), aviso, msg, h('div', { class: 'modal-actions' }, ok));
+  const md = abrirModal('Resolver ocorrência — ' + o.placa, corpo); pintar(); feito.focus();
+  ok.onclick = async () => {
+    mensagem(msg, '');
+    const dados = { id: o.id, resolucao: feito.value.trim() }, n = ed ? ed.quantas() : 0, val = valor.value.trim() ? parseNumeroBR(valor.value) : 0;
+    if (valor.value.trim() && (isNaN(val) || val < 0)) { mensagem(msg, 'Valor inválido.'); return valor.focus(); }
+    if (n || val) {
+      const texto = feito.value.trim() || o.item || 'Correção de ocorrência', t = tipoDoTexto(texto, null);
+      if (t.erro) { mensagem(msg, t.erro); return feito.focus(); }
+      if (t.varios) { mensagem(msg, 'Aqui cabe um serviço só. Escreva o principal (ex.: "' + t.varios[0].nome + '") ou lance os outros pela "Lançar nota".'); return feito.focus(); }
+      if (t.tipo === 'abastecimento') { mensagem(msg, 'Abastecimento não entra aqui.'); return feito.focus(); }
+      const ped = ed ? ed.obter() : { linhas: [] }; if (ped.erro) { mensagem(msg, ped.erro); if (ped.campo) ped.campo.focus(); return; }
+      if (ed && ed.precoSuspeito() && !(await confirmarCustom('Preço de peça fora do normal', 'Tem peça com valor bem diferente do que costuma custar. Confirma que digitou o valor de UMA unidade?'))) return;
+      let k = 0; if (km.value.trim()) { k = parseNumeroBR(km.value); if (isNaN(k) || k <= 0) { mensagem(msg, 'KM inválido.'); return km.focus(); }
+        const vk = validarSaltoKm(o.placa, k, hojeISO(), false); if (vk) { if (vk.erro) { mensagem(msg, vk.msg); return km.focus(); } if (vk.alerta && !(await confirmarCustom('Aviso de KM', vk.msg))) return; } }
+      Object.assign(dados, { manutId: gerarId(), tipo: t.tipo, descricao: t.descricao || texto, valor: val, km: k || (v ? v.kmAtual : 0), data: hojeISO(), classe: TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL', pecas: ped.linhas });
+    }
+    ok.disabled = true;
+    try {
+      await apiPost('resolverOcorrencia', dados); md.fechar();
+      o.status = 'RESOLVIDA'; o.resolvidoEm = hojeLocal() + ' ' + new Date().toTimeString().slice(0, 8); o.resolvidoPor = GF.nome();
+      toast(dados.manutId ? 'Resolvida e lançada no histórico do caminhão.' : 'Ocorrência resolvida: foi para Resolvido.');
+      if (depois) depois();
+    } catch (e) { ok.disabled = false; mensagem(msg, e.message); }
+  };
 }
 function reabrirOcorrenciaGF(id) {
   const d = App.dados, o = (d.ocorrencias || []).find(x => x.id === id); if (!o) return;
