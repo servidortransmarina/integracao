@@ -11,31 +11,7 @@ const Almox = {
   fonteAreas() { return Array.from(new Set(this.todasPecas().map(p => p.categoria).filter(Boolean).concat(this.AREAS))).sort((a, b) => a.localeCompare(b, 'pt-BR')); },
   fonteMarcas() { return Array.from(new Set(this.todasPecas().map(p => p.marca).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR')); },
   /** Sugestões enquanto digita (igual ao campo de nomes do Ponto): lista embaixo do campo, setas para escolher, Enter confirma, Esc fecha. */
-  ac(input, fonte, aoEscolher) {
-    input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false');
-    const box = h('div', { class: 'ax-ac-lista', role: 'listbox', hidden: true }), wrap = h('div', { class: 'ax-ac' }, input, box);
-    let itens = [], ativo = -1;
-    const fechar = () => { box.hidden = true; input.setAttribute('aria-expanded', 'false'); ativo = -1; };
-    const escolher = it => { input.value = it.v; fechar(); input.dispatchEvent(new Event('input', { bubbles: true })); fechar(); if (aoEscolher) aoEscolher(it); };
-    const abrir = () => {
-      const q = this.k(input.value), todos = fonte().map(x => typeof x === 'string' ? { v: x } : x);
-      itens = (q ? todos.filter(x => this.k(x.v).includes(q)).sort((a, b) => (this.k(b.v).startsWith(q) - this.k(a.v).startsWith(q)) || a.v.localeCompare(b.v, 'pt-BR')) : todos).slice(0, 8);
-      if (itens.length === 1 && this.k(itens[0].v) === q) itens = [];
-      limpar(box); ativo = -1;
-      if (!itens.length) return fechar();
-      itens.forEach(it => box.append(h('div', { class: 'ax-ac-item', role: 'option', onmousedown: e => { e.preventDefault(); escolher(it); } }, h('span', { text: it.v }), it.d ? h('small', { text: it.d }) : null)));
-      box.hidden = false; input.setAttribute('aria-expanded', 'true');
-    };
-    const marcar = n => { const els = Array.from(box.children); if (!els.length) return; ativo = (n + els.length) % els.length; els.forEach((e, i) => e.classList.toggle('ativa', i === ativo)); els[ativo].scrollIntoView({ block: 'nearest' }); };
-    input.addEventListener('input', abrir); input.addEventListener('click', abrir);     // não abre sozinho quando a janela coloca o cursor no campo input.addEventListener('blur', () => setTimeout(fechar, 120));
-    input.addEventListener('keydown', e => {
-      if (box.hidden) { if (e.key === 'ArrowDown') { abrir(); marcar(0); e.preventDefault(); } return; }
-      if (e.key === 'ArrowDown') { e.preventDefault(); marcar(ativo + 1); } else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(ativo - 1); }
-      else if (e.key === 'Enter' && ativo >= 0) { e.preventDefault(); e.stopPropagation(); escolher(itens[ativo]); }
-      else if (e.key === 'Escape') { e.stopPropagation(); fechar(); }
-    });
-    return wrap;
-  },
+  ac(input, fonte, aoEscolher) { return sugestoes(input, fonte, { aoEscolher }); },
   /** Campos de peça nova (unidade, área, marca): aparecem só quando a peça digitada ainda não está no almoxarifado. */
   extrasNova(d) {
     d = d || {};

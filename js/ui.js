@@ -113,3 +113,43 @@ const Visor = {
     window.addEventListener('keydown', tecla, true); document.body.append(ov); ir(at);
   }
 };
+
+/** Sugestões enquanto digita (o mesmo jeito do campo de nomes das cartas do Ponto): lista bonita embaixo do campo,
+    setas escolhem, Enter confirma, Esc fecha. fonte() devolve textos ou {v, d (detalhe), busca (texto extra para achar)}.
+    op.enterPrimeiro: Enter sem nada marcado pega a primeira sugestão. op.aoEscolher(item). Devolve o embrulho do campo
+    (se o campo já está na página, ele é embrulhado no mesmo lugar). */
+function sugestoes(input, fonte, op) {
+  op = op || {};
+  const k = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false'); input.setAttribute('autocomplete', 'off'); input.removeAttribute('list');
+  const box = h('div', { class: 'ax-ac-lista', role: 'listbox', hidden: true }), wrap = h('div', { class: 'ax-ac' });
+  if (input.parentNode) input.parentNode.insertBefore(wrap, input);
+  wrap.append(input, box);
+  let itens = [], ativo = -1;
+  const fechar = () => { box.hidden = true; input.setAttribute('aria-expanded', 'false'); ativo = -1; };
+  const escolher = it => { input.value = it.v; fechar(); input.dispatchEvent(new Event('input', { bubbles: true })); fechar(); if (op.aoEscolher) op.aoEscolher(it); };
+  // destaca o trecho digitado dentro da sugestão
+  const realce = (txt, q) => { if (!q) return [txt]; const n = String(txt).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(), i = n.indexOf(String(q).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim());
+    return i < 0 || !String(q).trim() ? [txt] : [txt.slice(0, i), h('mark', { text: txt.slice(i, i + String(q).trim().length) }), txt.slice(i + String(q).trim().length)]; };
+  const abrir = () => {
+    const q = k(input.value), todos = (fonte() || []).map(x => typeof x === 'string' ? { v: x } : x);
+    const alvo = x => k(x.v + ' ' + (x.busca || ''));
+    itens = (q ? todos.filter(x => alvo(x).includes(q)).sort((a, b) => (k(b.v).startsWith(q) - k(a.v).startsWith(q)) || String(a.v).localeCompare(String(b.v), 'pt-BR')) : todos).slice(0, 8);
+    if (itens.length === 1 && k(itens[0].v) === q) itens = [];
+    limpar(box); ativo = -1;
+    if (!itens.length) return fechar();
+    itens.forEach(it => box.append(h('div', { class: 'ax-ac-item', role: 'option', onmousedown: e => { e.preventDefault(); escolher(it); } }, h('span', {}, realce(String(it.v), input.value)), it.d ? h('small', { text: it.d }) : null)));
+    box.hidden = false; input.setAttribute('aria-expanded', 'true');
+    if (op.enterPrimeiro) marcar(0);
+  };
+  const marcar = n => { const els = Array.from(box.children); if (!els.length) return; ativo = (n + els.length) % els.length; els.forEach((e, i) => e.classList.toggle('ativa', i === ativo)); els[ativo].scrollIntoView({ block: 'nearest' }); };
+  input.addEventListener('input', e => { if (e.isTrusted) abrir(); }); input.addEventListener('click', abrir);     // não abre sozinho quando a janela coloca o cursor no campo
+  input.addEventListener('blur', () => setTimeout(fechar, 120));
+  input.addEventListener('keydown', e => {
+    if (box.hidden) { if (e.key === 'ArrowDown') { abrir(); marcar(0); e.preventDefault(); } return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); marcar(ativo + 1); } else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(ativo - 1); }
+    else if ((e.key === 'Enter' || (e.key === 'Tab' && op.enterPrimeiro)) && ativo >= 0) { if (e.key === 'Enter') e.preventDefault(); escolher(itens[ativo]); }
+    else if (e.key === 'Escape') { e.stopPropagation(); fechar(); }
+  });
+  return wrap;
+}

@@ -364,7 +364,7 @@ body[data-sis="ponto"] .hub-side .side-item.active::before, body[data-sis="fleet
 .cb-todos{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);cursor:pointer;width:fit-content}.cb-todos input{width:auto;flex:0 0 auto;margin:0;min-height:0}
 .cb-ver{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--dim)}
 .cb-seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff}.cb-seg button{border:0;background:none;font:inherit;font-size:13px;padding:7px 12px;cursor:pointer;color:#374151}.cb-seg button+button{border-left:1px solid var(--border)}.cb-seg button.on{background:var(--cb-ink,#13233a);color:#fff}
-.cb-grade{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.cb-grade{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:14px;align-items:start}
 @media(max-width:1499px){.cb-grade{grid-template-columns:minmax(0,1fr)}}
 .cb-bloco{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden}
 .cb-bloco-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}.cb-bloco-cab h4{margin:0;font-size:15px}.cb-bloco-cab span{font-size:12px;color:var(--dim)}
@@ -1079,7 +1079,7 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 @media (max-width:760px){
   .nt-cab{grid-template-columns:1fr 1fr}
   .nt-l1{grid-template-columns:22px minmax(0,1fr) 34px;grid-template-areas:"n s x" ". v v" ". c c"}
-  .nt-l1 .nt-n{grid-area:n}.nt-l1 input[aria-label="Serviço"]{grid-area:s}.nt-l1 .nt-val{grid-area:v}.nt-l1 select{grid-area:c}.nt-l1 .ax-x{grid-area:x}
+  .nt-l1 .nt-n{grid-area:n}.nt-l1 .ax-ac{grid-area:s}.nt-l1 .nt-val{grid-area:v}.nt-l1 select{grid-area:c}.nt-l1 .ax-x{grid-area:x}
   .nt-leitura,.nt-pecas{margin-left:0}
   .nt-tit{flex-direction:column;gap:2px}
 }
@@ -1127,3 +1127,46 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 .hist-acoes{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .hist-gestao .chips{margin-bottom:10px}
 @media (max-width:760px){.lanc-mot{width:100%;max-width:none}.hist-acoes{justify-content:flex-start}.hist-lin:has(.hist-acoes){flex-direction:column;align-items:stretch;gap:6px}}
+/* OS: peças em espera */
+.os-peca-mot{font-size:12px;color:#6b4a07;margin-top:3px}
+.osp-cab,.osp-lin{display:grid;grid-template-columns:minmax(0,1fr) 90px 34px;gap:8px;align-items:center}
+.osp-cab{font-size:12px;color:var(--dim);font-weight:600;margin:8px 0 4px}
+.osp-lin{margin-bottom:6px}.osp-info{grid-column:1/-1;font-size:12px;color:var(--dim);margin-top:-2px}.osp-info:empty{display:none}.osp-info.ok{color:#047857;font-weight:600}
+.osp input,.osp select{padding:9px 10px;border:1px solid var(--border);border-radius:9px;font-size:14px;width:100%;box-sizing:border-box;background:#fff}
+.osp-mot{margin-top:12px}.osp-mot select{margin-bottom:6px}
+
+.ax-ac-item mark{background:none;color:inherit;font-weight:800;text-decoration:underline;text-decoration-color:#93b4dc;text-underline-offset:2px}
+.cb-l .ax-ac{width:100%}.cb-l .ax-ac-lista{color:#1f2937;text-transform:none;letter-spacing:0}
+.cb-l .ax-ac-item span{color:#1f2937;font-size:15px;font-weight:700;letter-spacing:.02em;text-transform:none}
+.cb-l .ax-ac-item small{color:#5b6b7c;font-size:12px}
+.cb-l .ax-ac-item.ativa span,.cb-l .ax-ac-item:hover span{color:#154f83}
+.cb-rec-i.salvando{opacity:.75}.cb-rec-i em{font-style:normal;font-size:11px;color:#a8bad0}
+/* Combustível: levar o desconto ao GF */
+.cb-gf{border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;font-weight:700;font-size:12px;border-radius:8px;padding:5px 10px;cursor:pointer;white-space:nowrap}
+.cb-gf:hover{background:#e0e7ff}.cb-gf:disabled{opacity:.5}
+.cb-gf.ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}
+.cb-gf.mudou{background:#fff7e6;border-color:#f5c987;color:#7c4a03}
+.cb-gf.todas{margin-left:auto;background:#3730a3;color:#fff;border-color:#3730a3}
+.cb-puladas ul{margin:6px 0 0;padding-left:18px;line-height:1.6}
+.cb-vez{font-size:13px;font-weight:800;color:#fcd38a;margin-left:1px;vertical-align:super;line-height:0}
+.cb-conf-tab{width:100%;border-collapse:collapse;font-size:14px}
+.cb-conf-tab th{text-align:left;font-size:11px;color:var(--dim);padding:8px;border-bottom:1px solid var(--border)}.cb-conf-tab th.n,.cb-conf-tab td.n{text-align:right;white-space:nowrap}
+.cb-conf-tab td{padding:8px;border-bottom:1px solid #f0f2f5}.cb-conf-tab select{padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:14px;min-width:190px}
+.cb-conf-d{color:#047857;font-weight:700}.cb-conf-tab tr.ruim td{background:#fff5f5}.cb-conf-tab tr.ruim .cb-conf-d{color:#b91c1c}
+.cb-conf-aviso{background:#fff7e6;border:1px solid #f5c987;color:#7c4a03;border-radius:10px;padding:9px 12px;font-weight:600;font-size:13px}
+.cb-conf-erro{color:#b91c1c;font-weight:700}
+.cb-conf-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.cb-conf-cols ul{margin:6px 0 0;padding-left:18px;line-height:1.6;font-size:13px}
+.cb-conf-tab td:first-child{white-space:nowrap}
+.cb-bate{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;margin:12px 0 4px}
+.cb-bate-t{width:100%;font-size:12px;font-weight:700;color:var(--dim)}
+.cb-bate-i{flex:1 1 200px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+.cb-bate-i span{font-size:13px;font-weight:700;color:#334155}.cb-bate-i b{font-size:20px;font-variant-numeric:tabular-nums}.cb-bate-i small{font-size:12px;color:var(--dim)}
+.cb-bate-i.tot{background:#f1f5f9;border-color:#cbd5e1}
+.cb-conf-tab td.cb-conf-d{white-space:normal;min-width:130px}.cb-conf-d small{display:block;font-size:11px;color:var(--dim);font-weight:600}
+.cb-conf-tab select{min-width:0;width:100%;max-width:230px}
+
+.cb-gf.salvando{opacity:.7;cursor:progress}
+/* números ficam do tamanho deles; a sobra vai para o nome do motorista (não quebra à toa) */
+/* a regra geral do GF (td:nth-child(5) com 180px e palavra quebrada no meio) não vale aqui */
+.cb-tab td{min-width:0;word-break:normal;overflow-wrap:normal}
+@media(min-width:701px){.cb-tab td.nm{max-width:none;min-width:120px}}

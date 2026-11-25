@@ -158,8 +158,8 @@ const Motorista = {
       h('span', { class: 'ck-tipo-em', text: emoji }), h('span', { class: 'ck-tipo-tx' }, h('b', { text: tit }), h('small', { text: sub })), h('span', { class: 'ck-tipo-st ' + cls, text: estado }));
     const sel = h('div', { class: 'card ck-tipos' }, h('h2', { text: 'Qual checklist você vai fazer?' }),
       h('div', { class: 'ck-tipo-lista', role: 'radiogroup', 'aria-label': 'Tipo de checklist' },
-        op('DIARIO', '⚡', 'Diário · rápido', '12 itens e 2 fotos · uns 2 minutos · vale até ' + this.fmtPts(val.diario) + ' pts', st.hojeFeito ? '✅ feito hoje' : 'fazer hoje', st.hojeFeito ? 'ok' : 'falta'),
-        op('SEMANAL', '🗂️', 'Semanal · completo', 'Todos os itens e fotos · 1 por semana · vale até ' + this.fmtPts(val.semanal) + ' pts (e já conta como o de hoje)', st.semanaFeita ? '✅ feito esta semana' : 'falta esta semana', st.semanaFeita ? 'ok' : 'falta')),
+        op('DIARIO', '⚡', 'Diário · rápido', '12 itens e 2 fotos · uns 2 minutos', st.hojeFeito ? '✅ feito hoje' : 'fazer hoje', st.hojeFeito ? 'ok' : 'falta'),
+        op('SEMANAL', '🗂️', 'Semanal · completo', 'Todos os itens e fotos · 1 por semana (e já conta como o de hoje)', st.semanaFeita ? '✅ feito esta semana' : 'falta esta semana', st.semanaFeita ? 'ok' : 'falta')),
       !st.semanaFeita && this.tipoCk === 'DIARIO' ? h('p', { class: 'ck-tipo-dica', text: 'Ainda falta o semanal desta semana. Se tiver tempo hoje, faça o completo: ele já vale como o diário.' }) : null);
     const f = this.checklistForm(this.tipoCk); f.prepend(sel); return f;
   },
@@ -336,8 +336,7 @@ const Motorista = {
   manutencao() {
     const d = this.d(), esc = d.escalaHoje, hoje = Motorista.hoje(), placa = this.placaSel(esc ? esc.placa : '');
     const SUG = ['Engraxamento', 'Troca de óleo do motor', 'Troca de lâmpada', 'Borracharia (conserto de pneu)', 'Troca de pneu', 'Elétrica', 'Freio', 'Mangueira', 'Correia', 'Filtro', 'Lavagem'];
-    const lista = h('datalist', { id: 'mmSug' }, ...SUG.map(x => h('option', { value: x })));
-    const serv = h('input', { type: 'text', list: 'mmSug', maxlength: 80, placeholder: 'Ex.: Engraxamento, troca de lâmpada…' });
+    const serv = h('input', { type: 'text', maxlength: 80, autocomplete: 'off', placeholder: 'Ex.: Engraxamento, troca de lâmpada…' }), lista = null;
     const data = h('input', { type: 'date', value: hoje, max: hoje }), km = h('input', { type: 'number', inputmode: 'numeric', min: 0, placeholder: 'KM do painel' });
     const val = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: 0, placeholder: 'R$ (se pagou)' }), local = h('input', { type: 'text', maxlength: 80, placeholder: 'Oficina, posto, borracharia…' });
     const obs = h('textarea', { rows: 2, maxlength: 400, placeholder: 'Opcional' });
@@ -378,7 +377,7 @@ const Motorista = {
     const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
     return h('div', {}, h('div', { class: 'card' }, h('h2', { text: 'Lançar manutenção' }), lista,
       h('p', { class: 'hint', text: 'Fez algum serviço no caminhão na rua (engraxamento, lâmpada, borracharia…)? Lance aqui. Ele só entra no histórico do caminhão depois que a gestão aprovar.' }),
-      campo('Caminhão', this.caminhaoCampo(placa)), campo('Data', data), campo('O que foi feito', serv),
+      campo('Caminhão', this.caminhaoCampo(placa)), campo('Data', data), campo('O que foi feito', sugestoes(serv, () => SUG)),
       h('div', { class: 'row' }, campo('KM', km), campo('Valor', val)), campo('Onde foi feito', local), campo('Observação', obs),
       campo('Nota / recibo', caixa), campoGar, msg, h('div', { class: 'modal-actions' }, env)),
       meus.length ? h('div', { class: 'card' }, h('h2', { text: 'Seus lançamentos' }), ...meus.map(x => this.linhaManut(x))) : null);

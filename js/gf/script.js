@@ -92,7 +92,7 @@ function normalizarDadosDaPlanilha(raw) {
   const abast = (raw.abastecimentos || []).filter(a => a.origem !== 'motorista' && a.status !== 'expirado' && a.placa).map(a => {
     const l = Number(a.litros) || 0, vu = Number(a.valorUnit) || 0;
     return { id: String(a.id), placa: a.placa, tipo: 'abastecimento', descricao: a.produto || 'Diesel S10', km: a.km, data: a.data, valor: a.valor,
-      observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L', nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
+      observacao: 'Qtd: ' + l.toFixed(2) + ' L | R$ ' + vu.toFixed(3) + '/L' + (Number(a.valorCheio) > Number(a.valor) ? ' | com desconto do posto (na fatura: ' + fmtMoeda(Number(a.valorCheio)) + ')' : ''), nome: a.usuario || '', _abs: true, _litros: l, _hora: a.hora || '' };
   });
   const manutencoes = (raw.manutencoes || []).concat(abast).map(m => ({ _abs: m._abs, _litros: m._litros, _hora: m._hora,
     id: String(m.id), placa: String(m.placa).trim().toUpperCase(), tipo: (t => t === 'outro' && /^\s*engrax/i.test(String(m.descricao || '')) ? 'engraxamento' : t)(String(m.tipo || '').trim().toLowerCase()),
@@ -561,7 +561,7 @@ function montarCardManutMotorista(x) {
 }
 function abrirAprovarManut(id) {
   const x = manutMotoristaPendentes().find(m => m.id === id); if (!x) return toast('Esse lançamento já foi decidido.');
-  const serv = h('input', { type: 'text', value: x.servico, list: 'listaServicos', maxlength: 80 }), km = h('input', { type: 'text', inputmode: 'numeric', value: Number(x.km) > 0 ? Number(x.km).toLocaleString('pt-BR') : '' });
+  atualizarDatalistServicos(); const serv = h('input', { type: 'text', value: x.servico, maxlength: 80 }), km = h('input', { type: 'text', inputmode: 'numeric', value: Number(x.km) > 0 ? Number(x.km).toLocaleString('pt-BR') : '' });
   const valor = h('input', { type: 'text', inputmode: 'decimal', value: Number(x.valor) > 0 ? Number(x.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '' });
   const classe = h('select', {}, ...Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
   const ajusta = () => { const t = tipoDoTexto(serv.value.trim() || 'x', null); classe.value = TIPOS_RASTREADOS.includes(t.tipo) ? 'PREV' : 'CORR-PL'; }; ajusta(); serv.oninput = ajusta;
@@ -573,7 +573,7 @@ function abrirAprovarManut(id) {
   const campo = (rot, el) => h('div', { class: 'field' }, h('label', { text: rot }), el);
   const corpo = h('div', { class: 'mm-conferir' }, fotoEl,
     h('p', { class: 'hint', text: x.placa + ' · lançado por ' + (x.motoristaNome || 'motorista') + ' em ' + fmtQuando(x.criadoEm) + (x.local ? ' · ' + x.local : '') + (x.obs ? ' — ' + x.obs : '') }),
-    campo('Serviço ou peça', serv), h('div', { class: 'row' }, campo('KM', km), campo('Valor (R$)', valor), campo('Classificação', classe)),
+    campo('Serviço ou peça', sugestoes(serv, fonteServicos)), h('div', { class: 'row' }, campo('KM', km), campo('Valor (R$)', valor), campo('Classificação', classe)),
     campo('Motivo (se for recusar)', motivo), h('div', { class: 'modal-actions' }, nao, ok));
   const m = abrirModal('Conferir manutenção do motorista', corpo); let divisao = null;
   const decidir = async aprovar => {
@@ -638,9 +638,11 @@ function definirCrit(ref, id, crit) {
 }
 function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; manutTotalPecas(); document.getElementById('mCritWrap').style.display = ag ? 'block' : 'none'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
 
+/** Serviços já usados (a lista que o GF monta) para as sugestões ao digitar. */
+function fonteServicos() { return Array.from(document.querySelectorAll('#listaServicos option')).map(o => o.value).filter(Boolean); }
 function abrirModalManut(placa, manut, modo) {
   veiculoSel = placa; manutEditId = manut ? manut.id : null;
-  atualizarDatalistServicos(); 
+  atualizarDatalistServicos(); { const t = document.getElementById('mTipoInput'); if (!t.closest('.ax-ac')) sugestoes(t, fonteServicos); }
   document.getElementById('manutTitle').textContent = (manut ? 'Editar' : 'Marcar') + ' manutenção — ' + placa;
   document.getElementById('mModo').value = modo || 'realizada'; document.getElementById('mModo').disabled = !!manut;
   let valTipo = ''; 
@@ -738,7 +740,7 @@ function abrirNotaServicos(op) {
   };
   const novaLinha = (l, depoisDe) => {
     l = l || {};
-    const serv = inp({ maxlength: 80, list: 'listaServicos', placeholder: 'Ex.: Troca de óleo do motor', value: l.texto || '', 'aria-label': 'Serviço' });
+    const serv = inp({ maxlength: 80, placeholder: 'Ex.: Troca de óleo do motor', value: l.texto || '', 'aria-label': 'Serviço' });
     const valor = inp({ inputmode: 'decimal', placeholder: 'valor', value: l.valor ? Number(l.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '', 'aria-label': 'Valor deste serviço' });
     const classe = h('select', { 'aria-label': 'Tipo de manutenção' }, Object.keys(CLASSES).map(k => h('option', { value: k, text: CLASSES[k] })));
     const leitura = h('div', { class: 'nt-leitura' }), x = h('button', { type: 'button', class: 'ax-x', title: 'Tirar este serviço', 'aria-label': 'Tirar este serviço', text: '✕' });
@@ -762,7 +764,7 @@ function abrirNotaServicos(op) {
     serv.addEventListener('blur', () => { const lr = r.ler(); if (!lr.erro && lr.itens.length > 1) { serv.value = lr.itens[0].nome; let ant = r; lr.itens.slice(1).forEach(i => { ant = novaLinha({ texto: i.nome }, ant); }); atualizar(); toast('Separei em ' + lr.itens.length + ' serviços. Divida o valor entre eles.'); } });
     serv.addEventListener('input', atualizar); valor.addEventListener('input', atualizar);
     valor.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const i = rows.indexOf(r); if (rows[i + 1]) rows[i + 1].serv.focus(); else novaLinha(null, r).serv.focus(); atualizar(); } });
-    r.el = h('div', { class: 'nt-linha' }, h('div', { class: 'nt-l1' }, h('span', { class: 'nt-n' }), serv, h('label', { class: 'nt-val' }, h('span', { text: 'R$' }), valor), classe, x), leitura, pecasBox);
+    r.el = h('div', { class: 'nt-linha' }, h('div', { class: 'nt-l1' }, h('span', { class: 'nt-n' }), sugestoes(serv, fonteServicos), h('label', { class: 'nt-val' }, h('span', { text: 'R$' }), valor), classe, x), leitura, pecasBox);
     x.onclick = () => { if (rows.length === 1) { serv.value = ''; valor.value = ''; atualizar(); return; } rows.splice(rows.indexOf(r), 1); r.el.remove(); numerar(); atualizar(); };
     if (depoisDe && depoisDe.el) { rows.splice(rows.indexOf(depoisDe) + 1, 0, r); depoisDe.el.after(r.el); } else { rows.push(r); lista.append(r.el); }
     numerar(); r.pintar();
@@ -1330,7 +1332,7 @@ function resolverOcorrenciaGF(id) {
 /** Resolver ocorrência do motorista: pergunta o que foi feito e se usou peças. Com peças (ou valor), vira manutenção no histórico
     do caminhão e as peças saem do estoque; sem nada, só marca como resolvida. Usado no GF e na tela de Ocorrências do Fleet. */
 function abrirResolverOcorrencia(o, depois) {
-  const feito = h('input', { type: 'text', maxlength: 120, list: 'listaServicos', placeholder: 'Ex.: troquei a lâmpada do farol', 'aria-label': 'O que foi feito' });
+  const feito = h('input', { type: 'text', maxlength: 120, placeholder: 'Ex.: troquei a lâmpada do farol', 'aria-label': 'O que foi feito' });
   const valor = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Opcional', 'aria-label': 'Valor do serviço' });
   const v = (db.veiculos || []).find(x => x.placa === o.placa), km = h('input', { type: 'text', inputmode: 'numeric', placeholder: v && v.kmAtual ? 'Atual: ' + Number(v.kmAtual).toLocaleString('pt-BR') : 'Opcional', 'aria-label': 'KM' });
   const aviso = h('div', { class: 'oc-res-aviso' }), msg = h('div', { class: 'msg' }), ok = h('button', { type: 'button', class: 'btn', text: '✅ Resolver' });
@@ -1342,7 +1344,7 @@ function abrirResolverOcorrencia(o, depois) {
   valor.addEventListener('input', pintar); atualizarDatalistServicos();
   const corpo = h('div', { class: 'oc-res' },
     h('p', { class: 'oc-res-item' }, h('b', { text: o.item || 'Ocorrência' }), o.descricao ? ' — ' + o.descricao : ''),
-    campo('O que foi feito?', feito), h('div', { class: 'field' }, h('label', { text: 'Usou peças?' }), ed ? ed.el : h('p', { class: 'hint', text: 'Almoxarifado indisponível.' })),
+    campo('O que foi feito?', sugestoes(feito, fonteServicos)), h('div', { class: 'field' }, h('label', { text: 'Usou peças?' }), ed ? ed.el : h('p', { class: 'hint', text: 'Almoxarifado indisponível.' })),
     h('div', { class: 'row' }, campo('Valor do serviço / mão de obra (R$)', valor), campo('KM', km)), aviso, msg, h('div', { class: 'modal-actions' }, ok));
   const md = abrirModal('Resolver ocorrência — ' + o.placa, corpo); pintar(); feito.focus();
   ok.onclick = async () => {
