@@ -109,44 +109,52 @@ function osIniciar(id) {
 function osPecasDe(o) { const l = parseJsonSeguro(o.pecasEspera, []); return l.length ? l : (o.peca ? [{ nome: o.peca, qtd: 1 }] : []); }
 function osPecaHtml(o) {
   const l = osPecasDe(o); if (!l.length) return '';
-  return `<div class="os-peca">🛒 <b>Aguardando:</b> ${l.map(p => escHtml(p.nome) + (Number(p.qtd) !== 1 ? ' ×' + escHtml(String(p.qtd).replace('.', ',')) : '')).join(' · ')}${o.pecaMotivo ? `<div class="os-peca-mot">Motivo: ${escHtml(o.pecaMotivo)}</div>` : ''}</div>`;
+  const nome = p => escHtml(p.nome) + (Number(p.qtd) !== 1 ? ' ×' + escHtml(String(p.qtd).replace('.', ',')) : '');
+  const mot = p => p.motivo || o.pecaMotivo || '', ms = l.map(mot), umSo = ms.every(m => m === ms[0]);
+  // um motivo para todas: uma linha só; motivos diferentes: cada peça com o seu
+  if (umSo) return `<div class="os-peca">🛒 <b>Aguardando:</b> ${l.map(nome).join(' · ')}${ms[0] ? `<div class="os-peca-mot">Motivo: ${escHtml(ms[0])}</div>` : ''}</div>`;
+  return `<div class="os-peca">🛒 <b>Aguardando:</b><ul class="os-peca-l">${l.map(p => `<li>${nome(p)}${mot(p) ? ` <span class="os-peca-mot">— ${escHtml(mot(p))}</span>` : ''}</li>`).join('')}</ul></div>`;
 }
 const OS_MOTIVOS_PECA = ['Não tem no estoque', 'Encomendada no fornecedor (aguardando entrega)', 'Aguardando orçamento / aprovação da compra', 'Peça em garantia (aguardando troca)', 'Peça errada, aguardando a certa'];
-/** Aguardando peça (e editar): uma linha por peça, com quantidade, e a justificativa da espera. */
+/** Aguardando peça (e editar): uma linha por peça, com quantidade e a justificativa DESSA peça (cada uma pode esperar por um motivo). */
 function osPecaModal(o, editar) {
   const tem = typeof Almox !== 'undefined', mk = a => tem ? Almox.txt(a) : h('input', Object.assign({ type: 'text', autocomplete: 'off' }, a));
   const linhas = h('div', { class: 'osp-linhas' }), rows = [], msg = h('div', { class: 'msg' });
+  const partes = m => { m = m || ''; const base = OS_MOTIVOS_PECA.find(x => m === x || m.indexOf(x + ' — ') === 0) || (m ? 'Outro' : ''); return { base, det: base === 'Outro' ? m : (base && m.length > base.length ? m.slice(base.length + 3) : '') }; };
   const nova = (p, foco) => {
     p = p || {}; const nome = mk({ maxlength: 80, placeholder: 'Ex.: Lona de freio traseira', value: p.nome || '', 'aria-label': 'Peça' }), qtd = mk({ inputmode: 'decimal', placeholder: '1', value: p.qtd && Number(p.qtd) !== 1 ? String(p.qtd).replace('.', ',') : '', 'aria-label': 'Quantidade' });
     const info = h('small', { class: 'osp-info' }), x = h('button', { type: 'button', class: 'ax-x', 'aria-label': 'Tirar esta peça', text: '✕' });
-    const r = { nome, qtd }; rows.push(r);
+    // peça nova já vem com o motivo da anterior (quase sempre é o mesmo); dá para trocar
+    const ant = rows.length ? rows[rows.length - 1] : null, m0 = partes(p.motivo !== undefined ? p.motivo : (p.nome ? o.pecaMotivo : ant ? ant.motivo() : ''));
+    const motSel = h('select', { 'aria-label': 'Por que está esperando esta peça' }, h('option', { value: '', text: 'Por que está esperando?' }), OS_MOTIVOS_PECA.concat(['Outro']).map(m => h('option', { value: m, text: m })));
+    const det = mk({ maxlength: 120, placeholder: 'Detalhe (ex.: previsão sexta, fornecedor X)', 'aria-label': 'Detalhe do motivo' });
+    motSel.value = m0.base; det.value = m0.det;
+    const r = { nome, qtd, motSel, det, motivo: () => motSel.value === 'Outro' ? det.value.trim() : motSel.value ? motSel.value + (det.value.trim() ? ' — ' + det.value.trim() : '') : '' }; rows.push(r);
+    motSel.onchange = () => { mensagem(msg, ''); el.classList.remove('falta'); if (motSel.value === 'Outro') det.focus(); };
     const pinta = () => { const pc = tem ? Almox.porNome(nome.value) : null, q = parseNumeroBR(qtd.value) || 1; info.textContent = pc ? (Almox.qtd(pc) >= q ? '✓ Tem ' + Almox.num(Almox.qtd(pc)) + ' ' + Almox.un(pc) + ' no estoque' : 'No estoque: ' + Almox.num(Almox.qtd(pc)) + ' ' + Almox.un(pc)) : ''; info.className = 'osp-info' + (pc && Almox.qtd(pc) >= q ? ' ok' : ''); };
     [nome, qtd].forEach(i => i.addEventListener('input', pinta));
-    const el = h('div', { class: 'osp-lin' }, tem ? Almox.ac(nome, () => Almox.fontePecas()) : nome, qtd, x, info);
+    const el = h('div', { class: 'osp-item' }, h('div', { class: 'osp-lin' }, tem ? Almox.ac(nome, () => Almox.fontePecas()) : nome, qtd, x, info), h('div', { class: 'osp-mot' }, motSel, det));
     x.onclick = () => { if (rows.length === 1) { nome.value = ''; qtd.value = ''; pinta(); return; } rows.splice(rows.indexOf(r), 1); el.remove(); };
     linhas.append(el); pinta(); if (foco) nome.focus(); return r;
   };
   osPecasDe(o).forEach(p => nova(p)); if (!rows.length) nova();
-  const mot0 = o.pecaMotivo || '', motSel = h('select', { 'aria-label': 'Motivo da espera' }, h('option', { value: '', text: 'Escolha o motivo…' }), OS_MOTIVOS_PECA.concat(['Outro']).map(m => h('option', { value: m, text: m })));
-  const base = OS_MOTIVOS_PECA.find(m => mot0 === m || mot0.indexOf(m + ' — ') === 0) || (mot0 ? 'Outro' : ''), det = mk({ maxlength: 120, placeholder: 'Detalhe (ex.: previsão sexta, fornecedor X)', 'aria-label': 'Detalhe do motivo' });
-  motSel.value = base; motSel.onchange = () => { mensagem(msg, ''); if (motSel.value === 'Outro') det.focus(); }; det.value = base === 'Outro' ? mot0 : (base && mot0.length > base.length ? mot0.slice(base.length + 3) : '');
   const ok = h('button', { type: 'button', class: 'btn', text: editar ? 'Salvar peças' : 'Pausar e avisar Compras' });
   const m = abrirModal((editar ? 'Peças em espera · ' : 'Aguardando peça · ') + o.numero + ' · ' + o.placa, h('div', { class: 'osp' },
-    h('p', { class: 'hint', text: editar ? 'Acrescente ou tire peças. Peça nova na lista avisa os admins (Compras) de novo.' : 'O prazo da oficina fica pausado e os admins (Compras) são avisados.' }),
+    h('p', { class: 'hint', text: (editar ? 'Acrescente ou tire peças. Peça nova na lista avisa os admins (Compras) de novo.' : 'O prazo da oficina fica pausado e os admins (Compras) são avisados.') + ' Cada peça tem o seu motivo.' }),
     h('div', { class: 'osp-cab' }, h('span', { text: 'Peça que está faltando' }), h('span', { text: 'Qtd' })), linhas,
     h('button', { type: 'button', class: 'btn secondary small', text: '＋ Outra peça', onclick: () => nova(null, true) }),
-    h('div', { class: 'field osp-mot' }, h('label', { text: 'Por que está esperando? *' }), motSel, det), msg, h('div', { class: 'modal-actions' }, ok)), { largo: true });
+    msg, h('div', { class: 'modal-actions' }, ok)), { largo: true });
   if (!editar) rows[0].nome.focus();
   ok.onclick = async () => {
     const pecas = [];
     for (const r of rows) { const n = r.nome.value.trim(); if (!n && !r.qtd.value.trim()) continue; if (n.length < 2) { mensagem(msg, 'Diga o nome de cada peça.'); return r.nome.focus(); }
-      const q = r.qtd.value.trim() ? parseNumeroBR(r.qtd.value) : 1; if (isNaN(q) || q <= 0) { mensagem(msg, 'Quantidade inválida em "' + n + '".'); return r.qtd.focus(); } pecas.push({ nome: n, qtd: q }); }
+      const q = r.qtd.value.trim() ? parseNumeroBR(r.qtd.value) : 1; if (isNaN(q) || q <= 0) { mensagem(msg, 'Quantidade inválida em "' + n + '".'); return r.qtd.focus(); }
+      if (!r.motSel.value) { r.motSel.closest('.osp-item').classList.add('falta'); mensagem(msg, 'Escolha por que está esperando: ' + n + '.'); return r.motSel.focus(); }
+      if (r.motSel.value === 'Outro' && r.det.value.trim().length < 3) { mensagem(msg, 'Escreva o motivo de "' + n + '".'); return r.det.focus(); }
+      pecas.push({ nome: n, qtd: q, motivo: r.motivo() }); }
     if (!pecas.length) { mensagem(msg, 'Diga qual peça está faltando.'); return rows[0].nome.focus(); }
-    if (!motSel.value) { mensagem(msg, 'Escolha por que está esperando.'); return motSel.focus(); }
-    if (motSel.value === 'Outro' && det.value.trim().length < 3) { mensagem(msg, 'Escreva o motivo.'); return det.focus(); }
-    const motivo = motSel.value === 'Outro' ? det.value.trim() : motSel.value + (det.value.trim() ? ' — ' + det.value.trim() : '');
     ok.disabled = true;
-    if (await osAcao(o.id, { acao: editar ? 'editarPeca' : 'aguardarPeca', pecas, motivo }, editar ? 'Peças em espera atualizadas.' : 'Aguardando peça: prazo da oficina pausado.')) m.fechar(); else ok.disabled = false;
+    if (await osAcao(o.id, { acao: editar ? 'editarPeca' : 'aguardarPeca', pecas }, editar ? 'Peças em espera atualizadas.' : 'Aguardando peça: prazo da oficina pausado.')) m.fechar(); else ok.disabled = false;
   };
 }
 function osPeca(id) { const o = osAtual(id); if (o) osPecaModal(o, false); }
