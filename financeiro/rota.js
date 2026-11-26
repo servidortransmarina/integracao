@@ -329,25 +329,43 @@ function renderizarTabelaDepositosFinanceiro() {
 // ==========================================
 async function adicionarDepositoPelaEscala() {
   let dataInput = document.getElementById('dataDepositoEscala').value;
-  let valorInput = document.getElementById('valorDepositoEscala').value;
-  let valor = parseFloat(valorInput);
+  let valor = parseFloat(document.getElementById('valorDepositoEscala').value);
+  if (isNaN(valor) || valor <= 0) return cAlertError('Atenção', 'Digite um valor de depósito válido.');
+  // um só lugar para os depósitos: o Histórico de Depósitos da aba Lançamentos
+  depositos.push({ id: proximoIdDeposito++, data: dataInput ? formatarDataBR(dataInput) : new Date().toLocaleDateString('pt-BR'), valor: valor });
+  document.getElementById('valorDepositoEscala').value = '';
+  document.getElementById('dataDepositoEscala').value = '';
+  recalcularTotalDepositosFinanceiro(); renderizarTabelaDepositosFinanceiro(); renderizarFiltrosFinanceiroInstantaneo();
+  renderizarTabelaEscalasSalvas(); salvarDadosLocalmente();
+  cAlert('Depósito lançado', 'Entrou no Histórico de Depósitos (aba Lançamentos) e conta no crédito da semana que ele paga.');
+}
 
-  if (!isNaN(valor) && valor > 0) {
-    depositosEscalas.push({ 
-      id: proximoIdDepositoEscala++, 
-      data: dataInput ? formatarDataBR(dataInput) : new Date().toLocaleDateString('pt-BR'), 
-      valor: valor 
-    });
-    
-    document.getElementById('valorDepositoEscala').value = '';
-    document.getElementById('dataDepositoEscala').value = '';
-    
-    renderizarTabelaEscalasSalvas(); // Atualiza a UI na hora
-    salvarDadosLocalmente();
-    cAlert('Crédito Adicionado', 'O valor foi adicionado exclusivamente ao painel de Rotas (Balanços e Escalas)!');
-  } else {
-    cAlertError('Atenção', 'Digite um valor de depósito válido.');
-  }
+// ==========================================
+// CRÉDITO DA SEMANA: vem do Histórico de Depósitos
+// O depósito de sexta paga a semana seguinte (seg a dom): conta na semana de (data do depósito + 3 dias).
+// ==========================================
+function isoLocal(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function segundaDe(iso) { let p = iso.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2]), w = d.getDay(); d.setDate(d.getDate() - (w === 0 ? 6 : w - 1)); return d; }
+function semanaDoDeposito(dataStr) {
+  let iso = converterParaISO(extrairDataAbreviada(dataStr)); if (!iso) return null;
+  let p = iso.split('-').map(Number), d = new Date(p[0], p[1] - 1, p[2] + 3), seg = segundaDe(isoLocal(d)), dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+  return { seg: isoLocal(seg), dom: isoLocal(dom) };
+}
+/** Todos os depósitos: os do histórico + os que já foram usados num Balanço Semanal (o balanço tira da lista, mas o dinheiro entrou). */
+function depositosTodos() {
+  let l = depositos.slice(), ids = {}; l.forEach(d => { ids[d.id] = 1; });
+  balancosSemanais.forEach(b => {
+    let orig = Array.isArray(b.depositosOriginais) ? b.depositosOriginais : [];
+    if (orig.length) orig.forEach(d => { if (!ids[d.id]) { ids[d.id] = 1; l.push(d); } });
+    else { let m = String(b.periodo || '').match(/Dep[óo]sito:\s*(?:<\/b>)?\s*(\d{1,2}\/\d{1,2}\/\d{4})/); if (m && b.totalCredito) l.push({ id: 'bal' + b.id, data: m[1], valor: Number(b.totalCredito) || 0 }); }   // balanço antigo (migrado): data e crédito do próprio balanço
+  });
+  return l;
+}
+function definirSemanaAtual() {
+  let seg = segundaDe(isoLocal(new Date())), dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+  let a = document.getElementById('filtroEscalaInicio'), b = document.getElementById('filtroEscalaFim');
+  if (a) a.value = isoLocal(seg); if (b) b.value = isoLocal(dom);
+  renderizarTabelaEscalasSalvas();
 }
 
 // ==========================================
@@ -742,13 +760,11 @@ function renderizarTabelaEscalasSalvas() {
       return true;
   });
 
-  let depositosEscalasFiltrados = depositosEscalas.filter(d => {
-      if (!dataInicio && !dataFim) return true;
-      let dataLimpa = extrairDataAbreviada(d.data);
-      let isoData = converterParaISO(dataLimpa);
-      if (!isoData) return true;
-      if (dataInicio && isoData < dataInicio) return false;
-      if (dataFim && isoData > dataFim) return false;
+  // crédito = depósitos do Histórico de Depósitos cuja semana paga cai no filtro
+  let depositosEscalasFiltrados = depositosTodos().filter(d => {
+      let w = semanaDoDeposito(d.data); if (!w) return false;
+      if (dataInicio && w.dom < dataInicio) return false;
+      if (dataFim && w.seg > dataFim) return false;
       return true;
   });
 
@@ -783,6 +799,8 @@ function renderizarTabelaEscalasSalvas() {
   let saldoCreditoSemana = tetoOperacional - somaCustoSemana;
 
   let elCred = document.getElementById('txtSemanaCreditoTotal'); if(elCred) elCred.innerText = formatarMoeda(tetoOperacional);
+  let elCredDet = document.getElementById('txtSemanaCreditoDet');
+  if (elCredDet) elCredDet.innerText = depositosEscalasFiltrados.length ? 'Depósito' + (depositosEscalasFiltrados.length > 1 ? 's' : '') + ' de ' + depositosEscalasFiltrados.map(d => extrairDataAbreviada(d.data)).join(', ') : 'Nenhum depósito para este período';
   let elCusto = document.getElementById('txtSemanaCustoTotal'); if(elCusto) elCusto.innerText = formatarMoeda(somaCustoSemana);
   let elTick = document.getElementById('txtSemanaTicketMedioGeral'); if(elTick) elTick.innerText = formatarMoeda(ticketMedioSemanal);
   
@@ -827,7 +845,7 @@ async function salvarFechamentoEscalas() {
       periodo = `Até ${formatarDataBR(dataFim)}`;
   }
 
-  let confirma = await cConfirm('Salvar Balanço Semanal (Rotas)', `Deseja salvar o fechamento atual e limpar as escalas/depósitos filtrados da tela?\n\nPeríodo: ${periodo}\nCrédito Utilizado: ${valTeto}\nValor Gasto: ${valCusto}`);
+  let confirma = await cConfirm('Salvar Balanço Semanal (Rotas)', `Deseja salvar o fechamento atual e tirar da tela as escalas deste período?\n\nPeríodo: ${periodo}\nCrédito Utilizado: ${valTeto}\nValor Gasto: ${valCusto}`);
   if (!confirma) return;
 
   let escalasRemovidas = [];
@@ -847,22 +865,7 @@ async function salvarFechamentoEscalas() {
   });
   escalasDiariasSalvas = escalasRestantes;
 
-  let depositosRemovidos = [];
-  let depositosRestantes = [];
-  depositosEscalas.forEach(d => {
-      let manter = false;
-      if (!dataInicio && !dataFim) { manter = false; }
-      else {
-          let isoData = converterParaISO(extrairDataAbreviada(d.data));
-          if (!isoData) manter = false; 
-          else if (dataInicio && isoData < dataInicio) manter = true; 
-          else if (dataFim && isoData > dataFim) manter = true; 
-          else manter = false;
-      }
-      if (manter) depositosRestantes.push(d);
-      else depositosRemovidos.push(d);
-  });
-  depositosEscalas = depositosRestantes;
+  let depositosRemovidos = [];   // o crédito vem do Histórico de Depósitos: o balanço das escalas não mexe nele
 
   historicoEscalas.push({
       id: proximoIdHistoricoEscala++,
@@ -880,7 +883,7 @@ async function salvarFechamentoEscalas() {
   renderizarTabelaHistoricoEscalas();
   salvarDadosLocalmente();
 
-  cAlert('Balanço de Rotas Salvo', 'O histórico foi arquivado com sucesso!\n\n(Se precisar, ao excluir este histórico as escalas retornarão para a tela principal)');
+  cAlert('Balanço de Rotas Salvo', 'O histórico foi arquivado com sucesso!\n\n(Se precisar, ao excluir este histórico as escalas voltam para a tela principal)');
 }
 
 function renderizarTabelaHistoricoEscalas() {
@@ -1301,7 +1304,7 @@ function imprimirRelatorio() {
   let statusGeral = somatoriaBalanços >= 0 ? 'SUPERÁVIT' : 'DÉFICIT';
   
   let somaCustoEscala = escalasDiariasSalvas.reduce((acc, e) => acc + e.custoTotal, 0);
-  let tetoEscala = depositosEscalas.reduce((acc, d) => acc + d.valor, 0);
+  let tetoEscala = converterParaNumero((document.getElementById('txtSemanaCreditoTotal') || {}).innerText || '0');
   
   let html = `
     <div style="display: flex; align-items: center; margin-bottom: 20px;">
@@ -1348,11 +1351,7 @@ function imprimirRelatorio() {
 // GATILHOS DO FILTRO DE ESCALAS (ROTAS)
 // ==========================================
 function limparFiltroEscalas() {
-    let fInicio = document.getElementById('filtroEscalaInicio');
-    let fFim = document.getElementById('filtroEscalaFim');
-    if (fInicio) fInicio.value = '';
-    if (fFim) fFim.value = '';
-    renderizarTabelaEscalasSalvas();
+    definirSemanaAtual();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1377,5 +1376,6 @@ window.addEventListener('message', e => {
   if (e.origin !== location.origin || !e.data || e.data.tipo !== 'fin-aba') return;
   if (FIN_ABAS[e.data.aba]) trocarAba(FIN_ABAS[e.data.aba]);
 });
+definirSemanaAtual();
 carregarDadosLocais();
 try { window.parent.postMessage({ tipo: 'fin-pronto' }, location.origin); } catch (e) {}

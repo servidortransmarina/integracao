@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Financeiro › Rota</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <link rel="stylesheet" href="rota.css?v=4v">
+  <link rel="stylesheet" href="rota.css?v=4w">
 </head>
 <body>
 
@@ -156,7 +156,7 @@
       <!-- LADO DIREITO: Consolidado Semanal das Escalas -->
       <div class="panel">
         <h2>Consolidado Semanal das Escalas</h2>
-        <p style="font-size: 13px; color: #666;">Gasto diário das escalas abatido do Crédito Pré-Pago.</p>
+        <p style="font-size: 13px; color: #666;">Gasto diário das escalas abatido do Crédito Pré-Pago. Abre na semana atual; para ver outra, troque as datas. O crédito vem do Histórico de Depósitos (o depósito de sexta paga a semana seguinte).</p>
 
         <!-- Filtro de Período para as Escalas e Depósitos -->
         <div style="background: #f1f5f9; padding: 15px; border: 1px solid #cbd5e1; border-radius: 8px; margin: 15px 0; display: flex; gap: 15px; align-items: flex-end; border-left: 4px solid #64748b; flex-wrap: wrap;">
@@ -169,7 +169,7 @@
             <input type="date" id="filtroEscalaFim" onchange="renderizarTabelaEscalasSalvas()" style="margin-bottom: 0; width: 100%;">
           </div>
           <div style="display: flex; gap: 10px;">
-            <button type="button" class="btn-alerta" onclick="document.getElementById('filtroEscalaInicio').value=''; document.getElementById('filtroEscalaFim').value=''; renderizarTabelaEscalasSalvas();" style="padding: 10px 15px; margin: 0; white-space: nowrap;">Limpar</button>
+            <button type="button" class="btn-alerta" onclick="definirSemanaAtual()" style="padding: 10px 15px; margin: 0; white-space: nowrap;">Semana atual</button>
             <button type="button" class="btn-sucesso" onclick="salvarFechamentoEscalas()" style="padding: 10px 15px; margin: 0; white-space: nowrap;">💾 Salvar Balanço Semanal</button>
           </div>
         </div>
@@ -193,6 +193,7 @@
           <div class="card azul">
             <h3>Crédito Semanal</h3>
             <div class="valor" id="txtSemanaCreditoTotal">R$ 0,00</div>
+            <small id="txtSemanaCreditoDet" style="display:block;font-size:11px;color:#64748b;margin-top:4px"></small>
           </div>
           <div class="card vermelho">
             <h3>Gasto Semanal</h3>
@@ -429,6 +430,6 @@
 
 </div>
 
-<script src="rota.js?v=4v"></script>
+<script src="rota.js?v=4w"></script>
 </body>
 </html>
