@@ -70,7 +70,7 @@ const Motorista = {
     const F = this.filaFotos;
     const rodar = async () => {
       F.ativos++; foto.estado = 'enviando'; foto.aviso && foto.aviso();
-      try { const r = await API.chamar('enviarFotoChecklist', { tipo: foto.tipo, slot: foto.slot, placa: placa(), imagemBase64: foto.dados }, { mudo: true }); foto.id = r.id; foto.estado = 'ok'; foto.erro = ''; }
+      try { const r = await API.chamar('enviarFotoChecklist', { tipo: foto.tipo, slot: foto.slot, placa: placa(), ck: foto.tipo === 'nota' ? '' : this.ckAtual || '', imagemBase64: foto.dados }, { mudo: true }); foto.id = r.id; foto.estado = 'ok'; foto.erro = ''; }
       catch (e) { foto.estado = 'erro'; foto.erro = e.message; }
       F.ativos--; foto.aviso && foto.aviso(); const prox = F.espera.shift(); if (prox) prox();
       (foto.resolver || []).forEach(f => f()); foto.resolver = [];
@@ -165,6 +165,7 @@ const Motorista = {
   },
   checklistForm(tipo) {
     const d = this.d(), mod0 = d.checklistModelo;
+    this.ckAtual = tipo;          // as fotos vão para a pasta Checklist Diário ou Checklist Semanal
     const mod = tipo === 'DIARIO' ? Object.assign({}, mod0, { categorias: [{ cat: 'ANTES DE SAIR', itens: mod0.diario.itens }], quantidades: [], obrigatorios: [], semFotoItem: true,
       fotos: { carroceriaMin: 0, carroceriaMax: 0, pneus: mod0.diario.fotos, cabineItem: '', soSlots: true } }) : mod0;
     const esc = d.escalaHoje, placa = this.placaSel(esc ? esc.placa : ''), km = h('input', { type: 'number', inputmode: 'numeric', min: 1, placeholder: 'KM atual do painel' });
@@ -246,7 +247,7 @@ const Motorista = {
       const semDesc = Object.keys(resp).filter(n => resp[n] !== 'ok' && resp[n] !== 'na' && String(obs[n] || '').trim().length < 3); if (semDesc.length) { linhas[semDesc[0]].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Descreva o problema de: ' + semDesc[0] + '.'); }
       for (const n of mod.quantidades) if (String(qtd[n] == null ? '' : qtd[n]) === '') return mensagem(msg, 'Informe a quantidade de ' + n.toLowerCase() + '.');
       const semFoto = fotosCx.falta(); if (semFoto) { fotosCx.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, semFoto); }
-      const semObr = obrig.find(n => !fotoItem[n] || fotoItem[n].estado === 'erro'); if (semObr) { linhas[semObr].classList.add('falta'); linhas[semObr].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Tire a foto do ' + semObr.toLowerCase() + ' (obrigatória: mostre o manômetro e a validade).'); }
+      const semObr = obrig.find(n => !fotoItem[n] || fotoItem[n].estado === 'erro'); if (semObr) { linhas[semObr].classList.add('falta'); linhas[semObr].scrollIntoView({ behavior: 'smooth', block: 'center' }); return mensagem(msg, 'Tire a foto do ' + semObr.toLowerCase() + ' (obrigatória: mostre o reloginho e a validade).'); }
       const itens = Object.keys(resp).map(n => ({ item: n, status: resp[n], descricao: obs[n] || '' })).concat(mod.quantidades.map(n => ({ item: n, quantidade: qtd[n] })));
       env.disabled = true; env.textContent = 'Enviando fotos…';
       try {
