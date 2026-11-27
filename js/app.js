@@ -389,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })();
   API.aquecer();
   let _ultVis = Date.now();
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { _ultVis = Date.now(); return; } if (App.sessao && !$('.overlay.show') && Date.now() - _ultVis > 60000) App.recarregar(true); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { _ultVis = Date.now(); return; } if (App.sessao && !$('.overlay.show') && Date.now() - _ultVis > 1800000) App.recarregar(true); });   // até 30 min fora: o aviso de online (abaixo) já confere a versão e só baixa tudo se algo mudou
   $$('.logo-img').forEach(lg => { const sem = () => { lg.style.display = 'none'; const t = $('.logo-txt', lg.parentNode); if (t) t.hidden = false; }; lg.addEventListener('error', sem); if (lg.complete && lg.naturalWidth === 0) sem(); });
   if (typeof ESCALA_DESGASTE !== 'undefined' && $('#pneusEscala')) $('#pneusEscala').style.background = 'linear-gradient(90deg, ' + ESCALA_DESGASTE.map(e => rgbCss(e[1]) + ' ' + Math.round(e[0] * 100) + '%').join(', ') + ')';
   App.retomar();
@@ -421,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4z',
+  VERSAO: '50',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

@@ -1356,9 +1356,6 @@ function imprimirRelatorio() {
 // ==========================================
 // GATILHOS DO FILTRO DE ESCALAS (ROTAS)
 // ==========================================
-function limparFiltroEscalas() {
-    definirSemanaAtual();
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     let inputEscalaInicio = document.getElementById('filtroEscalaInicio');

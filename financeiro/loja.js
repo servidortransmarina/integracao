@@ -545,7 +545,6 @@ function buildDepositosFromRows(rows){
     .filter(d=>d.data && Number.isFinite(d.valor));
 }
 
-async function carregarDepositos(){ return carregarDaPlanilha(false,false); }
 
 function calcularLinhasFinanceiras(){
   const porData=new Map();
@@ -647,63 +646,6 @@ function renderProjecaoSemana(){
   const dias=[];let cursor=new Date(recorteDe+'T00:00:00');const fim=new Date(recorteAte+'T00:00:00');while(cursor<=fim){dias.push(`${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}-${String(cursor.getDate()).padStart(2,'0')}`);cursor.setDate(cursor.getDate()+1);}
   const porDia=new Map(dias.map(d=>[d,{n:0,valor:0}]));viagensPeriodo.forEach(v=>{const o=porDia.get(v.data);if(o){o.n++;o.valor+=v.valor_total4;}});
   destroyChart('semana');charts.semana=new Chart(document.getElementById('chartSemanaAtual'),{data:{labels:dias.map(fmtDate),datasets:[{type:'bar',label:'Viagens',data:dias.map(d=>porDia.get(d).n),backgroundColor:'rgba(229,57,53,.72)',borderRadius:5,yAxisID:'y'},{type:'line',label:'Faturamento',data:dias.map(d=>porDia.get(d).valor),borderColor:'#316CE6',backgroundColor:'#316CE6',pointRadius:3,tension:.28,yAxisID:'y1'}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,title:{display:true,text:'Viagens'},ticks:{precision:0}},y1:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false},ticks:{callback:v=>fmtBRL(v)}}}}});
-}
-function buildFromWorkbook(workbook){
-  const baseSheet = workbook.Sheets['BASE'];
-  if(!baseSheet){ alert('Não encontrei uma aba chamada "BASE" nesta planilha.'); return null; }
-  const rows = XLSX.utils.sheet_to_json(baseSheet, {header:1, raw:true, defval:null});
-
-  const freteSheet = workbook.Sheets['TABELA DE FRETE'];
-  const destinoMap = {};
-  if(freteSheet){
-    const frows = XLSX.utils.sheet_to_json(freteSheet, {header:1, raw:true, defval:null});
-    for(let i=1;i<frows.length;i++){
-      const r = frows[i];
-      if(r && r[0]!=null) destinoMap[Number(r[0])] = r[1];
-    }
-  }
-
-  const viagens = [];
-  for(let i=1;i<rows.length;i++){
-    const r = rows[i];
-    if(!r || r[0]==null) continue;
-    let dataStr;
-    if(r[0] instanceof Date){
-      dataStr = parseDataBR(`${String(r[0].getDate()).padStart(2,'0')}/${String(r[0].getMonth()+1).padStart(2,'0')}/${r[0].getFullYear()}`);
-    } else if(typeof r[0]==='number'){
-      const d = XLSX.SSF.parse_date_code(r[0]);
-      dataStr = d ? parseDataBR(`${String(d.d).padStart(2,'0')}/${String(d.m).padStart(2,'0')}/${d.y}`) : null;
-    } else { dataStr=parseDataBR(r[0]); }
-    if(!dataStr) continue;
-    const motorista = String(r[1]||'').trim();
-    const kit = [];
-    const pares = [
-      [r[2], r[8]],
-      [r[3], r[11]],
-      [r[5], r[14]]
-    ];
-    pares.forEach(([loja, ordem])=>{
-      if(loja!=null && loja!==''){
-        const lojaNum = Number(loja);
-        kit.push({loja:lojaNum, destino:destinoMap[lojaNum]||`Loja ${lojaNum}`, ordem: ordem!=null ? Number(ordem) : null});
-      }
-    });
-    if(!kit.length) continue;
-    const freteBase = (r[9]!=null && r[9]!=='') ? Number(r[9]) : 0;
-    const totalBase  = (r[10]!=null && r[10]!=='') ? Number(r[10]) : 0;
-    const frete2 = (r[12]!=null && r[12]!=='') ? Number(r[12]) : 0;
-    const total2 = (r[13]!=null && r[13]!=='') ? Number(r[13]) : 0;
-    const frete3 = (r[15]!=null && r[15]!=='') ? Number(r[15]) : 0;
-    const total3 = (r[16]!=null && r[16]!=='') ? Number(r[16]) : 0;
-
-    const freteTabela = freteBase + frete2 + frete3;
-    const valorTotal4 = totalBase + total2 + total3;
-
-    viagens.push({viagem_id:viagens.length+1, data:dataStr, motorista, kit,
-      frete_tabela: freteTabela, valor_total4: valorTotal4});
-  }
-  if(!viagens.length){ alert('Não encontrei linhas de dados na aba "BASE" (a partir da linha 2).'); return null; }
-  return viagens;
 }
 
 function celulaParaEnvio(c){
@@ -881,8 +823,6 @@ let cbForecastTimer=null;
 function cbForecastSave(data){LOJA_PREVISAO=data;clearTimeout(cbForecastTimer);cbForecastTimer=setTimeout(()=>{hubFin().chamar('financeiroLojaPrevisao',{previsao:LOJA_PREVISAO}).catch(e=>alert('A previsão não foi salva: '+e.message));},700);}
 function cbIsoParts(iso){const [y,m,d]=iso.split('-').map(Number);return {y,m,d}}
 function cbMonthStart(iso){const {y,m}=cbIsoParts(iso);return `${y}-${String(m).padStart(2,'0')}-01`}
-function cbIsoWeekday(iso){return new Date(`${iso}T12:00:00`).getDay()}
-function cbTripsOnDate(iso){return VIAGENS.filter(v=>v.data===iso)}
 function cbForecastQuantity(iso,pace,manual){
   if(Object.prototype.hasOwnProperty.call(manual,iso)&&manual[iso]!==''&&Number.isFinite(Number(manual[iso]))) return {quantity:Math.max(0,Math.floor(Number(manual[iso]))),basis:'Quantidade informada'};
   return {quantity:Math.max(0,Math.round(pace)),basis:'Estimativa pelo ritmo recente'};

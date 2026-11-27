@@ -67,11 +67,6 @@ function chaveFuncionarioCarta(nome) {
 }
 // Ao selecionar um funcionário, usar sempre o nome COMPLETO da base.
 // Jamais reaproveitar uma abreviação histórica na sugestão do formulário.
-function nomeHistoricoPreferidoCarta(nome) {
-  const {tag,nomeBase}=separarNomeCarta(nome);
-  const localizado=localizarNomeCartaNaBase(nomeBase);
-  return formatarNomeCarta(localizado.registro?.nome||nomeBase,tag);
-}
 
 // Contador do menu; no celular o selo some quando o valor é zero.
 function definirBadge(id,n){const el=$(id);if(!el)return;el.textContent=String(n);el.dataset.zero=Number(n)>0?'0':'1';}
@@ -1055,9 +1050,6 @@ async function carregarFuncionarios() {
       if(APP.subaba==='capa')renderCapa();
     }
   }catch(e){console.warn(e.message);}
-}
-function encontrarFuncionario(nome,empresa) {
-  return APP.funcionarios.find(f=>norm(f.nome)===norm(nome)&&(!empresa||f.empresa===empresa))||APP.saldos.find(f=>norm(f.nome)===norm(nome)&&(!empresa||f.empresa===empresa));
 }
 async function salvarFolga(e) {
   e.preventDefault();

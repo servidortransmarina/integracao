@@ -13,7 +13,6 @@ const LABEL_ULTIMA = { oleo: 'Último óleo do motor', alinhamento: 'Último ali
 const CACHE_KEY = 'frotaCacheV13';
 
 function salvarCache() {}
-function carregarCache() { return false; }
 
 /* ================= CAIXAS NATIVAS REFORMULADAS (PROMISSES) ================= */
 function confirmarCustom(titulo, msg) {
@@ -27,17 +26,6 @@ function confirmarCustom(titulo, msg) {
   });
 }
 
-function alertarCustom(titulo, msg) {
-  return new Promise(resolve => {
-    const modal = document.getElementById('modalConfirm');
-    document.getElementById('confirmTitle').textContent = titulo; document.getElementById('confirmMsg').textContent = msg;
-    modal.style.zIndex = '10000'; openModal('modalConfirm');
-    const btnConf = document.getElementById('confirmBtn'); const btnCanc = document.getElementById('confirmCancelBtn');
-    const classeAntiga = btnConf.className; btnConf.textContent = 'OK'; btnConf.className = 'btn success'; btnCanc.style.display = 'none';
-    const clear = () => { btnConf.onclick = null; btnConf.textContent = 'Confirmar'; btnConf.className = classeAntiga; btnCanc.style.display = 'inline-block'; modal.style.zIndex = ''; closeModal('modalConfirm'); };
-    btnConf.onclick = () => { clear(); resolve(true); };
-  });
-}
 
 /** Pergunta um texto (motivo, peça…). Devolve o texto ou null se cancelar. */
 function pedirTextoCustom(titulo, msg, padrao, placeholder) {
