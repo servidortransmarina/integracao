@@ -639,6 +639,19 @@ function definirCrit(ref, id, crit) {
 }
 function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; manutTotalPecas(); document.getElementById('mLojaWrap').hidden = manutAbast || ag; document.getElementById('mLojaRot').textContent = 'Loja / oficina (onde foi feito)'; document.getElementById('mCritWrap').style.display = ag ? 'block' : 'none'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
 
+/** Pneu comprado/vindo na nota numa manutenção: abre o cadastro de pneus já preenchido (quantidade, marca, medida e montado
+    neste caminhão), para entrar no controle de pneus sem lançar de novo. Do estoque: avisa para montar os que já estão cadastrados. */
+function pneusDaManutencao(pecas, m) {
+  if (typeof abrirModalPneu !== 'function') return;
+  const nomeDe = l => (l.pecaId && typeof Almox !== 'undefined' && Almox.porId(l.pecaId) ? Almox.porId(l.pecaId).nome : l.nome) || '';
+  const pn = pecas.filter(l => /\bpneus?\b/i.test(nomeDe(l)) || /pneu/i.test(String(l.categoria || '')));
+  if (!pn.length) return;
+  const novos = pn.filter(l => l.origem !== 'estoque'), qtd = novos.reduce((t, l) => t + Math.round(Number(l.qtdComprada) || Number(l.qtd) || 1), 0);
+  if (!novos.length) { toast('🛞 Pneu saiu do almoxarifado: monte-o no ' + m.placa + ' em Pneus, para o controle de km.'); return; }
+  const txt = [nomeDe(novos[0]), m.observacao].join(' '), med = (txt.match(/\b(\d{3}\s*\/\s*\d{2}\s*R?\s*\d{2}(?:[.,]5)?)\b/i) || txt.match(/\b(\d{3}\s*\/\s*\d{2})\b/) || [])[1] || '';
+  abrirModalPneu(null, { quantidade: Math.min(50, qtd), marca: novos[0].marca || '', medida: med.replace(/\s+/g, ''), obs: 'Manutenção de ' + fmtData(m.data) + (m.oficina ? ' · ' + m.oficina : ''),
+    placa: m.placa, km: m.km, aviso: '🛞 ' + qtd + (qtd > 1 ? ' pneus vieram' : ' pneu veio') + ' da manutenção do ' + m.placa + '. Confira marca, medida e posição e salve: assim ' + (qtd > 1 ? 'eles entram' : 'ele entra') + ' no controle de pneus sem lançar de novo.' });
+}
 /** Lojas e oficinas já usadas (manutenções, notas e compras do almoxarifado), para as sugestões ao digitar. */
 function fonteLojas() {
   const vistos = {}, out = [];
@@ -929,6 +942,7 @@ async function salvarManutencao() {
   if (alertaAtivo) db.alertas = db.alertas.filter(x => x.id !== alertaAtivo.id);
   
   salvarCache(); renderDetalhe(); sincronizarAlertas(false); toast('Manutenção salva...');
+  if (!editando && pecas) setTimeout(() => pneusDaManutencao(pecas, { placa, km, data, oficina: loja, observacao }), 600);
   execBackground(async () => {
     await apiPost(editando ? 'updateManutencao' : 'addManutencao', envio);
     for (const ag of agCumpridos) await apiPost('deleteAgendamento', { id: ag.id });

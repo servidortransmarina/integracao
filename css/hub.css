@@ -1109,12 +1109,13 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 .ax-ac-item small{font-size:11px;color:#7b8a99;font-weight:500}
 .ax-ac-item.ativa,.ax-ac-item:hover{background:#e9f2fc;color:#154f83;font-weight:650}
 /* peça nova: unidade, área e marca */
-.ax-nova{grid-column:1/-1;display:grid;grid-template-columns:auto 170px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end;background:#f3f4ff;border-radius:10px;padding:8px 10px}
+.ax-nova{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end;background:#f3f4ff;border-radius:10px;padding:8px 10px}
+.ax-nova-t{grid-column:1/-1}.ax-nova label>*{width:100%;min-width:0}.ax-nova .ax-ac{display:block;width:100%}
 .ax-nova[hidden]{display:none}
 .ax-nova-t{font-size:12px;font-weight:700;color:#4338ca;align-self:center}
 .ax-nova label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:600;color:var(--dim)}
 .ax-nova select,.ax-nova input{padding:8px 10px;border:1px solid var(--border);border-radius:9px;font-size:14px;background:#fff;width:100%;box-sizing:border-box}
-@media (max-width:760px){.ax-nova{grid-template-columns:1fr 1fr}.ax-nova-t{grid-column:1/-1}.ax-nova label:nth-of-type(1){grid-column:1/-1}}
+@media (max-width:760px){.ax-nova{grid-template-columns:1fr 1fr}.ax-nova label:nth-of-type(1){grid-column:1/-1}}
 .oc-res-item{margin:0 0 12px;padding:10px 12px;background:#f8fafc;border-radius:10px;font-size:14px}
 .oc-res .row .field{flex:1}
 .oc-res input{padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;width:100%;box-sizing:border-box}
@@ -1197,3 +1198,13 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
   #tabelaHistorico td.h-acao{grid-area:acao;display:flex;gap:8px;margin-top:6px}
   #tabelaHistorico td.h-acao .btn{flex:1;max-width:160px}
 }
+.ax-ac-lista{min-width:190px}
+
+/* Cadastro de pneus em lote: uma linha por pneu (código previsto, onde está, posição, KM) */
+.pn-dest{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+.pn-dest-l{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px;align-items:center;padding:6px 8px;border:1px solid var(--border);border-radius:9px;background:#fafbfc}
+.pn-dest-l.monta{grid-template-columns:70px minmax(0,1.4fr) minmax(0,1fr)}.pn-dest-l.monta select:first-of-type{grid-column:2/4}.pn-dest-l.monta select:nth-of-type(2){grid-column:2}.pn-dest-l.monta input{grid-column:3}
+.pn-dest-c{font-size:13px;color:#173a57}
+.pn-dest-l select,.pn-dest-l input{width:100%;min-width:0;padding:7px 8px;font-size:14px}
+@media (max-width:600px){.pn-dest-l.monta{grid-template-columns:70px minmax(0,1fr)}.pn-dest-l.monta select:first-of-type,.pn-dest-l.monta select:nth-of-type(2),.pn-dest-l.monta input{grid-column:2}}
+.pn-aviso{margin-top:10px;padding:10px 12px;border-radius:10px;background:#eef6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-size:13px;line-height:1.4}

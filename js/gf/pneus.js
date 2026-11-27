@@ -480,7 +480,7 @@ function pneusDefinirModo(raiox) {
 function pneusIrParaVista(chave) { if (pneusMV && VISTAS_PNEUS[chave]) pneusMV.setAttribute('camera-orbit', VISTAS_PNEUS[chave]); }
 
 /* ---------- MODAL: CADASTRO / EDIÇÃO DE PNEU ---------- */
-function abrirModalPneu(codigo) {
+function abrirModalPneu(codigo, pre) {
   const p = codigo ? db.pneus.find(x => x.codigo === codigo) : null;
   pneuEditCodigo = p ? p.codigo : null;
   document.getElementById('pnTitulo').textContent = p ? 'Editar pneu ' + p.codigo : 'Cadastrar pneu';
@@ -490,19 +490,56 @@ function abrirModalPneu(codigo) {
   set('pnMarca', p ? p.marca : ''); set('pnModelo', p ? p.modelo : ''); set('pnMedida', p ? p.medida : '');
   set('pnRecap', p ? p.recapagens : 0); set('pnKmRodado', ''); set('pnObs', p ? p.obs : '');
   document.getElementById('pnNovoWrap').style.display = p ? 'none' : 'block';
-  document.getElementById('pnMontado').innerHTML = '<option value="">Em estoque</option>' + db.veiculos.map(v => `<option value="${v.placa}">Já montado em ${v.placa}</option>`).join('');
-  pnMontadoChange();
+  pnDestinosLinhas = []; pnDestinosMontar();
+  // vindo de uma manutenção: já preenchido e todos montados no caminhão dela (dá para trocar)
+  const av = document.getElementById('pnAviso'); av.hidden = !(pre && pre.aviso); av.textContent = pre && pre.aviso || '';
+  if (pre) {
+    set('pnQtd', pre.quantidade || 1); set('pnMarca', pre.marca || ''); set('pnMedida', pre.medida || ''); set('pnObs', pre.obs || ''); pnDestinosMontar();
+    if (pre.placa && db.veiculos.some(v => v.placa === pre.placa)) { pnDestinosLinhas.forEach(r => { r.placa.value = pre.placa; r.km.value = pre.km > 0 ? Number(pre.km).toLocaleString('pt-BR') : ''; }); pnDestinosPosicoes();
+      if (!pre.km) pnDestinosLinhas.forEach(r => { const v = db.veiculos.find(x => x.placa === pre.placa); r.km.value = v && v.kmAtual > 0 ? Number(v.kmAtual).toLocaleString('pt-BR') : ''; }); }
+  }
   openModal('modalPneu');
 }
-function pnMontadoChange() {
-  const placa = document.getElementById('pnMontado').value;
-  document.getElementById('pnMontadoWrap').style.display = placa ? 'flex' : 'none';
-  const q = document.getElementById('pnQtd'); q.disabled = !!placa; if (placa) q.value = 1;   // montado direto: 1 por vez
-  if (!placa) return;
-  const livres = posicoesDoVeiculo(placa).filter(pos => !pneuNaPosicao(placa, pos.cod));
-  document.getElementById('pnPosicao').innerHTML = livres.length ? livres.map(pos => `<option value="${pos.cod}">${pos.nome}</option>`).join('') : '<option value="">Sem posição livre</option>';
-  const v = db.veiculos.find(x => x.placa === placa);
-  document.getElementById('pnKmMont').value = v && v.kmAtual > 0 ? Number(v.kmAtual).toLocaleString('pt-BR') : '';
+/** Códigos que os pneus do lote vão receber (o mesmo cálculo do servidor): sem código, P-0001, P-0002…; com código, CÓDIGO-1, CÓDIGO-2… */
+function pnCodigosPrevistos(qtd, base) {
+  base = String(base || '').trim(); const out = [];
+  if (base) { for (let k = 1; k <= qtd; k++) out.push(qtd > 1 ? base + '-' + k : base); return out; }
+  const tem = c => db.pneus.some(x => String(x.codigo).toUpperCase() === c.toUpperCase());
+  let seq = db.pneus.reduce((m, x) => { const r = /^P-(\d+)$/i.exec(x.codigo); return r ? Math.max(m, Number(r[1])) : m; }, 0);
+  for (let k = 1; k <= qtd; k++) { let c; do { c = 'P-' + String(++seq).padStart(4, '0'); } while (tem(c)); out.push(c); }
+  return out;
+}
+/* Uma linha por pneu: o código que ele vai ganhar, onde está (estoque ou caminhão), a posição e o KM do caminhão. */
+let pnDestinosLinhas = [];
+function pnDestinosMontar() {
+  const box = document.getElementById('pnDestinos'); if (!box || pneuEditCodigo) return;
+  const q = Math.max(1, Math.min(50, parseInt(document.getElementById('pnQtd').value, 10) || 1)), cods = pnCodigosPrevistos(q, document.getElementById('pnCodigo').value);
+  const ant = pnDestinosLinhas.map(r => ({ placa: r.placa.value, pos: r.pos.value, km: r.km.value }));
+  limpar(box); pnDestinosLinhas = [];
+  const opPlacas = '<option value="">Em estoque</option>' + db.veiculos.map(v => `<option value="${v.placa}">Montado em ${v.placa}</option>`).join('');
+  for (let i = 0; i < q; i++) {
+    const a = ant[i] || (i > 0 && ant[i - 1] ? { placa: (pnDestinosLinhas[i - 1] || {}).placa ? pnDestinosLinhas[i - 1].placa.value : '' } : {});
+    const placa = h('select', { 'aria-label': 'Onde está o pneu ' + cods[i] }); placa.innerHTML = opPlacas; placa.value = a.placa || '';
+    const pos = h('select', { 'aria-label': 'Posição do pneu ' + cods[i] }), km = h('input', { type: 'text', inputmode: 'numeric', placeholder: 'KM do caminhão', 'aria-label': 'KM do caminhão' });
+    const r = { placa, pos, km, el: h('div', { class: 'pn-dest-l' }, h('b', { class: 'pn-dest-c', text: cods[i] }), placa, pos, km) };
+    pnDestinosLinhas.push(r); box.append(r.el);
+    placa.onchange = () => { const v = db.veiculos.find(x => x.placa === placa.value); km.value = v && v.kmAtual > 0 ? Number(v.kmAtual).toLocaleString('pt-BR') : ''; pnDestinosPosicoes(); };
+    pos.onchange = pnDestinosPosicoes;
+    if (a.km) km.value = a.km; else if (placa.value) { const v = db.veiculos.find(x => x.placa === placa.value); km.value = v && v.kmAtual > 0 ? Number(v.kmAtual).toLocaleString('pt-BR') : ''; }
+    pos.dataset.quer = a.pos || '';
+  }
+  pnDestinosPosicoes();
+}
+/** Posições livres de cada caminhão, sem repetir a que outro pneu do lote já pegou. */
+function pnDestinosPosicoes() {
+  pnDestinosLinhas.forEach((r, i) => {
+    const pl = r.placa.value, monta = !!pl; r.pos.hidden = r.km.hidden = !monta; r.el.classList.toggle('monta', monta);
+    if (!monta) { r.pos.innerHTML = ''; return; }
+    const outras = pnDestinosLinhas.filter((x, j) => j !== i && x.placa.value === pl).map(x => x.pos.value || x.pos.dataset.quer).filter(Boolean);
+    const livres = posicoesDoVeiculo(pl).filter(p => !pneuNaPosicao(pl, p.cod) && outras.indexOf(p.cod) < 0), atual = r.pos.value || r.pos.dataset.quer;
+    r.pos.innerHTML = livres.length ? livres.map(p => `<option value="${p.cod}">${p.nome}</option>`).join('') : '<option value="">Sem posição livre</option>';
+    if (atual && livres.some(p => p.cod === atual)) r.pos.value = atual; r.pos.dataset.quer = r.pos.value;
+  });
 }
 async function salvarPneuModal() {
   const g = id => document.getElementById(id).value.trim();
@@ -513,15 +550,18 @@ async function salvarPneuModal() {
   if (pneuEditCodigo) { dados.codigo = pneuEditCodigo; ok = await pneusApi('updatePneu', dados, 'Pneu atualizado.'); }
   else {
     const rodado = g('pnKmRodado'); if (rodado !== '') { const n = parseNumeroBR(rodado); if (isNaN(n) || n < 0) return toast('KM já rodado inválido.', true); dados.kmRodado = n; }
-    const placa = document.getElementById('pnMontado').value;
-    if (placa) {
-      const pos = document.getElementById('pnPosicao').value, km = parseNumeroBR(g('pnKmMont'));
-      if (!pos) return toast('Esse caminhão não tem posição livre.', true);
-      if (isNaN(km) || km < 0) return toast('Informe o KM do caminhão na montagem.', true);
-      Object.assign(dados, { placa, posicao: pos, kmMontagem: km });
+    const destinos = [];
+    for (const r of pnDestinosLinhas.slice(0, dados.quantidade)) {
+      const placa = r.placa.value; if (!placa) { destinos.push({}); continue; }
+      const pos = r.pos.value, km = parseNumeroBR(r.km.value);
+      if (!pos) { r.pos.focus(); return toast('O ' + placa + ' não tem mais posição livre para o pneu ' + r.el.querySelector('.pn-dest-c').textContent + '.', true); }
+      if (isNaN(km) || km < 0) { r.km.focus(); return toast('Informe o KM do ' + placa + ' na montagem.', true); }
+      destinos.push({ placa, posicao: pos, kmMontagem: km });
     }
-    ok = await pneusApi('addPneu', dados, dados.quantidade > 1 ? dados.quantidade + ' pneus lançados no estoque.' : 'Pneu cadastrado.');
-    if (ok && placa) { pneusPlaca = placa; pneusPosSel = dados.posicao; renderPneus(); }
+    const nMont = destinos.filter(x => x.placa).length, prim = destinos.find(x => x.placa);
+    if (nMont) dados.destinos = destinos;
+    ok = await pneusApi('addPneu', dados, dados.quantidade > 1 ? dados.quantidade + ' pneus cadastrados' + (nMont ? ' (' + nMont + ' já montados)' : ' no estoque') + '.' : 'Pneu cadastrado.');
+    if (ok && prim) { pneusPlaca = prim.placa; pneusPosSel = prim.posicao; renderPneus(); }
   }
   if (ok) closeModal('modalPneu');
 }
