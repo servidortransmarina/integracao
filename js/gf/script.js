@@ -436,7 +436,7 @@ function renderDetalhe() {
 
   // Monta as linhas do histórico exibindo o KM normalmente (ou 0 km)
   const linhasHistoricoHtml = msUi.map(m => {
-    const colKm = '<div style="font-size: 10px; color: var(--dim); text-transform: uppercase;">Apurado com</div><div style="font-weight: 600;">' + fmtKm(m.km) + '</div>';
+    const colKm = '<div class="h-km-rot" style="font-size: 10px; color: var(--dim); text-transform: uppercase;">Apurado com</div><div style="font-weight: 600;">' + fmtKm(m.km) + '</div>';
     const btnExcluir = isAdmin ? `<button class="btn danger small" onclick="excluirManutencao('${m.id}')">Excluir</button>` : '';
     const cl = m.tipo === 'abastecimento' ? '' : tagClasse(classeDe(m));
     const nota = (m.nota ? ` <button type="button" class="btn-nota" title="Ver a foto da nota" onclick="verNota('${escAttr(m.nota)}', '${escAttr(nomeManutencao(m))}')">🧾 Nota</button>` : '')
@@ -444,7 +444,8 @@ function renderDetalhe() {
     const qq = m._abs ? (m.nome ? 'Lançado por ' + m.nome : '') : quemQuando(m, 'Lançado');
     const pcs = m._abs || typeof Almox === 'undefined' ? [] : Almox.movs().filter(x => String(x.manutencaoId) === String(m.id) && x.tipo === 'SAIDA').map(x => { const p = Almox.porId(x.pecaId); return (p ? p.nome : 'peça') + (Number(x.quantidade) !== 1 ? ' ×' + Almox.num(x.quantidade) : ''); });
     const origemNota = [m.notaNum ? '🧾 Nota ' + m.notaNum : (m.lote ? '🧾 Lançado junto com outros serviços' : ''), m.oficina, pcs.length ? '🔩 ' + pcs.join(', ') + (m.valorPecas > 0 ? ' (' + fmtMoeda(m.valorPecas) + ' no valor)' : '') : ''].filter(Boolean).join(' · ');
-    return `<tr><td>${nomeManutencao(m)}<div class="hist-tags">${cl}${nota}</div>${qq ? `<div class="quem-quando">👤 ${escHtml(qq)}</div>` : ''}${origemNota ? `<div class="quem-quando">${escHtml(origemNota)}</div>` : ''}</td><td>${fmtData(m.data)}</td><td>${colKm}</td><td>${fmtMoeda(m.valor)}</td><td>${m.observacao || '-'}</td><td><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
+    // no celular cada linha vira um cartão (CSS): nome e valor em cima, data e KM embaixo, depois obs, quem lançou e os botões
+    return `<tr><td class="h-tipo"><span class="h-nome">${nomeManutencao(m)}</span><div class="hist-tags">${cl}${nota}</div><div class="h-quem">${qq ? `<div class="quem-quando">👤 ${escHtml(qq)}</div>` : ''}${origemNota ? `<div class="quem-quando">${escHtml(origemNota)}</div>` : ''}</div></td><td class="h-data">${fmtData(m.data)}</td><td class="h-km">${colKm}</td><td class="h-val">${fmtMoeda(m.valor)}</td><td class="h-obs">${m.observacao || '-'}</td><td class="h-acao"><button class="btn secondary small" onclick="editarManutencao('${m.id}')">Editar</button> ${btnExcluir}</td></tr>`;
   }).join('');
 
   document.getElementById('manutDetalheWrap').innerHTML = `
@@ -636,8 +637,16 @@ function definirCrit(ref, id, crit) {
   renderTelaAtual(); toast('Criticidade: ' + CRITS[crit].t + '.');
   execBackground(async () => { try { await apiPost('definirCriticidade', { ref, id, criticidade: crit }); } catch (e) { x.criticidade = antes; if (bruto) bruto.criticidade = antes; renderTelaAtual(); throw e; } }, 'Não foi possível mudar a criticidade');
 }
-function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; manutTotalPecas(); document.getElementById('mCritWrap').style.display = ag ? 'block' : 'none'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
+function onModoChange() { const ag = document.getElementById('mModo').value === 'agendar'; manutTotalPecas(); document.getElementById('mLojaWrap').hidden = manutAbast || ag; document.getElementById('mLojaRot').textContent = 'Loja / oficina (onde foi feito)'; document.getElementById('mCritWrap').style.display = ag ? 'block' : 'none'; document.getElementById('mDataRealizadaWrap').style.display = ag ? 'none' : 'block'; document.getElementById('mDataPrevistaWrap').style.display = ag ? 'block' : 'none'; }
 
+/** Lojas e oficinas já usadas (manutenções, notas e compras do almoxarifado), para as sugestões ao digitar. */
+function fonteLojas() {
+  const vistos = {}, out = [];
+  [].concat(db.manutencoes.map(m => m.oficina), typeof Almox !== 'undefined' ? Almox.fornecedores() : []).forEach(n => { n = String(n || '').trim(); const k = n.toLowerCase(); if (n && k !== 'oficina' && !vistos[k]) { vistos[k] = 1; out.push(n); } });
+  return out.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+/** KM do caminhão num dia passado, pela Sascar (servidor). null se não tiver leitura perto daquele dia. */
+async function kmDoDiaSascar(placa, data) { try { const r = await apiPost('kmNoDia', { placa, data }); return r && Number(r.km) > 0 ? r : null; } catch (e) { return null; } }
 /** Serviços já usados (a lista que o GF monta) para as sugestões ao digitar. */
 function fonteServicos() { return Array.from(document.querySelectorAll('#listaServicos option')).map(o => o.value).filter(Boolean); }
 function abrirModalManut(placa, manut, modo) {
@@ -659,6 +668,7 @@ function abrirModalManut(placa, manut, modo) {
   document.getElementById('mData').value = manut ? manut.data : hojeISO(); document.getElementById('mDataPrevista').value = ''; 
   document.getElementById('mValor').value = (manut && manut.valor > 0) ? Number(manut.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : ''; 
   document.getElementById('mObs').value = manut ? (manut.observacao || '') : '';
+  { const lj = document.getElementById('mLoja'); if (!lj.closest('.ax-ac')) sugestoes(lj, fonteLojas); lj.value = manut ? (manut.oficina || '') : ''; }
   { const sel = document.getElementById('mClasse'); delete sel.dataset.mexeu; sel.onchange = () => { sel.dataset.mexeu = '1'; };
     sel.value = manut ? classeDe(manut) : 'CORR-PL'; if (manut && manut.classe) sel.dataset.mexeu = '1'; if (!manut) sugerirClasse();
     document.getElementById('mCrit').value = (manut && normCrit(manut.criticidade)) || 'P3'; }
@@ -694,7 +704,7 @@ function manutParaNota(itens) {
   const ped = manutEditorPecas && manutEditorPecas.quantas() ? manutEditorPecas.obter() : null;
   if (ped && ped.linhas && linhas[0]) linhas[0].pecas = ped.linhas;
   closeModal('modalManut');
-  abrirNotaServicos({ placa: veiculoSel, modo: g('mModo'), linhas, total: parseNumeroBR(g('mValor')) || 0, km: g('mKm').trim(), data: g('mData'), dataPrevista: g('mDataPrevista'), obs: g('mObs').trim(), criticidade: g('mCrit'),
+  abrirNotaServicos({ placa: veiculoSel, modo: g('mModo'), linhas, total: parseNumeroBR(g('mValor')) || 0, km: g('mKm').trim(), data: g('mData'), dataPrevista: g('mDataPrevista'), obs: g('mObs').trim(), criticidade: g('mCrit'), oficina: g('mLoja').trim(),
     aviso: itens ? '"' + texto + '" vai virar ' + itens.length + ' manutenções separadas. Confira e divida o valor entre elas.' : '' });
 }
 
@@ -704,7 +714,7 @@ function manutParaNota(itens) {
 function abrirNotaServicos(op) {
   op = op || {}; atualizarDatalistServicos();
   const placa = op.placa, v = db.veiculos.find(x => x.placa === placa);
-  const oficinas = Array.from(new Set(db.manutencoes.map(m => m.oficina).filter(Boolean))).sort();
+  const oficinas = fonteLojas();
   const inp = (a) => h('input', Object.assign({ type: 'text', autocomplete: 'off', spellcheck: 'false', name: 'nt_' + Math.random().toString(36).slice(2, 8) }, a));
   const modo = h('select', { 'aria-label': 'Situação' }, h('option', { value: 'realizada', text: 'Serviços já feitos' }), h('option', { value: 'agendar', text: 'Agendar (orçamento aprovado)' }));
   modo.value = op.modo === 'agendar' ? 'agendar' : 'realizada';
@@ -802,6 +812,8 @@ function abrirNotaServicos(op) {
       if (!data.value) { mensagem(msg, 'Preencha a data.'); return data.focus(); }
       if (km.value.trim()) { kmN = parseNumeroBR(km.value); if (isNaN(kmN) || kmN <= 0) { mensagem(msg, 'KM inválido.'); return km.focus(); }
         const val = validarSaltoKm(placa, kmN, data.value, false); if (val) { if (val.erro) { mensagem(msg, val.msg); return km.focus(); } if (val.alerta && !(await confirmarCustom('Aviso de KM', val.msg))) return; } }
+      else if (!ag && data.value && data.value < hojeISO()) { const kd = await kmDoDiaSascar(placa, data.value); kmN = kd ? kd.km : (v ? v.kmAtual : 0);      // nota de dia passado sem KM: o KM daquele dia pela Sascar
+        if (kd) setTimeout(() => toast('KM de ' + fmtData(data.value) + ' pela Sascar: ' + fmtKm(kd.km)), 900); }
       else kmN = v ? v.kmAtual : 0;
     }
     if (rows.some(r => r.ed && r.ed.precoSuspeito()) && !(await confirmarCustom('Preço de peça fora do normal', 'Tem peça com valor bem diferente do que costuma custar. Confirma que digitou o valor de UMA unidade?'))) return;
@@ -837,6 +849,7 @@ async function salvarManutencao() {
   const modo = document.getElementById('mModo').value; const textoTipo = document.getElementById('mTipoInput').value.trim(); const kmInput = document.getElementById('mKm').value.trim(); const data = document.getElementById('mData').value; const dataPrevista = document.getElementById('mDataPrevista').value; 
   const valor = parseNumeroBR(document.getElementById('mValor').value) || 0; 
   const observacao = document.getElementById('mObs').value.trim();
+  const loja = document.getElementById('mLoja').value.trim().slice(0, 60);
   
   if (!textoTipo) return toast('Informe qual manutenção será feita.', true);
   
@@ -877,9 +890,19 @@ async function salvarManutencao() {
      }
   }
   
+  // manutenção já feita, com data anterior e KM em branco: o KM é o daquele dia pela Sascar, não o de hoje
+  let kmDia = null;
+  if (kmInput === '' && !isAbastecimento && modo !== 'agendar' && data && data < hojeISO()) {
+    const bt = document.querySelector('#modalManut .modal-actions .btn:not(.secondary)'), t0 = bt ? bt.textContent : '';
+    if (bt) { bt.disabled = true; bt.textContent = 'Buscando KM de ' + fmtData(data) + '…'; }
+    kmDia = await kmDoDiaSascar(placa, data);
+    if (bt) { bt.disabled = false; bt.textContent = t0; }
+  }
   closeModal('modalManut');
   // Se for abastecimento sem KM informado (ou 0), mantém 0 e NUNCA puxa o kmAtual do caminhão
-  const km = kmInput !== '' ? kmParsed : (isAbastecimento ? (manutOriginal ? manutOriginal.km : 0) : (v ? v.kmAtual : 0));
+  const km = kmInput !== '' ? kmParsed : (isAbastecimento ? (manutOriginal ? manutOriginal.km : 0) : kmDia ? kmDia.km : (v ? v.kmAtual : 0));
+  if (kmDia) setTimeout(() => toast('KM de ' + fmtData(data) + ' pela Sascar: ' + fmtKm(kmDia.km) + (kmDia.exato ? '' : ' (leitura de ' + fmtData(kmDia.data) + ')')), 900);
+  else if (kmInput === '' && !isAbastecimento && modo !== 'agendar' && data && data < hojeISO()) setTimeout(() => toast('Sem leitura da Sascar perto de ' + fmtData(data) + ': ficou o KM atual. Se souber o KM do dia, edite.', true), 900);
   const kmSubiu = !!(v && km > v.kmAtual); if (kmSubiu) v.kmAtual = km; 
 
   const nomeUsuario = (GF.nome()) + " (em " + dataHoraAtual() + ")";
@@ -894,7 +917,7 @@ async function salvarManutencao() {
   }
 
   const registro = { id: editando ? manutEditId : gerarId(), placa, tipo: tipoFinal, descricao: descricaoFinal, km, data, valor: pecas ? Math.round((valor + custoPecas) * 100) / 100 : valor, valorPecas: custoPecas, observacao, nome: nomeUsuario, classe: isAbastecimento ? '' : document.getElementById('mClasse').value, nota: manutOriginal ? manutOriginal.nota || '' : '',
-    lote: manutOriginal ? manutOriginal.lote || '' : '', oficina: manutOriginal ? manutOriginal.oficina || '' : '', notaNum: manutOriginal ? manutOriginal.notaNum || '' : '' };
+    lote: manutOriginal ? manutOriginal.lote || '' : '', oficina: isAbastecimento ? (manutOriginal ? manutOriginal.oficina || '' : '') : loja, notaNum: manutOriginal ? manutOriginal.notaNum || '' : '' };
   const envio = pecas ? Object.assign({}, registro, { valor, pecas }) : registro;      // com peças, o servidor soma o custo delas ao valor do serviço
   
   const agCumpridos = db.agendamentos.filter(a => a.placa === placa && (a.id === manutAgResolvendo || normPeca(a.tipo === 'outro' ? a.descricao : a.tipo) === normPeca(tipoFinal === 'outro' ? descricaoFinal : tipoFinal)));

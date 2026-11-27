@@ -70,7 +70,7 @@ const Motorista = {
     const F = this.filaFotos;
     const rodar = async () => {
       F.ativos++; foto.estado = 'enviando'; foto.aviso && foto.aviso();
-      try { const r = await API.chamar('enviarFotoChecklist', { tipo: foto.tipo, slot: foto.slot, placa: placa(), ck: foto.tipo === 'nota' ? '' : this.ckAtual || '', imagemBase64: foto.dados }, { mudo: true }); foto.id = r.id; foto.estado = 'ok'; foto.erro = ''; }
+      try { const r = await API.chamar('enviarFotoChecklist', { tipo: foto.tipo, slot: foto.slot, placa: placa(), ck: foto.tipo === 'nota' ? '' : this.ckAtual || '', imagemBase64: foto.dados }, { mudo: true }); foto.id = r.id; foto.estado = 'ok'; foto.erro = ''; if (foto.aoOk) foto.aoOk(); }
       catch (e) { foto.estado = 'erro'; foto.erro = e.message; }
       F.ativos--; foto.aviso && foto.aviso(); const prox = F.espera.shift(); if (prox) prox();
       (foto.resolver || []).forEach(f => f()); foto.resolver = [];
@@ -78,8 +78,23 @@ const Motorista = {
     foto.pronta = new Promise(res => { foto.resolver = [res]; });
     if (F.ativos < 2) rodar(); else F.espera.push(rodar);
   },
+  /** Fotos do checklist que ainda não terminaram de subir ficam guardadas no celular (IndexedDB): se o app fechar
+      ou o celular recarregar a página ao abrir a câmera, elas voltam e são enviadas de novo. */
+  fotosPend: {
+    db() { if (!this._db) this._db = new Promise((ok, no) => { if (!window.indexedDB) return no(new Error('sem IndexedDB')); const r = indexedDB.open('trm-ck-fotos', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); }); return this._db; },
+    async tx(modo, fn) { try { const db = await this.db(); return await new Promise((ok, no) => { const t = db.transaction('f', modo), st = t.objectStore('f'); let r; fn(st, x => { r = x; }); t.oncomplete = () => ok(r); t.onerror = () => no(t.error); t.onabort = () => no(t.error); }); } catch (e) { return undefined; } },
+    salvar(chave, k, v) { return this.tx('readwrite', st => st.put(Object.assign({ dia: Motorista.hoje() }, v), chave + '|' + k)); },
+    tirar(chave, k) { return this.tx('readwrite', st => st.delete(chave + '|' + k)); },
+    async lista(chave) {
+      const l = await this.tx('readwrite', (st, fim) => { const out = []; const c = st.openCursor(); c.onsuccess = () => { const cur = c.result; if (!cur) return fim(out);
+        if (String(cur.key).indexOf(chave + '|') === 0) { if (cur.value && cur.value.dia === Motorista.hoje()) out.push(Object.assign({ k: String(cur.key).slice(chave.length + 1) }, cur.value)); else cur.delete(); } cur.continue(); }; });
+      return l || [];
+    },
+    async limpar(chave) { (await this.lista(chave)).forEach(x => this.tirar(chave, x.k)); }
+  },
   /** Cartão "Fotos do caminhão". Devolve { el, estado() } — estado diz o que falta e permite esperar os envios. */
-  cartaoFotos(mod, placa, mudou) {
+  cartaoFotos(mod, placa, mudou, chaveRasc) {
+    const M = this, P = this.fotosPend, guarda = (f, k) => { if (!chaveRasc) return; f.pk = k; P.salvar(chaveRasc, k, { tipo: f.tipo, slot: f.slot, dados: f.dados }); f.aoOk = () => P.tirar(chaveRasc, k); }, solta = f => { if (chaveRasc && f && f.pk) P.tirar(chaveRasc, f.pk); };
     const cfg = mod.fotos || { carroceriaMin: 4, carroceriaMax: 10, pneus: [], cabineItem: '' };
     mudou = mudou || (() => {});
     const car = [], pneu = {}, cab = { v: null };
@@ -100,16 +115,16 @@ const Motorista = {
     // carroceria
     const contador = h('small', { class: 'hint' }), gridCar = h('div', { class: 'ckf-grid' });
     const pintaCar = () => {
-      limpar(gridCar); car.forEach((f, i) => gridCar.append(miniatura(f, () => { car.splice(i, 1); pintaCar(); mudou(); })));
+      limpar(gridCar); car.forEach((f, i) => gridCar.append(miniatura(f, () => { solta(f); car.splice(i, 1); pintaCar(); mudou(); })));
       contador.textContent = car.length + ' de ' + cfg.carroceriaMin + ' fotos (mínimo)' + (car.length >= cfg.carroceriaMin ? ' ✓' : '');
       if (car.length < cfg.carroceriaMax) gridCar.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => pc.abrir() }, h('b', { text: '＋' }), h('span', { text: 'Foto' })));
     };
-    const pc = pegar(d => { const f = { tipo: 'carroceria', slot: 'c' + (car.length + 1), dados: d, estado: 'enviando' }; car.push(f); this.enviarFoto(f, placa); pintaCar(); });
+    const pc = pegar(d => { const f = { tipo: 'carroceria', slot: 'c' + (car.length + 1), dados: d, estado: 'enviando' }; guarda(f, 'c:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)); car.push(f); this.enviarFoto(f, placa); pintaCar(); });
     // pneus e cabine: um espaço por foto
     const slot = (rotulo, guardar, obter, tipo, chave) => {
-      const caixa = h('div', { class: 'ckf-slot' }), p = pegar(d => { const f = { tipo, slot: chave, dados: d, estado: 'enviando' }; guardar(f); this.enviarFoto(f, placa); pinta(); });
+      const caixa = h('div', { class: 'ckf-slot' }), p = pegar(d => { const f = { tipo, slot: chave, dados: d, estado: 'enviando' }; guarda(f, 's:' + rotulo); guardar(f); this.enviarFoto(f, placa); pinta(); });
       const pinta = () => { limpar(caixa); const f = obter(); caixa.append(h('div', { class: 'ckf-rot', text: rotulo }));
-        if (f) caixa.append(miniatura(f, () => { guardar(null); pinta(); mudou(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
+        if (f) caixa.append(miniatura(f, () => { solta(obter()); guardar(null); pinta(); mudou(); })); else caixa.append(h('button', { type: 'button', class: 'ckf-add', onclick: () => p.abrir() }, h('b', { text: '📷' }), h('span', { text: 'Tirar foto' }))); caixa.append(p.inp); };
       pinta(); return caixa;
     };
     const so = !!cfg.soSlots;     // checklist diário: só as fotos fixas (painel e frente)
@@ -123,9 +138,19 @@ const Motorista = {
     const salva = id => ({ tipo: 'salva', dados: urlFotoDrive(id, 400), estado: 'ok', id, pronta: Promise.resolve() });
     return { el, todas,
       /** Volta as fotos de um checklist que ficou pela metade (já estão no Drive). */
-      restaurar(f) { if (!f) return; (f.c || []).forEach(id => car.push(salva(id))); Object.keys(f.p || {}).forEach(n => { if ((cfg.pneus || []).indexOf(n) >= 0) pneu[n] = salva(f.p[n]); }); if (f.k) cab.v = salva(f.k);
+      restaurar(f) { if (!f) return; (f.c || []).filter(id => !car.some(x => x.id === id)).forEach(id => car.push(salva(id))); Object.keys(f.p || {}).forEach(n => { if ((cfg.pneus || []).indexOf(n) >= 0) pneu[n] = salva(f.p[n]); }); if (f.k) cab.v = salva(f.k);
         pintaCar(); $$('.ckf-slot', el).forEach(x => x.remove()); const pz = $('.ckf-pneus', el); limpar(pz); (cfg.pneus || []).forEach((n, i) => pz.append(slot(n, f2 => { pneu[n] = f2; }, () => pneu[n], so ? 'item' : 'pneu', (so ? 'd' : 'p') + (i + 1))));
         if (!so) el.append(slot('Cabine por dentro', f2 => { cab.v = f2; }, () => cab.v, 'cabine', 'k')); },
+      /** Fotos que não tinham terminado de subir: voltam para o lugar e são enviadas de novo. */
+      pendentes(l) { let mexeu = false;
+        l.forEach(x => { const f = { tipo: x.tipo, slot: x.slot, dados: x.dados, estado: 'enviando', pk: x.k, aoOk: () => P.tirar(chaveRasc, x.k) };
+          const sobra = () => P.tirar(chaveRasc, x.k);      // o lugar já tem foto enviada: a guardada não serve mais
+          if (x.k.indexOf('c:') === 0) { if (car.length >= cfg.carroceriaMax) return sobra(); car.push(f); }
+          else if (x.k === 's:Cabine por dentro') { if (cab.v) return sobra(); cab.v = f; }
+          else if (x.k.indexOf('s:') === 0) { const n = x.k.slice(2); if ((cfg.pneus || []).indexOf(n) < 0 || pneu[n]) return sobra(); pneu[n] = f; }
+          else return;
+          M.enviarFoto(f, placa); mexeu = true; });
+        if (mexeu) this.restaurar({}); return l.filter(x => x.k.indexOf('i:') !== 0).length; },
       ids() { const ok = f => f && f.estado === 'ok' && f.id ? f.id : ''; const p = {}; (cfg.pneus || []).forEach(n => { if (ok(pneu[n])) p[n] = pneu[n].id; }); return { c: car.map(ok).filter(Boolean), p, k: ok(cab.v) }; },
       falta() {
         if (car.length < cfg.carroceriaMin) return 'Tire mais ' + (cfg.carroceriaMin - car.length) + ' foto(s) da carroceria.';
@@ -181,7 +206,7 @@ const Motorista = {
     const mudou = () => { if (!pronto) return; try { localStorage.setItem(chave, JSON.stringify(montarRasc())); } catch (e) { /* sem armazenamento: o servidor guarda */ } clearTimeout(tServ); tServ = setTimeout(enviarServ, 6000); };
     Motorista._ckFlush = () => { if (tServ) enviarServ(); };      // app minimizado/fechado: manda o que falta para o servidor na hora
     if (!Motorista._ckOuvindo) { Motorista._ckOuvindo = true; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && Motorista._ckFlush) Motorista._ckFlush(); }); }
-    const apagarRasc = () => { clearTimeout(tServ); tServ = null; Motorista._ckFlush = null; try { localStorage.removeItem(chave); } catch (e) { /* ok */ } };
+    const apagarRasc = () => { clearTimeout(tServ); tServ = null; Motorista._ckFlush = null; try { localStorage.removeItem(chave); } catch (e) { /* ok */ } this.fotosPend.limpar(chave); };
     // foto de cada item (opcional): itens que já têm foto no cartão de fotos (pneus e cabine) não pedem de novo
     const jaTemFoto = (mod.fotos && mod.fotos.pneus || []).concat(mod.fotos && mod.fotos.cabineItem ? [mod.fotos.cabineItem] : []);
     const comFotoPropria = mod.semFotoItem ? [] : mod.categorias.reduce((l, c) => l.concat(c.itens.filter(n => jaTemFoto.indexOf(n) < 0)), []), contFotos = h('span', { class: 'ck-fotos-cont' });
@@ -193,7 +218,7 @@ const Motorista = {
       const pinta = () => { const f = fotoItem[nome]; limpar(bt); bt.className = 'ck-foto' + (ob ? ' obrig' : '') + (f ? ' tem ' + f.estado : ''); if (f) bt.append(h('img', { src: f.dados, alt: '' }), h('i', { text: f.estado === 'ok' ? '✓' : f.estado === 'erro' ? '!' : '…' })); else bt.append('📷'); pintaCont(); };
       ctl['foto:' + nome] = pinta;
       inp.onchange = async () => { const arq = inp.files && inp.files[0]; inp.value = ''; if (!arq) return;
-        try { const f = { tipo: 'item', slot: nome.slice(0, 12), dados: await this.reduzirFoto(arq), estado: 'enviando' }; f.aviso = () => { pinta(); if (f.estado === 'ok') mudou(); }; fotoItem[nome] = f; this.enviarFoto(f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
+        try { const f = { tipo: 'item', slot: nome.slice(0, 12), dados: await this.reduzirFoto(arq), estado: 'enviando' }; f.aviso = () => { pinta(); if (f.estado === 'ok') mudou(); }; const ant = fotoItem[nome]; if (ant && ant.pk) this.fotosPend.tirar(chave, ant.pk); f.pk = 'i:' + nome; this.fotosPend.salvar(chave, f.pk, { tipo: f.tipo, slot: f.slot, dados: f.dados }); f.aoOk = () => this.fotosPend.tirar(chave, f.pk); fotoItem[nome] = f; this.enviarFoto(f, () => placa.value); pinta(); } catch (e) { toast(e.message); } };
       bt.onclick = () => { const f = fotoItem[nome]; if (f && f.estado === 'erro') { this.enviarFoto(f, () => placa.value); return; } inp.click(); };
       pinta(); return h('span', { class: 'ck-foto-cx' }, bt, inp);
     };
@@ -235,7 +260,7 @@ const Motorista = {
     const outroTx = h('textarea', { rows: 2, maxlength: 300, placeholder: 'Ex.: retrovisor solto, barulho na suspensão… (deixe em branco se não tiver)', oninput: () => mudou() }), outroSt = { v: 'warn' };
     const outroSeg = h('div', { class: 'oc-seg' }); [['warn', '! Atenção'], ['bad', '✕ Ruim']].forEach(([v, t]) => { const b = h('button', { type: 'button', class: 'oc-op ' + (v === 'warn' ? 'pendente on' : 'ruim'), text: t, dataset: { v } }); b.onclick = () => { outroSt.v = v; outroSeg.querySelectorAll('.oc-op').forEach(x => x.classList.toggle('on', x === b)); mudou(); }; outroSeg.append(b); });
     const outroCx = h('div', { class: 'card ck-cat ck-outro' }, h('h3', { text: 'OUTRO PROBLEMA (OPCIONAL)' }), h('p', { class: 'hint', text: 'Viu algo que não está na lista? Escreva aqui.' }), outroTx, outroSeg);
-    const fotosCx = this.cartaoFotos(mod, () => placa.value, () => mudou());
+    const fotosCx = this.cartaoFotos(mod, () => placa.value, () => mudou(), chave);
     const eq = h('div', { class: 'card ck-cat' }, h('h3', { text: 'QUANTIDADES' }));
     mod.quantidades.forEach(n => { const i = h('input', { type: 'number', inputmode: 'numeric', min: 0, max: 999, placeholder: '0', oninput: e => { qtd[n] = e.target.value; mudou(); } }); ctl['qtd:' + n] = i; eq.append(h('div', { class: 'ck-lin' }, h('div', { class: 'ck-topo' }, h('span', { class: 'ck-nome', text: 'Quantidade de ' + n.toLowerCase().replace(/s$/, '') + 's' }), h('span', { class: 'ck-qtd' }, i)))); });
     const msg = h('div', { class: 'msg' }), env = h('button', { class: 'btn', type: 'button', text: 'Enviar checklist' });
@@ -286,6 +311,14 @@ const Motorista = {
           if (!ok) return; apagarRasc(); API.chamar('salvarRascunhoChecklist', { rascunho: null }, { fundo: true }).catch(() => {}); d.rascunhoChecklist = null; App.abrirAba('checklists'); }) })));
     }
     pronto = true;
+    this.fotosPend.lista(chave).then(l => { if (!l.length || !raiz.isConnected) return;
+      let n0 = 0; fotosCx.pendentes(l);
+      l.filter(x => x.k.indexOf('i:') === 0).forEach(x => { const n = x.k.slice(2); if (!ctl['foto:' + n] || (fotoItem[n] && fotoItem[n].estado === 'ok')) { this.fotosPend.tirar(chave, x.k); return; }
+        const f = { tipo: x.tipo, slot: x.slot, dados: x.dados, estado: 'enviando', pk: x.k }; f.aoOk = () => this.fotosPend.tirar(chave, x.k); f.aviso = () => { ctl['foto:' + n](); if (f.estado === 'ok') mudou(); };
+        fotoItem[n] = f; this.enviarFoto(f, () => placa.value); ctl['foto:' + n](); });
+      n0 = $$('.ckf-mini.enviando', raiz).length + Object.keys(fotoItem).filter(k => fotoItem[k].estado === 'enviando').length; if (!n0) return;
+      toast('📷 ' + n0 + (n0 > 1 ? ' fotos que não tinham terminado de enviar voltaram e estão sendo enviadas.' : ' foto que não tinha terminado de enviar voltou e está sendo enviada.'));
+    });
     return raiz;
   },
 

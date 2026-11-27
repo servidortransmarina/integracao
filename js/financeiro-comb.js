@@ -434,16 +434,22 @@ const Comb = {
 
   // ---------- cadastro ----------
   telaCadastro() {
-    const d = this.d, so = App.sessao.chefe, q = this.busca.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
-    const lista = d.cadastro.filter(c => (!this.grupoCad || c.grupo === this.grupoCad) && (!q || (c.nome + ' ' + c.placa).normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().indexOf(q) >= 0));
-    const busca = h('input', { id: 'cbBusca', class: 'cb-in', placeholder: 'Buscar nome ou placa', value: this.busca, oninput: e => { this.busca = e.target.value; this.render(); } });
+    const d = this.d, so = App.sessao.chefe, nz = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(), sp = t => nz(t).replace(/[^A-Z0-9]/g, '');
+    const lista = d.cadastro.filter(c => !this.grupoCad || c.grupo === this.grupoCad);
+    // a busca só esconde/mostra as linhas: o campo não é recriado (no celular, recriar fechava o teclado a cada letra)
+    const confere = (c, q) => !q || nz(c.nome + ' ' + c.placa).indexOf(nz(q)) >= 0 || (sp(q) && sp(c.placa).indexOf(sp(q)) >= 0);
+    const vazio = h('div', { class: 'empty', text: 'Nenhum motorista ou placa com essa busca.' });
+    const filtrar = () => { let n = 0; linhas.forEach(([tr, c]) => { tr.hidden = !confere(c, this.busca); if (!tr.hidden) n++; }); vazio.hidden = n > 0; };
+    const busca = h('input', { id: 'cbBusca', class: 'cb-in', type: 'search', autocomplete: 'off', placeholder: 'Buscar nome ou placa', value: this.busca, oninput: e => { this.busca = e.target.value; filtrar(); } });
+    const linhas = [], linha = (c, tr) => { linhas.push([tr, c]); return tr; };
     const filtro = h('div', { class: 'cb-postos' }, [['', 'Todos'], ['AGREGADO', 'Agregados'], ['FROTA', 'Frota própria']].map(([v, t]) => h('button', { type: 'button', class: 'cb-posto' + (this.grupoCad === v ? ' on' : ''), onclick: () => { this.grupoCad = v; this.render(); } }, h('b', { text: t }), h('small', { text: String(d.cadastro.filter(c => !v || c.grupo === v).length) }))));
     const tab = h('div', { class: 'cb-tab' }, h('table', { class: 'cb-cad' }, h('thead', {}, h('tr', {}, h('th', { text: 'Motorista' }), h('th', { text: 'Placa' }), h('th', { text: 'Grupo' }), h('th', { text: 'Situação' }), so ? null : h('th', {}))),
-      h('tbody', {}, lista.map(c => h('tr', { class: c.ativo === 'NAO' ? 'inativo' : '' }, h('td', { class: 'nm' }, c.nome, c.daEscala ? h('small', { class: 'cb-esc', title: 'Quem mais rodou com o caminhão nos últimos 30 dias, pela escala' + (c.nomeCadastro ? ' (no cadastro: ' + c.nomeCadastro + ')' : ''), text: ' · pela escala' }) : null), h('td', { class: 'pl', text: c.placa }), h('td', { text: c.grupo === 'FROTA' ? 'Frota própria' : 'Agregado' }), h('td', { text: c.ativo === 'NAO' ? 'Inativo' : 'Ativo' }),
-        so ? null : h('td', { class: 'n' }, h('button', { class: 'btn-link', type: 'button', text: 'Editar', onclick: () => this.editarCad(c) })))))));
+      h('tbody', {}, lista.map(c => linha(c, h('tr', { class: c.ativo === 'NAO' ? 'inativo' : '' }, h('td', { class: 'nm' }, c.nome, c.daEscala ? h('small', { class: 'cb-esc', title: 'Quem mais rodou com o caminhão nos últimos 30 dias, pela escala' + (c.nomeCadastro ? ' (no cadastro: ' + c.nomeCadastro + ')' : ''), text: ' · pela escala' }) : null), h('td', { class: 'pl', text: c.placa }), h('td', { text: c.grupo === 'FROTA' ? 'Frota própria' : 'Agregado' }), h('td', { text: c.ativo === 'NAO' ? 'Inativo' : 'Ativo' }),
+        so ? null : h('td', { class: 'n' }, h('button', { class: 'btn-link', type: 'button', text: 'Editar', onclick: () => this.editarCad(c) }))))))));
+    filtrar();
     return h('div', { class: 'cb-cadastro' },
       h('div', { class: 'cb-cad-cab' }, h('h3', { text: 'Motoristas e placas' }), busca, filtro, so ? null : h('button', { class: 'btn', type: 'button', text: '+ Cadastrar', onclick: () => this.editarCad() })),
-      tab,
+      tab, vazio,
       so ? null : h('div', { class: 'cb-cad-pe' },
         h('section', { class: 'cb-box' }, h('h4', { text: 'Postos' }), h('p', { class: 'hint', text: 'Na ordem das colunas da fatura: ' + d.postos.join(', ') + '.' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Editar postos', onclick: () => this.editarPostos() })),
         h('section', { class: 'cb-box' }, h('h4', { text: 'Importar planilha antiga' }), h('p', { class: 'hint', text: 'Traz motoristas, placas e as faturas da FATURA_POSTO (.xlsm). Cada pagamento só pode ser importado uma vez.' }), h('button', { class: 'btn secondary small', type: 'button', text: 'Escolher arquivo', onclick: () => this.importar() }))));

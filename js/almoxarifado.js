@@ -44,7 +44,7 @@ const Almox = {
   /** Situação do estoque: sem (zerado), baixo (no mínimo ou abaixo), ok. Peça sem mínimo definido nunca fica "baixa". */
   situacao(p) { const q = this.qtd(p), m = this.min(p); if (m > 0 && q <= 0) return 'sem'; if (m > 0 && q <= m) return 'baixo'; return 'ok'; },
   baixas() { return this.pecas().filter(p => this.situacao(p) !== 'ok'); },
-  fornecedores() { const s = new Set(); this.movs().forEach(m => { if (m.fornecedor && m.origem !== 'nota') s.add(String(m.fornecedor)); }); return Array.from(s).sort((a, b) => a.localeCompare(b, 'pt-BR')); },
+  fornecedores() { const s = new Set(); this.movs().forEach(m => { if (m.fornecedor && String(m.fornecedor).toLowerCase() !== 'oficina') s.add(String(m.fornecedor)); }); return Array.from(s).sort((a, b) => a.localeCompare(b, 'pt-BR')); },
   /** Compras (com preço) de uma peça, mais nova primeiro. */
   compras(pid) { return this.recentes(this.movs().filter(m => String(m.pecaId) === String(pid) && m.tipo === 'ENTRADA' && Number(m.valorUnit) > 0)); },
   /** Mais novo primeiro: data, hora do lançamento e, no empate, a ordem da planilha. */

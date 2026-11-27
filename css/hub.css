@@ -1174,3 +1174,26 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 /* a regra geral do GF (td:nth-child(5) com 180px e palavra quebrada no meio) não vale aqui */
 .cb-tab td{min-width:0;word-break:normal;overflow-wrap:normal}
 @media(min-width:701px){.cb-tab td.nm{max-width:none;min-width:120px}}
+
+/* Histórico de manutenções no celular: cada linha vira um cartão (mais espaço para o texto, nada espremido em colunas) */
+@media (max-width:760px){
+  .tabela-responsiva #tabelaHistorico{min-width:0;font-size:14px}
+  #tabelaHistorico thead{display:none}
+  #tabelaHistorico,#tabelaHistorico tbody{display:block}
+  #tabelaHistorico tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"tipo tipo val" "data km km" "tags tags tags" "obs obs obs" "quem quem quem" "acao acao acao";gap:3px 8px;padding:12px 2px;border-bottom:1px solid #e5e7eb}
+  #tabelaHistorico td{display:block;padding:0;border:0;min-width:0;word-break:normal;overflow-wrap:anywhere}
+  #tabelaHistorico td.h-tipo{display:contents}
+  #tabelaHistorico td.h-tipo .h-nome{grid-area:tipo;font-weight:700;font-size:15px;color:#111827}
+  #tabelaHistorico td.h-tipo .hist-tags{grid-area:tags;margin:2px 0 0}
+  #tabelaHistorico td.h-tipo .hist-tags:empty{display:none}
+  #tabelaHistorico td.h-tipo .h-quem{grid-area:quem;font-size:12px}
+  #tabelaHistorico td.h-val{grid-area:val;font-weight:800;font-size:15px;white-space:nowrap;text-align:right}
+  #tabelaHistorico td.h-data{grid-area:data;color:var(--dim);font-size:13px;white-space:nowrap}
+  #tabelaHistorico td.h-km{grid-area:km;color:var(--dim);font-size:13px}
+  #tabelaHistorico td.h-km .h-km-rot{display:none}
+  #tabelaHistorico td.h-km div{display:inline;font-weight:600!important}
+  #tabelaHistorico td.h-km::before{content:"· "}
+  #tabelaHistorico td.h-obs{grid-area:obs;font-size:13px;color:#374151;margin-top:2px}
+  #tabelaHistorico td.h-acao{grid-area:acao;display:flex;gap:8px;margin-top:6px}
+  #tabelaHistorico td.h-acao .btn{flex:1;max-width:160px}
+}
