@@ -357,7 +357,10 @@ function depositosTodos() {
   balancosSemanais.forEach(b => {
     let orig = Array.isArray(b.depositosOriginais) ? b.depositosOriginais : [];
     if (orig.length) orig.forEach(d => { if (!ids[d.id]) { ids[d.id] = 1; l.push(d); } });
-    else { let m = String(b.periodo || '').match(/Dep[óo]sito:\s*(?:<\/b>)?\s*(\d{1,2}\/\d{1,2}\/\d{4})/); if (m && b.totalCredito) l.push({ id: 'bal' + b.id, data: m[1], valor: Number(b.totalCredito) || 0 }); }   // balanço antigo (migrado): data e crédito do próprio balanço
+    else { let m = String(b.periodo || '').match(/Dep[óo]sito:\s*(?:<\/b>)?\s*(\d{1,2}\/\d{1,2}\/\d{4})/);
+      // balanço antigo (migrado) sem a lista dos depósitos: só usa o crédito dele se o depósito daquele dia NÃO estiver no histórico (a migração trouxe os dois)
+      const dia = m ? converterParaISO(m[1]) : '', jaTem = dia && l.some(d => converterParaISO(extrairDataAbreviada(d.data)) === dia);
+      if (m && b.totalCredito && !jaTem) l.push({ id: 'bal' + b.id, data: m[1], valor: Number(b.totalCredito) || 0 }); }
   });
   return l;
 }
