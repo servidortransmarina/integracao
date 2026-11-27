@@ -89,6 +89,7 @@ const App = {
     this.sessao = { usuario: me.usuario, nome: me.nome, email: me.email, avatar: me.avatar || '🔧', perfil: (me.acessos && me.acessos.frota) || '', acessos: me.acessos, pontoPerfil: me.pontoPerfil || '', sistemas: me.sistemas || sistemasPadrao((me.acessos && me.acessos.frota) || '') };
     if (!this.sessao.perfil) { API.guardar(''); throw new Error('Sua conta ainda não tem acesso a nenhum sistema.'); }
     this.sessao.chefe = !!me.chefe; document.body.classList.toggle('so-leitura', this.sessao.chefe);
+    this.sessao.modo = me.modo || ''; this.sessao.podeMotorista = !!me.podeMotorista; this.faixaModo();
     $('#auth').hidden = true; $('#app').hidden = false; corBarra('#f3f4f6');
     this.montarUsuario(); this.montarNavegacao();
     if (login.trocarSenha) { exigirTrocaSenha(() => this.recarregar()); return; }
@@ -175,6 +176,7 @@ const App = {
       pop.append(h('button', { onclick: () => { pop.remove(); Usuarios.abrir(); } }, '👥 Usuários', Usuarios.pendentes ? h('span', { class: 'badge red', text: String(Usuarios.pendentes) }) : null),
         h('button', { onclick: () => { pop.remove(); Pendencias.abrir(); } }, '🧾 Pendências de placa', np ? h('span', { class: 'badge red', text: String(np) }) : null));
     }
+    if (S.podeMotorista) pop.append(h('button', { class: 'pop-modo', onclick: () => { pop.remove(); this.trocarModo(S.modo === 'motorista' ? '' : 'motorista'); } }, S.modo === 'motorista' ? '↩️ Voltar para o meu perfil' : '🚚 Entrar como motorista'));
     pop.append(h('button', { onclick: () => { pop.remove(); Ajuda.abrir(); } }, '❓ Ajuda'));
     if (S.perfil === 'master') { const np2 = ((this.dados && this.dados.problemas) || []).length; pop.append(h('button', { onclick: () => { pop.remove(); Ajuda.problemas(); } }, '🐞 Problemas relatados', np2 ? h('span', { class: 'badge red', text: String(np2) }) : null)); }
     pop.append(h('hr'), h('button', { onclick: () => { pop.remove(); this.sair(); } }, '🚪 Sair do sistema'));
@@ -182,6 +184,21 @@ const App = {
     const r = ancora.getBoundingClientRect(), w = pop.offsetWidth, hh = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, paraCima ? r.left : r.right - w)) + 'px';
     pop.style.top = (paraCima ? Math.max(8, r.top - hh - 8) : r.bottom + 8) + 'px';
+  },
+
+  /** Quem também dirige troca entre o perfil dele e o modo motorista (checklist, abastecimento, defeito…). */
+  async trocarModo(modo) {
+    setLoading(true);
+    try { await API.chamar('trocarModo', { modo }); try { sessionStorage.setItem('trm.aviso', modo ? '🚚 Modo motorista: faça o checklist, abasteça e relate defeitos. Para voltar, use o botão lá em cima.' : 'De volta ao seu perfil.'); } catch (e) {} location.reload(); }
+    catch (e) { setLoading(false); toast(e.message, true); }
+  },
+  /** Faixa fixa no topo enquanto está no modo motorista, com o botão para voltar. */
+  faixaModo() {
+    try { const a = sessionStorage.getItem('trm.aviso'); if (a) { sessionStorage.removeItem('trm.aviso'); setTimeout(() => toast(a), 600); } } catch (e) {}
+    let f = $('#faixaModo'); const on = this.sessao && this.sessao.modo === 'motorista';
+    document.body.classList.toggle('modo-motorista', !!on);
+    if (!on) { if (f) f.remove(); return; }
+    if (!f) { f = h('div', { id: 'faixaModo', class: 'faixa-modo' }, h('span', { text: '🚚 Você está no modo motorista' }), h('button', { type: 'button', text: 'Voltar para o meu perfil', onclick: () => this.trocarModo('') })); document.body.prepend(f); }
   },
 
   /* ---- navegação ---- */
@@ -299,6 +316,7 @@ const App = {
       const np = (this.dados && this.dados.pendenciasPlaca) || 0;
       caixa.append(item('👥', 'Usuários', () => Usuarios.abrir(), Usuarios.pendentes ? h('span', { class: 'badge red', text: String(Usuarios.pendentes) }) : null), item('🧾', 'Pendências de placa', () => Pendencias.abrir(), np ? h('span', { class: 'badge red', text: String(np) }) : null));
     }
+    if (S.podeMotorista) caixa.append(S.modo === 'motorista' ? item('↩️', 'Voltar para o meu perfil', () => this.trocarModo('')) : item('🚚', 'Entrar como motorista', () => this.trocarModo('motorista')));
     caixa.append(item('❓', 'Ajuda', () => Ajuda.abrir()));
     if (S.perfil === 'master') { const np2 = ((this.dados && this.dados.problemas) || []).length; caixa.append(item('🐞', 'Problemas relatados', () => Ajuda.problemas(), np2 ? h('span', { class: 'badge red', text: String(np2) }) : null)); }
     caixa.append(item('🚪', 'Sair do sistema', () => this.sair()));
@@ -391,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Quem está online agora: barrinhas no topo (menu lateral no PC, barra de cima no celular). A gestão vê os nomes ao tocar. */
 const Online = {
-  VERSAO: '4y',
+  VERSAO: '4z',
   _avisouVersao: false, _timer: null, _dados: { online: 0 },
   nivel(n) { return n >= 8 ? 4 : n >= 4 ? 3 : n >= 2 ? 2 : n >= 1 ? 1 : 0; },
   /** Garante o indicador onde ele aparece: menu lateral (PC), linha do topo do Painel e barra de ações dos sistemas (celular). */

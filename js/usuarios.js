@@ -23,16 +23,33 @@ const Usuarios = {
               h('button', { class: 'btn small danger', text: 'Recusar', onclick: () => confirm('Recusar o cadastro de ' + u.nome + '?') && this.agir(() => API.chamar('decidirCadastro', { usuario: u.usuario, aprovar: false }), () => { u.status = 'RECUSADO'; }) }))));
         });
       }
-      caixa.append(h('h2', { style: 'font-size:15px;margin-top:8px', text: 'Todos os usuários' }));
-      caixa.append(h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Usuário', 'Nome', 'Status', 'Perfil', ''].map(t => h('th', { text: t })))),
-        h('tbody', {}, outros.map(u => {
-          const ehMaster = u.perfil === 'master', sel = h('select', { disabled: ehMaster || App.sessao.chefe || u.usuario === App.sessao.usuario ? true : null }, ehMaster ? [h('option', {}, 'Master')] : ['motorista', 'mecanico', 'admin', 'chefe'].map(p => h('option', { value: p, selected: p === u.perfil ? true : null }, NOME_PERFIL[p])));
-          if (!ehMaster) sel.onchange = () => { const antes = u.perfil, novo = sel.value; this.agir(() => API.chamar('alterarPerfil', { usuario: u.usuario, perfil: novo }), () => { u.perfil = novo; }, () => { u.perfil = antes; }); };
-          const cor = u.status === 'ATIVO' ? 'green' : u.status === 'INATIVO' || u.status === 'RECUSADO' ? 'red' : 'gray';
-          const acao = ehMaster || u.usuario === App.sessao.usuario || ['ATIVO', 'INATIVO'].indexOf(u.status) < 0 ? '' :
-            h('button', { class: 'btn small ' + (u.status === 'ATIVO' ? 'secondary' : 'success'), text: u.status === 'ATIVO' ? 'Desativar' : 'Ativar', onclick: () => { const antes = u.status, novo = antes === 'ATIVO' ? 'INATIVO' : 'ATIVO'; this.agir(() => API.chamar('definirStatusUsuario', { usuario: u.usuario, status: novo }), () => { u.status = novo; }, () => { u.status = antes; }); } });
-          return h('tr', {}, h('td', { text: u.usuario }), h('td', {}, nomeBonito(u.nome), h('button', { class: 'link', type: 'button', title: 'Corrigir nome (acentos)', text: ' ✏️', onclick: () => { const n = prompt('Nome de exibição (com acentos):', u.nome); if (n && n.trim() && n.trim() !== u.nome) { const antes = u.nome, novo = n.trim(); this.agir(() => API.chamar('editarNomeUsuario', { usuario: u.usuario, nome: novo }), () => { u.nome = novo; }, () => { u.nome = antes; }); } } })), h('td', {}, h('span', { class: 'badge ' + cor, text: u.status })), h('td', {}, u.perfil ? sel : '—'), h('td', {}, h('div', { class: 'acoes-user' }, ehMaster || !u.perfil ? h('span') : h('button', { class: 'btn small secondary', type: 'button', text: '🔑 Sistemas', onclick: () => this.sistemas(u) }), acao || h('span'))));
-        })))));
+      // todos os usuários em cartões (no PC, em colunas; no celular, um embaixo do outro)
+      const busca = h('input', { type: 'search', class: 'us-busca', placeholder: 'Buscar por nome ou usuário', autocomplete: 'off', value: this.busca || '' });
+      const grade = h('div', { class: 'us-grade' }), vazio = h('div', { class: 'empty', text: 'Ninguém com essa busca.', hidden: true });
+      const nz = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const filtrar = () => { this.busca = busca.value; let n = 0; $$('.us-card', grade).forEach(c => { const ok = !busca.value.trim() || c.dataset.k.indexOf(nz(busca.value.trim())) >= 0; c.hidden = !ok; if (ok) n++; }); vazio.hidden = n > 0; };
+      busca.oninput = filtrar;
+      caixa.append(h('div', { class: 'us-cab' }, h('h2', { text: 'Todos os usuários (' + outros.length + ')' }), busca), grade, vazio);
+      const ordem = { ATIVO: 0, INATIVO: 1, RECUSADO: 2 };
+      outros.slice().sort((a, b) => (ordem[a.status] ?? 3) - (ordem[b.status] ?? 3) || String(a.nome).localeCompare(String(b.nome), 'pt-BR')).forEach(u => {
+        const ehMaster = u.perfil === 'master', eu = u.usuario === App.sessao.usuario, so = App.sessao.chefe;
+        const sel = h('select', { 'aria-label': 'Perfil de ' + u.nome, disabled: ehMaster || so || eu ? true : null }, ehMaster ? [h('option', {}, 'Master')] : ['motorista', 'mecanico', 'admin', 'chefe'].map(p => h('option', { value: p, selected: p === u.perfil ? true : null }, NOME_PERFIL[p])));
+        if (!ehMaster) sel.onchange = () => { const antes = u.perfil, novo = sel.value; this.agir(() => API.chamar('alterarPerfil', { usuario: u.usuario, perfil: novo }), () => { u.perfil = novo; if (novo === 'motorista') u.dirige = true; }, () => { u.perfil = antes; }); };
+        const cor = u.status === 'ATIVO' ? 'green' : u.status === 'INATIVO' || u.status === 'RECUSADO' ? 'red' : 'gray';
+        const acao = ehMaster || eu || so || ['ATIVO', 'INATIVO'].indexOf(u.status) < 0 ? null :
+          h('button', { class: 'btn small ' + (u.status === 'ATIVO' ? 'secondary' : 'success'), text: u.status === 'ATIVO' ? 'Desativar' : 'Ativar', onclick: () => { const antes = u.status, novo = antes === 'ATIVO' ? 'INATIVO' : 'ATIVO'; this.agir(() => API.chamar('definirStatusUsuario', { usuario: u.usuario, status: novo }), () => { u.status = novo; }, () => { u.status = antes; }); } });
+        const editar = so ? null : h('button', { class: 'link us-edit', type: 'button', title: 'Corrigir nome (acentos)', 'aria-label': 'Corrigir nome', text: '✏️', onclick: () => { const n = prompt('Nome de exibição (com acentos):', u.nome); if (n && n.trim() && n.trim() !== u.nome) { const antes = u.nome, novo = n.trim(); this.agir(() => API.chamar('editarNomeUsuario', { usuario: u.usuario, nome: novo }), () => { u.nome = novo; }, () => { u.nome = antes; }); } } });
+        // "também dirige": ADM/mecânico que às vezes roda de motorista ganha o modo motorista no menu dele
+        const podeDirigir = u.status === 'ATIVO' && ['admin', 'mecanico', 'master'].indexOf(u.perfil) >= 0 && !so;
+        const dir = podeDirigir ? h('label', { class: 'us-dirige', title: 'A pessoa troca entre o perfil dela e o modo motorista pelo menu do nome' }, h('input', { type: 'checkbox', checked: u.dirige ? true : null, onchange: e => { const v = e.target.checked; this.agir(() => API.chamar('tambemMotorista', { usuario: u.usuario, sim: v }), () => { u.dirige = v; }, () => { u.dirige = !v; }); } }), h('span', { text: '🚚 Também dirige' })) : null;
+        const sub = [u.usuario, u.email].filter(Boolean).join(' · ');
+        grade.append(h('div', { class: 'us-card' + (u.status !== 'ATIVO' ? ' off' : ''), dataset: { k: nz(u.nome + ' ' + u.usuario + ' ' + (u.email || '')) } },
+          h('div', { class: 'us-top' }, h('span', { class: 'avatar us-av' }, avatarNo(u.avatar || '👤')), h('div', { class: 'us-nm' }, h('b', { text: nomeBonito(u.nome) }), editar, h('small', { text: sub })), h('span', { class: 'badge ' + cor, text: u.status === 'ATIVO' ? 'Ativo' : u.status === 'INATIVO' ? 'Inativo' : u.status === 'RECUSADO' ? 'Recusado' : u.status })),
+          h('div', { class: 'us-meio' }, h('label', { class: 'us-perfil' }, h('span', { text: 'Perfil' }), u.perfil ? sel : h('span', { text: '—' })), dir,
+            u.perfil === 'motorista' || (u.dirige && !podeDirigir) ? h('small', { class: 'us-tag', text: '🚚 Motorista' }) : null),
+          ehMaster || !u.perfil || (!acao && so) ? null : h('div', { class: 'us-acoes' }, so ? null : h('button', { class: 'btn small secondary', type: 'button', text: '🔑 Sistemas', onclick: () => this.sistemas(u) }), acao)));
+      });
+      filtrar();
       if (typeof App !== 'undefined' && App.sessao) { App.montarUsuario(); App.montarNavegacao(); }
     };
     desenhar(true);
