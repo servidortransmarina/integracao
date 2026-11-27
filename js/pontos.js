@@ -63,52 +63,101 @@ const Pontos = {
   }
 };
 
-/* Aba Pódio do Fleet (gestão): ranking do mês inteiro, setas contra o mês anterior e de onde vieram os pontos. */
+/* Aba Pódio do Fleet (gestão): ranking do mês inteiro, setas contra o mês anterior e de onde vieram os pontos.
+   AO VIVO: abre na hora com o último ranking visto (guardado no aparelho) e, enquanto a tela está aberta, pergunta ao servidor
+   só o número de versão dos pontos a cada 12 s (leve). Mudou → baixa o ranking e anima quem subiu ou desceu.
+   A seta ao lado do nome mostra a troca de posição desde a última vez que este aparelho viu o ranking. */
 const Podio = {
-  mes: null,
+  mes: null, ult: {}, timer: null, INTERVALO: 12000,
   MESES: ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'],
   rotMes(m) { const [y, mm] = m.split('-').map(Number), n = this.MESES[mm - 1]; return n.charAt(0).toUpperCase() + n.slice(1) + ' de ' + y; },
   somaMes(m, n) { let [y, mm] = m.split('-').map(Number); mm += n; while (mm < 1) { mm += 12; y--; } while (mm > 12) { mm -= 12; y++; } return y + '-' + String(mm).padStart(2, '0'); },
+  chave(m) { return 'trm.podio.' + ((App.sessao && App.sessao.usuario) || '') + '.' + m; },
+  guardado(m) { if (this.ult[m]) return this.ult[m]; try { const x = JSON.parse(localStorage.getItem(this.chave(m)) || 'null'); if (x && x.r) { this.ult[m] = x; return x; } } catch (e) {} return null; },
+  guardar(m, r, pos) { const x = { r, pos }; this.ult[m] = x; try { localStorage.setItem(this.chave(m), JSON.stringify(x)); } catch (e) {} },
   tela() {
-    const hoje = (App.dados && App.dados.hoje) || new Date().toISOString().slice(0, 10);
-    if (!this.mes) this.mes = hoje.slice(0, 7);
-    const cx = h('div', { class: 'pd' }), corpo = h('div', { class: 'pd-corpo' }, h('div', { class: 'hint', text: 'Carregando ranking…' }));
-    const titulo = h('h2', { text: this.rotMes(this.mes) });
+    const hoje = (App.dados && App.dados.hoje) || new Date().toISOString().slice(0, 10), mesAtual = hoje.slice(0, 7);
+    if (!this.mes) this.mes = mesAtual;
+    const mes = this.mes, cx = h('div', { class: 'pd' }), corpo = h('div', { class: 'pd-corpo' });
     const ir = n => { this.mes = this.somaMes(this.mes, n); App.abrirAba('podio'); };
-    const prox = h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Próximo mês', text: '›', onclick: () => ir(1) }); if (this.mes >= hoje.slice(0, 7)) prox.disabled = true;
-    cx.append(h('div', { class: 'card pd-cab' }, h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Mês anterior', text: '‹', onclick: () => ir(-1) }), titulo, prox), corpo);
-    API.chamar('rankingPontos', { mes: this.mes }, { mudo: true }).then(r => this.preencher(corpo, r)).catch(e => { corpo.textContent = ''; corpo.append(h('div', { class: 'card empty', text: e.message })); });
+    const prox = h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Próximo mês', text: '›', onclick: () => ir(1) }); if (mes >= mesAtual) prox.disabled = true;
+    const vivo = h('span', { class: 'pd-vivo', hidden: mes !== mesAtual, title: 'O ranking se atualiza sozinho enquanto esta tela está aberta' }, h('i'), 'ao vivo');
+    cx.append(h('div', { class: 'card pd-cab' }, h('button', { class: 'pd-nav', type: 'button', 'aria-label': 'Mês anterior', text: '‹', onclick: () => ir(-1) }), h('h2', { text: this.rotMes(mes) }), vivo, prox), corpo);
+    const g = this.guardado(mes);
+    if (g) this.preencher(corpo, g.r, g.pos, false); else corpo.append(h('div', { class: 'hint', text: 'Carregando ranking…' }));
+    this.buscar(corpo, mes, !!g);
+    clearInterval(this.timer);
+    if (mes === mesAtual) this.timer = setInterval(() => this.vigiar(corpo, mes), this.INTERVALO);
     return cx;
+  },
+  /** Enquanto a tela do pódio está aberta: pergunta só a versão; baixa o ranking quando ela muda. */
+  async vigiar(corpo, mes) {
+    if (!corpo.isConnected || this.mes !== mes) { clearInterval(this.timer); this.timer = null; return; }
+    if (document.hidden || this._buscando) return;
+    try { const r = await API.chamar('versaoPontos', {}, { fundo: true, mudo: true }); const g = this.guardado(mes); if (!g || r.versao !== g.r.versao) this.buscar(corpo, mes, true); } catch (e) { /* tenta de novo no próximo ciclo */ }
+  },
+  async buscar(corpo, mes, temAlgo) {
+    this._buscando = true;
+    try {
+      const r = await API.chamar('rankingPontos', { mes }, { mudo: true, fundo: temAlgo });
+      if (!corpo.isConnected || this.mes !== mes) return;
+      const g = this.guardado(mes);
+      if (g && g.r.versao === r.versao && JSON.stringify(g.r.ranking) === JSON.stringify(r.ranking)) { this.guardar(mes, r, g.pos); return; }
+      this.preencher(corpo, r, g ? g.pos : null, !!g);
+    } catch (e) { if (!temAlgo) { corpo.textContent = ''; corpo.append(h('div', { class: 'card empty', text: e.message })); } }
+    finally { this._buscando = false; }
   },
   seta(x) {
     if (!x.posicao) return h('span', { class: 'pd-seta igual', text: '—', title: 'Sem pontos no mês' });
     if (!x.posicaoAnterior) return h('span', { class: 'pd-seta novo', text: 'novo', title: 'Não pontuou no mês anterior' });
     const d = x.posicaoAnterior - x.posicao;
     if (!d) return h('span', { class: 'pd-seta igual', text: '=', title: 'Mesma posição do mês anterior' });
-    return h('span', { class: 'pd-seta ' + (d > 0 ? 'sobe' : 'desce'), text: (d > 0 ? '▲ ' : '▼ ') + Math.abs(d), title: (d > 0 ? 'Subiu ' : 'Desceu ') + Math.abs(d) + (Math.abs(d) > 1 ? ' posições' : ' posição') + ' (era ' + x.posicaoAnterior + 'º)' });
+    return h('span', { class: 'pd-seta ' + (d > 0 ? 'sobe' : 'desce'), text: (d > 0 ? '▲ ' : '▼ ') + Math.abs(d), title: (d > 0 ? 'Subiu ' : 'Desceu ') + Math.abs(d) + (Math.abs(d) > 1 ? ' posições' : ' posição') + ' em relação ao mês anterior (era ' + x.posicaoAnterior + 'º)' });
   },
-  preencher(corpo, r) {
+  /** Seta de TROCA DE POSIÇÃO: desde a última vez que este aparelho viu o ranking (ou desde o último ciclo, ao vivo). */
+  mov(x, antes) {
+    if (!antes || !x.posicao) return null;
+    const a = antes[x.id]; if (!a) return x.posicao <= 10 ? h('span', { class: 'pd-mov novo', text: '★ entrou', title: 'Entrou no ranking' }) : null;
+    const d = a - x.posicao; if (!d) return null;
+    return h('span', { class: 'pd-mov ' + (d > 0 ? 'sobe' : 'desce'), text: (d > 0 ? '▲' : '▼') + Math.abs(d), title: (d > 0 ? 'Subiu ' : 'Desceu ') + Math.abs(d) + (Math.abs(d) > 1 ? ' posições' : ' posição') + ' (estava em ' + a + 'º)' });
+  },
+  preencher(corpo, r, posAntes, animar) {
+    const calmo = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // FLIP: guarda onde cada linha estava para animar até o lugar novo
+    const antes = {}, ptsAntes = {}; if (animar && !calmo) $$('.pd-lin[data-id]', corpo).forEach(l => { antes[l.dataset.id] = l.getBoundingClientRect().top; ptsAntes[l.dataset.id] = Number(l.dataset.pts) || 0; });
     corpo.textContent = '';
     const lista = r.ranking || [], top = lista.filter(x => x.posicao).slice(0, 3), rot = {}; (r.regras || []).forEach(g => { rot[g.evento] = g.descricao || g.evento; });
+    const topAntes = posAntes ? Object.keys(posAntes).filter(id => posAntes[id] <= 3).sort((a, b) => posAntes[a] - posAntes[b]).join() : null, topAgora = top.map(x => x.id).join();
     if (top.length) {
-      const ordem = [top[1], top[0], top[2]], pos = [2, 1, 3], alt = window.innerWidth < 640 ? { 1: 64, 2: 46, 3: 32 } : { 1: 110, 2: 80, 3: 60 }, med = { 1: '🥇', 2: '🥈', 3: '🥉' }, palco = h('div', { class: 'podio' });
-      ordem.forEach((x, i) => { if (!x) return; const p = pos[i];
-        palco.append(h('div', { class: 'degrau p' + p }, h('div', { class: 'medalha', text: med[p] }), x.avatar ? h('span', { class: 'avatar mot-av' }, avatarNo(x.avatar)) : null, h('b', { text: nomeBonito(x.nome).split(' ')[0] }), h('small', { text: x.pontos.toLocaleString('pt-BR') + ' pts' }), h('div', { class: 'bloco', style: 'height:' + alt[p] + 'px', text: String(p) }))); });
+      const ordem = [top[1], top[0], top[2]], pos = [2, 1, 3], alt = window.innerWidth < 640 ? { 1: 64, 2: 46, 3: 32 } : { 1: 110, 2: 80, 3: 60 }, med = { 1: '🥇', 2: '🥈', 3: '🥉' }, palco = h('div', { class: 'podio' + (animar && topAntes !== null && topAntes !== topAgora ? ' mudou' : '') });
+      ordem.forEach((x, i) => { if (!x) return; const p = pos[i], subiu = posAntes && posAntes[x.id] && posAntes[x.id] > p;
+        palco.append(h('div', { class: 'degrau p' + p + (animar && subiu ? ' chegou' : ''), dataset: { id: x.id } }, h('div', { class: 'medalha', text: med[p] }), x.avatar ? h('span', { class: 'avatar mot-av' }, avatarNo(x.avatar)) : null, h('b', { text: nomeBonito(x.nome).split(' ')[0] }), h('small', { text: x.pontos.toLocaleString('pt-BR') + ' pts' }), h('div', { class: 'bloco', style: 'height:' + alt[p] + 'px', text: String(p) }))); });
       corpo.append(h('div', { class: 'card pd-palco' }, palco));
     } else corpo.append(h('div', { class: 'card empty', text: 'Ninguém pontuou em ' + this.rotMes(r.mes) + '.' }));
     const tab = h('div', { class: 'card pd-lista' }, h('div', { class: 'pd-lin pd-th' }, h('span', { text: '#' }), h('span', { text: 'Motorista' }), h('span', { text: 'Pontos' }), h('span', { class: 'pd-th-ant', text: 'Mês anterior' })));
     const motPorId = {}; ((App.dados && App.dados.motoristas) || []).forEach(m => { motPorId[m.id] = m; });
+    const linhas = [];
     lista.forEach(x => {
       const det = Object.keys(x.eventos || {}).map(e => x.eventos[e] + '× ' + String(rot[e] || e).toLowerCase()).join(' · ');
-      const lin = h('div', { class: 'pd-lin' + (x.posicao && x.posicao <= 3 ? ' top' : '') + (x.posicao ? '' : ' zero') },
+      const mv = this.mov(x, posAntes), pts = h('span', { class: 'pd-pts', text: x.pontos.toLocaleString('pt-BR') });
+      const lin = h('div', { class: 'pd-lin' + (x.posicao && x.posicao <= 3 ? ' top' : '') + (x.posicao ? '' : ' zero') + (animar && mv ? ' mexeu ' + (mv.classList.contains('desce') ? 'caiu' : 'subiu') : ''), dataset: { id: x.id, pts: x.pontos } },
         h('span', { class: 'pd-pos', text: x.posicao ? x.posicao + 'º' : '–' }),
-        h('span', { class: 'pd-nome' }, h('b', { text: nomeBonito(x.nome) }), det ? h('small', { text: det }) : null),
-        h('span', { class: 'pd-pts', text: x.pontos.toLocaleString('pt-BR') }),
-        h('span', { class: 'pd-ant' }, this.seta(x), h('small', { text: x.pontosAnterior ? x.pontosAnterior.toLocaleString('pt-BR') + ' pts' : '' })));
+        h('span', { class: 'pd-nome' }, h('span', { class: 'pd-nm' }, h('b', { text: nomeBonito(x.nome) }), mv), det ? h('small', { text: det }) : null),
+        pts, h('span', { class: 'pd-ant' }, this.seta(x), h('small', { text: x.pontosAnterior ? x.pontosAnterior.toLocaleString('pt-BR') + ' pts' : '' })));
       if (motPorId[x.id]) { lin.classList.add('click'); lin.title = 'Lançar bônus ou desconto'; lin.onclick = () => Pontos.ajustar(motPorId[x.id]); }
-      tab.append(lin);
+      tab.append(lin); linhas.push([lin, x, pts]);
     });
     if (!lista.length) tab.append(h('div', { class: 'empty', text: 'Nenhum motorista cadastrado.' }));
-    corpo.append(tab, h('p', { class: 'hint pd-nota', text: 'Setas comparam com a posição no mês anterior. Toque num motorista para lançar bônus ou desconto (sempre com motivo).' }));
-  }
+    corpo.append(tab, h('p', { class: 'hint pd-nota', text: 'A seta pequena ao lado do nome mostra quem subiu ou desceu desde a última vez que você viu o ranking. A coluna da direita compara com o mês anterior. Toque num motorista para lançar bônus ou desconto (sempre com motivo).' }));
+    if (animar && !calmo) {
+      linhas.forEach(([lin, x, pts]) => {
+        const t0 = antes[x.id]; if (t0 !== undefined) { const dy = t0 - lin.getBoundingClientRect().top; if (Math.abs(dy) > 2) { lin.style.transform = 'translateY(' + dy + 'px)'; lin.style.transition = 'none'; requestAnimationFrame(() => requestAnimationFrame(() => { lin.style.transition = 'transform .9s cubic-bezier(.2,.8,.2,1)'; lin.style.transform = ''; })); } }
+        const p0 = ptsAntes[x.id]; if (p0 !== undefined && p0 !== x.pontos) this.contar(pts, p0, x.pontos);
+      });
+    }
+    const pos = {}; lista.forEach(x => { if (x.posicao) pos[x.id] = x.posicao; });
+    // a seta fica à vista até a próxima mudança; "desde a última visita" passa a ser este ranking
+    this.guardar(r.mes || this.mes, r, animar || !posAntes ? pos : posAntes);
+  },
+  contar(el, de, ate) { const t0 = performance.now(), dur = 900; const passo = t => { const k = Math.min(1, (t - t0) / dur), v = Math.round(de + (ate - de) * (1 - Math.pow(1 - k, 3))); el.textContent = v.toLocaleString('pt-BR'); if (k < 1) requestAnimationFrame(passo); }; requestAnimationFrame(passo); }
 };

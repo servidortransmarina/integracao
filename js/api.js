@@ -22,7 +22,7 @@ const API = {
    */
   /* Perfil CHEFE (só visualiza): o servidor já recusa qualquer gravação; aqui a gente nem envia e avisa na hora. Mesma lista do Api.gs. */
   CHEFE_LEITURA: ['ping', 'logout', 'me', 'alterarSenha', 'solicitarTrocaEmail', 'confirmarTrocaEmail', 'atualizarDados', 'getBootstrap', 'getHistorico', 'lerAviso', 'presenca', 'relatarProblema',
-    'checklistDetalhe', 'rankingPontos', 'listarUsuarios', 'listarPendenciasPlaca', 'getPrevisao', 'escCarregar', 'escHistorico', 'escDadosCarregar', 'escDadosVersoes', 'escVerificarLimpeza',
+    'checklistDetalhe', 'rankingPontos', 'versaoPontos', 'listarUsuarios', 'listarPendenciasPlaca', 'getPrevisao', 'escCarregar', 'escHistorico', 'escDadosCarregar', 'escDadosVersoes', 'escVerificarLimpeza',
     'financeiroRotaCarregar', 'financeiroRotaResumo', 'financeiroRotaVersoes', 'financeiroLojaCarregar', 'financeiroLojaResumo', 'combCarregar', 'combResumo'],
   CHEFE_PONTO: ['getDadosADM', 'getPendentesADM', 'getAcoesCartasADM', 'getAssinaturasResponsaveisADM', 'getDadosEncarregado', 'getSaldoHoras', 'getBancoHorasHistorico', 'getBancoCompleto',
     'getOpcoesExtratoBanco', 'getExtratosBanco', 'estadoCapturaBancoCompleto', 'relatorioBancoHoras', 'getFuncionarios', 'getFolgas', 'estadoSincronizacaoMob', 'getCartoes'],
