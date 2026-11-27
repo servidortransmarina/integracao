@@ -16,8 +16,15 @@ const Almox = {
   extrasNova(d) {
     d = d || {};
     const un = this.selUnidade(d.unidade || 'un'), area = this.txt({ maxlength: 40, placeholder: 'Ex.: Freio, Elétrica', value: d.categoria || '', 'aria-label': 'Área' }), marca = this.txt({ maxlength: 40, placeholder: 'Ex.: Mann, Bosch', value: d.marca || '', 'aria-label': 'Marca' });
-    const el = h('div', { class: 'ax-nova', hidden: true }, h('span', { class: 'ax-nova-t', text: 'Peça nova:' }), h('label', {}, 'Unidade', un), h('label', {}, 'Área', this.ac(area, () => this.fonteAreas())), h('label', {}, 'Marca', this.ac(marca, () => this.fonteMarcas())));
-    return { el, dados: () => ({ unidade: un.value, categoria: area.value.trim(), marca: marca.value.trim() }), mostrar: v => { el.hidden = !v; } };
+    const tit = h('span', { class: 'ax-nova-t', text: 'Peça nova:' }), lUn = h('label', {}, 'Unidade', un);
+    const el = h('div', { class: 'ax-nova', hidden: true }, tit, lUn, h('label', {}, 'Área', this.ac(area, () => this.fonteAreas())), h('label', {}, 'Marca', this.ac(marca, () => this.fonteMarcas())));
+    let deQuem = null;
+    return { el, dados: () => ({ unidade: un.value, categoria: area.value.trim(), marca: marca.value.trim() }), mostrar: v => { el.hidden = !v; },
+      /** Peça que já existe: mostra a área e a marca do cadastro (dá para corrigir); a unidade não muda aqui. */
+      existente: p => { lUn.hidden = !!p; tit.textContent = p ? 'Área e marca:' : 'Peça nova:';
+        if (p && deQuem !== p.id) { if (!d.categoria || deQuem) area.value = p.categoria || ''; if (!d.marca || deQuem) marca.value = p.marca || ''; }
+        if (!p && deQuem) { area.value = ''; marca.value = ''; }
+        deQuem = p ? p.id : null; } };
   },
   selUnidade(atual) { return h('select', { 'aria-label': 'Unidade' }, this.UNIDADES.map(([u, t]) => h('option', { value: u, text: u === t ? u : u + ' — ' + t, selected: (atual || 'un') === u ? true : null }))); },
   aba: 'estoque', busca: '', filtro: '', buscaMov: '', tipoMov: '', limiteMov: 150,
@@ -371,7 +378,7 @@ const Almox = {
       const qtd = this.txt({ inputmode: 'decimal', placeholder: '1', value: l.qtd ? String(l.qtd).replace('.', ',') : '', 'aria-label': 'Quantas usou' });
       let origem = l.origem || 'estoque';
       const seg = h('div', { class: 'ax-seg', role: 'radiogroup', 'aria-label': 'De onde veio' });
-      const comp = this.txt({ inputmode: 'decimal', placeholder: 'igual', value: l.qtdComprada && Number(l.qtdComprada) !== Number(l.qtd) ? String(l.qtdComprada).replace('.', ',') : '', 'aria-label': 'Quantas comprou' });
+      const comp = this.txt({ inputmode: 'decimal', placeholder: 'igual', value: Number(l.qtdComprada) > 0 ? String(l.qtdComprada).replace('.', ',') : '', 'aria-label': 'Quantas comprou' });      // mostra o que foi lançado, mesmo se for igual ao que usou
       const forn = this.txt({ maxlength: 60, placeholder: 'Ex.: Autopeças Sul', value: l.fornecedor && origem === 'compra' ? l.fornecedor : '', 'aria-label': 'Onde comprou' });
       const vu = this.txt({ inputmode: 'decimal', placeholder: 'R$ de UMA', value: l.valorUnit ? String(l.valorUnit).replace('.', ',') : '', 'aria-label': 'Valor de uma unidade' });
       const info = h('div', { class: 'ax-ed-info' }), aviso = h('div', { class: 'ax-aviso', hidden: true });
@@ -390,7 +397,7 @@ const Almox = {
         rotQ.textContent = pl ? 'Precisa' : 'Usou'; rotC.textContent = pl ? 'Comprar quantas?' : 'Comprou quantas?'; rotF.textContent = pl ? 'Onde comprar' : 'Onde comprou'; rotV.textContent = pl ? 'Valor previsto de UMA' : 'Valor de UMA unidade';
         $$('button', seg).forEach(b => { const on = b.dataset.v === origem; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); b.textContent = ORIG.find(o => o[0] === b.dataset.v)[pl ? 2 : 1]; });
         fCompra.hidden = origem === 'estoque'; fCompra.querySelector('.ax-ed-forn').hidden = origem === 'nota';
-        ex.mostrar(origem !== 'estoque' && peca.value.trim().length > 1 && !r.p());
+        ex.mostrar(origem !== 'estoque' && peca.value.trim().length > 1); ex.existente(r.p());
         const p = r.p(), q = r.q(); limpar(info); info.className = 'ax-ed-info';
         if (origem === 'estoque') {
           if (!peca.value.trim()) info.textContent = 'Escolha a peça da lista do almoxarifado.';
@@ -435,11 +442,11 @@ const Almox = {
             out.push({ pecaId: p.id, nome: p.nome, qtd: q, origem: o });
           } else {
             const v = r.v(), c = r.comp();
-            if (plano() && isNaN(v)) { out.push(Object.assign(p ? { pecaId: p.id, nome: p.nome } : Object.assign({ nome }, r.ex.dados()), { qtd: q, origem: o, valorUnit: '', qtdComprada: c || q, fornecedor: o === 'compra' ? r.el.querySelector('.ax-ed-forn input').value.trim() : '' })); continue; }
+            if (plano() && isNaN(v)) { out.push(Object.assign(p ? { pecaId: p.id, nome: p.nome, categoria: r.ex.dados().categoria, marca: r.ex.dados().marca } : Object.assign({ nome }, r.ex.dados()), { qtd: q, origem: o, valorUnit: '', qtdComprada: c || q, fornecedor: o === 'compra' ? r.el.querySelector('.ax-ed-forn input').value.trim() : '' })); continue; }
             if (isNaN(v) || v < 0 || !String(v).length) return { erro: 'Diga o valor de UMA unidade de "' + nome + '".', campo: r.peca };
             if (c && c < q) return { erro: 'Comprou menos do que usou em "' + nome + '"?', campo: r.qtd };
             const forn = o === 'compra' ? r.el.querySelector('.ax-ed-forn input').value.trim() : '';
-            out.push(Object.assign(p ? { pecaId: p.id, nome: p.nome } : Object.assign({ nome }, r.ex.dados()), { qtd: q, origem: o, valorUnit: v, qtdComprada: c || q, fornecedor: forn }));
+            out.push(Object.assign(p ? { pecaId: p.id, nome: p.nome, categoria: r.ex.dados().categoria, marca: r.ex.dados().marca } : Object.assign({ nome }, r.ex.dados()), { qtd: q, origem: o, valorUnit: v, qtdComprada: c || q, fornecedor: forn }));
           }
         }
         return { linhas: out };

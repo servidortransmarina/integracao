@@ -3,20 +3,22 @@ const STORAGE_KEY = 'transmarina_gestao_sessao_v2';
 const APP = {sessao:null, cartas:[], pendentes:[], acoesCartas:[], assinaturasResponsaveis:[], saldos:[], funcionarios:[], folgas:[], selecionadas:new Set(), aba:'horas', subaba:'controle', cartaEditando:null, usuarios:{pendentes:[],ativos:[],recusados:[]}};
 const $ = id => document.getElementById(id);
 const norm = x => String(x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
-// (FALTA) identifica o tipo da carta, mas a busca de empresa e responsável
-// usa o nome real do colaborador, sem exigir um novo cadastro no MobPonto.
+// O que vem entre parênteses no começo ou no fim — (FALTA), (ADV), (ATESTADO)… — é o TIPO da carta:
+// fica guardado no histórico, mas a busca de empresa e responsável usa só o nome do colaborador.
+// Compatível também com as cartas antigas do Excel: "NOME(FALTA)".
+const TAG_CARTA_INI=/^\(\s*([^()]{1,20}?)\s*\)\s*/, TAG_CARTA_FIM=/\s*\(\s*([^()]{1,20}?)\s*\)$/;
 function separarNomeCarta(valor) {
-  const texto=String(valor??'').trim();
-  // Compatível também com as cartas antigas do Excel: "NOME(FALTA)".
-  const inicio=/^\(\s*FALTA\s*\)\s*/i;
-  const fim=/\s*\(\s*FALTA\s*\)$/i;
-  const falta=inicio.test(texto)||fim.test(texto);
-  const nomeBase=texto.replace(inicio,'').replace(fim,'').replace(/\s+/g,' ').trim();
-  return {falta,nomeBase};
+  let texto=String(valor??'').trim(), tag='';
+  const a=texto.match(TAG_CARTA_INI); if(a){tag=a[1];texto=texto.replace(TAG_CARTA_INI,'');}
+  const b=texto.match(TAG_CARTA_FIM); if(b){tag=tag||b[1];texto=texto.replace(TAG_CARTA_FIM,'');}
+  tag=norm(tag).replace(/\s+/g,' ');
+  const nomeBase=texto.replace(/\s+/g,' ').trim();
+  return {falta:tag==='FALTA',tag,nomeBase};
 }
-function formatarNomeCarta(nomeBase,falta=false) {
-  const nome=String(nomeBase??'').replace(/\s+/g,' ').trim();
-  return falta&&nome?`(FALTA) ${nome}`:nome;
+/** tag: o tipo ('FALTA', 'ADV'…); true vale como FALTA (chamadas antigas). */
+function formatarNomeCarta(nomeBase,tag='') {
+  const nome=String(nomeBase??'').replace(/\s+/g,' ').trim(), t=tag===true?'FALTA':(tag?norm(tag):'');
+  return t&&nome?`(${t}) ${nome}`:nome;
 }
 
 // V30.12 — Padronização pelo nome completo oficial quando a identificação for única.
@@ -66,9 +68,9 @@ function chaveFuncionarioCarta(nome) {
 // Ao selecionar um funcionário, usar sempre o nome COMPLETO da base.
 // Jamais reaproveitar uma abreviação histórica na sugestão do formulário.
 function nomeHistoricoPreferidoCarta(nome) {
-  const {falta,nomeBase}=separarNomeCarta(nome);
+  const {tag,nomeBase}=separarNomeCarta(nome);
   const localizado=localizarNomeCartaNaBase(nomeBase);
-  return formatarNomeCarta(localizado.registro?.nome||nomeBase,falta);
+  return formatarNomeCarta(localizado.registro?.nome||nomeBase,tag);
 }
 
 // Contador do menu; no celular o selo some quando o valor é zero.
@@ -1320,9 +1322,9 @@ function renderCartas() {
   if(linhas.length>200)$('tbody-cartas').innerHTML+=`<tr><td colspan="7" class="empty">Exibindo 200 de ${linhas.length} cartas. Use os filtros para localizar outros registros.</td></tr>`;
 }
 function identificarFuncionarioCarta(nome) {
-  const {falta,nomeBase}=separarNomeCarta(nome);
+  const {tag,nomeBase}=separarNomeCarta(nome), falta=tag;
   const nomeLimpo=nomeBase.replace(/\s+/g,' ').trim();
-  if(!nomeLimpo)return {erro:'Informe o nome do funcionário após (FALTA).'};
+  if(!nomeLimpo)return {erro:'Informe o nome do funcionário depois do '+(tag?'('+tag+')':'tipo entre parênteses')+'.'};
   // Uma escolha explícita do menu vence ambiguidade de nomes entre empresas.
   if(funcionarioCartaSelecionado&&norm(funcionarioCartaSelecionado.nome)===norm(nomeLimpo)) {
     const escolhido=funcionarioCartaSelecionado;
@@ -1903,24 +1905,25 @@ function imprimirCapa() {
 function agruparCartasPorFuncionario(cartas) {
   const grupos=new Map();
   for(const carta of cartas) {
-    const {falta,nomeBase}=separarNomeCarta(carta.funcionario);
+    const {falta,tag,nomeBase}=separarNomeCarta(carta.funcionario);
     const nome=nomeBase.replace(/\s+/g,' ').trim();
     if(!nome)continue;
     const chave=chaveFuncionarioCarta(nome);
     let registro=grupos.get(chave);
     if(!registro){
       const oficial=localizarNomeCartaNaBase(nome).registro;
-      registro={nome:oficial?.nome||nome,total:0,normais:0,faltas:0};
+      registro={nome:oficial?.nome||nome,total:0,normais:0,faltas:0,tipos:{}};
       grupos.set(chave,registro);
     }
     registro.total++;
     if(falta)registro.faltas++;
+    else if(tag)registro.tipos[tag]=(registro.tipos[tag]||0)+1;
     else registro.normais++;
   }
   return [...grupos.values()].sort((a,b)=>
     b.total-a.total||a.nome.localeCompare(b.nome,'pt-BR'));
 }
-const detalharCartas = r => `${r.normais} normais · ${r.faltas} faltas`;
+const detalharCartas = r => [`${r.normais} normais`, `${r.faltas} faltas`].concat(Object.keys(r.tipos||{}).sort().map(t=>`${r.tipos[t]} ${t.toLowerCase()}`)).join(' · ');
 
 const chartColors=['#1f4e78','#4f83b7','#77a6cc','#ec9845','#4e9d93','#7465ab','#d46f83','#8492a6','#90b67d','#c59759','#6f8796','#cbb2d9'];
 function filtrarPeriodoRelatorio() {const mes=$('filtro-relatorio-mes').value;return APP.cartas.filter(c=>!mes||c.dataOcorrencia.slice(0,7)===mes);}
@@ -2248,7 +2251,7 @@ function construirImagemResumo(tipo) {
     y+=rowH;
   });
   const footer=y+38;
-  ctx.fillStyle='#657689';ctx.font='20px Arial';ctx.fillText('Total por funcionário = cartas normais + cartas (FALTA).',margem,footer);
+  ctx.fillStyle='#657689';ctx.font='20px Arial';ctx.fillText('Total por funcionário = cartas normais + cartas com tipo, como (FALTA) e (ADV).',margem,footer);
   return canvas;
 }
 async function obterBlobPNG(canvas){return new Promise((ok,erro)=>canvas.toBlob(blob=>blob?ok(blob):erro(Error('Falha ao gerar PNG.')),'image/png'));}
@@ -2355,7 +2358,7 @@ function configurarSugestaoCarta(idInput,idLista,obterValores,aposSelecionar=()=
     if(eFuncionario) {
       // Empresa escolhida é preservada inclusive para homônimos entre filiais.
       funcionarioCartaSelecionado={nome:escolhido.nome,empresa:escolhido.empresa};
-      campo.value=formatarNomeCarta(escolhido.nome,separarNomeCarta(campo.value).falta);
+      campo.value=formatarNomeCarta(escolhido.nome,separarNomeCarta(campo.value).tag);
     } else campo.value=escolhido;
     campo.dispatchEvent(new Event('input',{bubbles:true}));
     campo.dispatchEvent(new Event('change',{bubbles:true}));
