@@ -353,13 +353,16 @@ function semanaDoDeposito(dataStr) {
 }
 /** Todos os depósitos: os do histórico + os que já foram usados num Balanço Semanal (o balanço tira da lista, mas o dinheiro entrou). */
 function depositosTodos() {
-  let l = depositos.slice(), ids = {}; l.forEach(d => { ids[d.id] = 1; });
+  // o mesmo depósito pode estar no histórico e também guardado num balanço (a migração e balanços salvos de novo trazem cópias,
+  // às vezes com outro id): do balanço só entra o que não tiver o MESMO dia e o MESMO valor já na lista
+  const dia = d => converterParaISO(extrairDataAbreviada(d.data)), chave = d => dia(d) + '|' + Math.round((Number(d.valor) || 0) * 100);
+  let l = depositos.slice(), ids = {}, vistos = {}; l.forEach(d => { ids[d.id] = 1; vistos[chave(d)] = 1; });
   balancosSemanais.forEach(b => {
     let orig = Array.isArray(b.depositosOriginais) ? b.depositosOriginais : [];
-    if (orig.length) orig.forEach(d => { if (!ids[d.id]) { ids[d.id] = 1; l.push(d); } });
+    if (orig.length) orig.forEach(d => { const k = chave(d); if (!ids[d.id] && !vistos[k]) { ids[d.id] = 1; vistos[k] = 1; l.push(d); } });
     else { let m = String(b.periodo || '').match(/Dep[óo]sito:\s*(?:<\/b>)?\s*(\d{1,2}\/\d{1,2}\/\d{4})/);
-      // balanço antigo (migrado) sem a lista dos depósitos: só usa o crédito dele se o depósito daquele dia NÃO estiver no histórico (a migração trouxe os dois)
-      const dia = m ? converterParaISO(m[1]) : '', jaTem = dia && l.some(d => converterParaISO(extrairDataAbreviada(d.data)) === dia);
+      // balanço antigo (migrado) sem a lista dos depósitos: só usa o crédito dele se nenhum depósito daquele dia já estiver na lista
+      const d0 = m ? converterParaISO(m[1]) : '', jaTem = d0 && l.some(d => dia(d) === d0);
       if (m && b.totalCredito && !jaTem) l.push({ id: 'bal' + b.id, data: m[1], valor: Number(b.totalCredito) || 0 }); }
   });
   return l;
@@ -803,7 +806,7 @@ function renderizarTabelaEscalasSalvas() {
 
   let elCred = document.getElementById('txtSemanaCreditoTotal'); if(elCred) elCred.innerText = formatarMoeda(tetoOperacional);
   let elCredDet = document.getElementById('txtSemanaCreditoDet');
-  if (elCredDet) elCredDet.innerText = depositosEscalasFiltrados.length ? 'Depósito' + (depositosEscalasFiltrados.length > 1 ? 's' : '') + ' de ' + depositosEscalasFiltrados.map(d => extrairDataAbreviada(d.data)).join(', ') : 'Nenhum depósito para este período';
+  if (elCredDet) elCredDet.innerText = depositosEscalasFiltrados.length ? 'Depósito' + (depositosEscalasFiltrados.length > 1 ? 's' : '') + ' de ' + depositosEscalasFiltrados.map(d => extrairDataAbreviada(d.data) + ' (' + formatarMoeda(Number(d.valor) || 0) + ')').join(' + ') : 'Nenhum depósito para este período';
   let elCusto = document.getElementById('txtSemanaCustoTotal'); if(elCusto) elCusto.innerText = formatarMoeda(somaCustoSemana);
   let elTick = document.getElementById('txtSemanaTicketMedioGeral'); if(elTick) elTick.innerText = formatarMoeda(ticketMedioSemanal);
   

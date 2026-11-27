@@ -121,6 +121,17 @@ const App = {
       return; }
     setLoading(false); await this.aplicarDados();
   },
+  /** ATUALIZAÇÃO AUTOMÁTICA: o servidor manda a versão dos dados desta tela. O aviso de "online" (a cada 30 s) traz a versão
+      atual; se mudou por causa de outra pessoa ou de um robô, atualiza sozinho por trás (sem atrapalhar quem está digitando). */
+  verResp(action, r) {
+    if (action === 'getBootstrap') { this._ver = r._ver; return; }
+    if (action === 'presenca') {
+      if (!this._ver) { this._ver = r._ver; return; }
+      if (r._ver && r._ver !== this._ver && this.sessao && this.dados) this.recarregar(true);
+      return;
+    }
+    if (r._verAntes === this._ver) this._ver = r._ver;      // só o que esta pessoa gravou (já veio no patch); se outro gravou antes, o próximo aviso atualiza
+  },
   /** Junta as linhas que o servidor devolveu (patch) em App.dados e redesenha logo depois da ação (sem esperar o getBootstrap). */
   aplicarPatch(p) {
     const D = this.dados; if (!D || !p || !p.tabelas) return;
@@ -324,6 +335,7 @@ const App = {
 
   async sair() { try { await API.chamar('logout', {}, { semExpirar: true }); } catch (e) {} this.limparSessao(); },
   limparSessao() {
+    this._ver = '';
     API.guardar(''); Online.parar(); document.body.classList.remove('so-leitura'); this.sessao = null; this.dados = null; this.hist = null; this.aba = 'inicio'; this.ultimaAba = {}; veiculoSel = null; PontoHub.reiniciar(); FinHub.reiniciar(); EscHub.reiniciar();
     $$('.overlay.show').forEach(o => { if (!o.id) o.remove(); else o.classList.remove('show'); });
     const p = $('#perfilPop'); if (p) p.remove();
@@ -433,7 +445,7 @@ const Online = {
       this._avisouVersao = true;
       toast('O servidor está numa versão anterior (' + (d.versaoApi || 'antiga') + '). No Apps Script: Implantar → Gerenciar implantações → editar → Nova versão.', true);
     }
-    if (!this._timer) this._timer = setInterval(() => this.pingar(), 60000);
+    if (!this._timer) this._timer = setInterval(() => this.pingar(), 30000);      // também é o que traz a versão dos dados (atualização automática)
   },
   async pingar() {
     if (!App.sessao || document.hidden) return;

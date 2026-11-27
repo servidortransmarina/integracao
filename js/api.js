@@ -52,6 +52,7 @@ const API = {
       r = await resp.json();
     } catch (e) { throw new Error('Sem conexão com o servidor. Tente novamente.'); }
     finally { if (!mudo) this.barra(-1); if (!fundo) { this._frente--; this._fimFrente = Date.now(); } }
+    if (r && r._ver !== undefined && typeof App !== 'undefined' && App.verResp) try { App.verResp(action, r); } catch (e) { /* só a atualização automática */ }
     if (!r || r.ok === false) {
       let msg = (r && r.error) || 'Erro inesperado.';
       if (msg === 'Ação inválida.') msg = 'Esta função ainda não está no servidor: falta publicar a nova versão do Apps Script (Implantar → Gerenciar implantações → editar → Nova versão).';
